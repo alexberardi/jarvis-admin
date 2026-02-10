@@ -22,8 +22,9 @@ npm run build
 
 ```
 src/
-├── api/            # Axios clients (auth, settings)
+├── api/            # Axios clients (auth, settings), configured dynamically
 ├── auth/           # AuthContext (login, token refresh, superuser gate)
+├── discovery/      # Network discovery (find config-service, resolve URLs)
 ├── hooks/          # useAuth, useSettings (TanStack Query)
 ├── components/
 │   ├── layout/     # AppShell, Sidebar, Header
@@ -41,12 +42,19 @@ src/
 3. Tokens stored in localStorage, attached to settings-server requests via axios interceptor
 4. On 401 from settings-server, auto-refresh is attempted; if that fails, redirect to login
 
-## Environment Variables
+## Network Discovery
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VITE_AUTH_URL` | `http://localhost:8007` | jarvis-auth base URL |
-| `VITE_SETTINGS_URL` | `http://localhost:8014` | jarvis-settings-server base URL |
+Service URLs are resolved automatically at startup via `jarvis-config-service` — no environment variables needed.
+
+**Discovery flow:**
+1. Check localStorage cache for a previously-discovered config service URL; validate with `/info` probe
+2. Scan `localhost` ports 8013-8020, hitting `/info` on each
+3. If not found, discover local IP via WebRTC, then scan the /24 subnet on ports 8013-8020
+4. First response where `{"service": "jarvis-config-service"}` matches wins
+5. Use config service's `GET /services/jarvis-auth` to resolve auth URL; settings API lives on the config service itself
+6. Cache discovered config URL in localStorage for fast subsequent loads
+
+**Requires:** `jarvis-config-service` running on the network with `jarvis-auth` registered. Settings API is served by the config service itself at `/v1/settings`.
 
 ## Dependencies
 

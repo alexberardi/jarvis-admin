@@ -1,11 +1,17 @@
 import axios from 'axios'
 
-const AUTH_BASE = import.meta.env.VITE_AUTH_URL ?? 'http://localhost:8007'
-const SETTINGS_BASE = import.meta.env.VITE_SETTINGS_URL ?? 'http://localhost:8014'
+export const authClient = axios.create()
 
-export const authClient = axios.create({ baseURL: AUTH_BASE })
+export const settingsClient = axios.create()
 
-export const settingsClient = axios.create({ baseURL: SETTINGS_BASE })
+/**
+ * Configure base URLs for API clients after network discovery resolves.
+ * Must be called before any API requests are made.
+ */
+export function configureClients(authUrl: string, settingsUrl: string) {
+  authClient.defaults.baseURL = authUrl
+  settingsClient.defaults.baseURL = settingsUrl
+}
 
 export function setAuthToken(token: string | null) {
   if (token) {

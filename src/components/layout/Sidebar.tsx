@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { Settings } from 'lucide-react'
+import { Server, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { LucideIcon } from 'lucide-react'
 
@@ -11,8 +11,8 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Settings', icon: Settings, path: '/settings' },
+  { label: 'Services', icon: Server, path: '/services' },
   // Future:
-  // { label: 'Services', icon: Server, path: '/services' },
   // { label: 'Logs', icon: ScrollText, path: '/logs' },
 ]
 
