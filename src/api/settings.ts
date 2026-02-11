@@ -1,14 +1,14 @@
-import { settingsClient } from './client'
+import { apiClient } from './client'
 import type { AggregatedSettingsResponse, ServiceUpdateResponse } from '@/types/settings'
 
 export async function getAllSettings(): Promise<AggregatedSettingsResponse> {
-  const { data } = await settingsClient.get<AggregatedSettingsResponse>('/v1/settings/')
+  const { data } = await apiClient.get<AggregatedSettingsResponse>('/api/settings/')
   return data
 }
 
 export async function getServiceSettings(serviceName: string): Promise<AggregatedSettingsResponse> {
-  const { data } = await settingsClient.get<AggregatedSettingsResponse>(
-    `/v1/settings/?service=${encodeURIComponent(serviceName)}`,
+  const { data } = await apiClient.get<AggregatedSettingsResponse>(
+    `/api/settings/?service=${encodeURIComponent(serviceName)}`,
   )
   return data
 }
@@ -18,8 +18,8 @@ export async function updateSetting(
   key: string,
   value: unknown,
 ): Promise<ServiceUpdateResponse> {
-  const { data } = await settingsClient.put<ServiceUpdateResponse>(
-    `/v1/settings/${encodeURIComponent(serviceName)}/${key}`,
+  const { data } = await apiClient.put<ServiceUpdateResponse>(
+    `/api/settings/${encodeURIComponent(serviceName)}/${key}`,
     { value },
   )
   return data

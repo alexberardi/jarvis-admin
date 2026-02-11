@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
-import { Server, Settings } from 'lucide-react'
+import { LayoutDashboard, Settings, Server, Blocks } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import SystemInfoBar from './SystemInfoBar'
 import type { LucideIcon } from 'lucide-react'
 
 interface NavItem {
@@ -10,10 +11,10 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Settings', icon: Settings, path: '/settings' },
   { label: 'Services', icon: Server, path: '/services' },
-  // Future:
-  // { label: 'Logs', icon: ScrollText, path: '/logs' },
+  { label: 'Modules', icon: Blocks, path: '/modules' },
 ]
 
 export default function Sidebar() {
@@ -42,6 +43,8 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      <SystemInfoBar />
     </aside>
   )
 }

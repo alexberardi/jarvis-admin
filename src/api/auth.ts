@@ -1,4 +1,4 @@
-import { authClient } from './client'
+import { apiClient } from './client'
 
 export interface AuthUser {
   id: number
@@ -15,20 +15,13 @@ interface TokenResponse {
 }
 
 export async function login(email: string, password: string): Promise<TokenResponse> {
-  const { data } = await authClient.post<TokenResponse>('/auth/login', { email, password })
+  const { data } = await apiClient.post<TokenResponse>('/api/auth/login', { email, password })
   return data
 }
 
 export async function refresh(refreshToken: string): Promise<TokenResponse> {
-  const { data } = await authClient.post<TokenResponse>('/auth/refresh', {
+  const { data } = await apiClient.post<TokenResponse>('/api/auth/refresh', {
     refresh_token: refreshToken,
-  })
-  return data
-}
-
-export async function getMe(accessToken: string): Promise<AuthUser> {
-  const { data } = await authClient.get<AuthUser>('/auth/me', {
-    headers: { Authorization: `Bearer ${accessToken}` },
   })
   return data
 }

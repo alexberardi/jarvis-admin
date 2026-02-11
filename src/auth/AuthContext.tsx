@@ -134,7 +134,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authApi.login(email, password)
 
       // UX gate only — the real security boundary is server-side
-      // (jarvis-settings-server enforces require_superuser on all endpoints)
       if (!res.user.is_superuser) {
         setState((prev) => ({
           ...prev,
