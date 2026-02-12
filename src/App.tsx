@@ -9,7 +9,8 @@ import LoginPage from '@/pages/LoginPage'
 import SettingsPage from '@/pages/SettingsPage'
 import ServicesPage from '@/pages/ServicesPage'
 import DashboardPage from '@/pages/DashboardPage'
-import ModulesPage from '@/pages/ModulesPage'
+import TrainingPage from '@/pages/TrainingPage'
+import NodesPage from '@/pages/NodesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 const queryClient = new QueryClient()
@@ -26,7 +27,8 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/services" element={<ServicesPage />} />
-                <Route path="/modules" element={<ModulesPage />} />
+                <Route path="/training" element={<TrainingPage />} />
+                <Route path="/nodes" element={<NodesPage />} />
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Route>
