@@ -11,6 +11,7 @@ import { servicesRoutes } from './routes/services.js'
 import { containersRoutes } from './routes/containers.js'
 import { systemRoutes } from './routes/system.js'
 import { nodesRoutes } from './routes/nodes.js'
+import { resolveServiceUrls } from './services/configService.js'
 import type { DockerService } from './services/docker.js'
 import type { ComposeService } from './services/compose.js'
 import type { RegistryService } from './services/registry.js'
@@ -31,8 +32,34 @@ declare module 'fastify' {
   }
 }
 
+/** Map short service names from config-service to Config property names. */
+const SERVICE_NAME_TO_CONFIG: Record<string, keyof Config> = {
+  auth: 'authUrl',
+  'llm-proxy': 'llmProxyUrl',
+  'command-center': 'commandCenterUrl',
+}
+
 export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> {
   const config = { ...loadConfig(), ...opts.config }
+
+  // Resolve service URLs from config-service (override localhost defaults)
+  try {
+    const serviceMap = await resolveServiceUrls(config.configServiceUrl)
+    for (const [serviceName, configKey] of Object.entries(SERVICE_NAME_TO_CONFIG)) {
+      const url = serviceMap.get(serviceName)
+      if (url) {
+        ;(config as Record<string, unknown>)[configKey] = url
+      }
+    }
+  } catch (err) {
+    console.warn(
+      `[jarvis-admin] Could not resolve service URLs from config-service at ${config.configServiceUrl}: ${err instanceof Error ? err.message : err}. Using defaults.`
+    )
+  }
+
+  if (!config.authUrl) {
+    throw new Error('AUTH_URL is required. Set it in your environment or register "auth" in config-service.')
+  }
 
   const app = Fastify({ logger: false })
 

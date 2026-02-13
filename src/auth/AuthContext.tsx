@@ -24,6 +24,7 @@ interface AuthState {
 interface AuthContextValue {
   state: AuthState
   login: (email: string, password: string) => Promise<void>
+  setup: (email: string, password: string, username?: string) => Promise<void>
   logout: () => void
 }
 
@@ -168,7 +169,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const value = useMemo(() => ({ state, login, logout }), [state, login, logout])
+  const setup = useCallback(async (email: string, password: string, username?: string) => {
+    setState((prev) => ({ ...prev, error: null, isLoading: true }))
+
+    try {
+      const res = await authApi.setup(email, password, username)
+
+      localStorage.setItem(ACCESS_KEY, res.access_token)
+      localStorage.setItem(REFRESH_KEY, res.refresh_token)
+      localStorage.setItem(USER_KEY, JSON.stringify(res.user))
+      setAuthToken(res.access_token)
+
+      setState({
+        user: res.user,
+        accessToken: res.access_token,
+        refreshToken: res.refresh_token,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      })
+    } catch (err: unknown) {
+      const message =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
+        'Setup failed'
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: message,
+      }))
+    }
+  }, [])
+
+  const value = useMemo(() => ({ state, login, setup, logout }), [state, login, setup, logout])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

@@ -13,7 +13,8 @@ export interface Config {
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   return {
     port: parseInt(env.PORT ?? '3000', 10),
-    authUrl: env.AUTH_URL ?? 'http://localhost:8007',
+    // Service URLs default to localhost; overridden by config-service discovery at startup
+    authUrl: env.AUTH_URL ?? '',
     configServiceUrl: env.CONFIG_SERVICE_URL ?? 'http://localhost:8013',
     llmProxyUrl: env.LLM_PROXY_URL ?? 'http://localhost:8000',
     commandCenterUrl: env.COMMAND_CENTER_URL ?? 'http://localhost:8002',
