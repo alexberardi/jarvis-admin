@@ -44,7 +44,8 @@ export async function requireSuperuser(
     }
 
     request.user = user
-  } catch {
+  } catch (err) {
+    console.error(`[requireSuperuser] Auth service error (authUrl=${authUrl}):`, err)
     reply.code(502).send({ error: 'Auth service unavailable' })
   }
 }
