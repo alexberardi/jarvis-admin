@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
-import { RefreshCw, Copy, Check, AlertTriangle, FolderOpen, Info } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { RefreshCw, Copy, Check, AlertTriangle, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useServiceRegistry, useRegisterServices, useRotateKey } from '@/hooks/useServices'
@@ -34,15 +34,7 @@ export default function ServicesPage() {
   const [rotateResult, setRotateResult] = useState<KeyRotateResponse | null>(null)
   const [rotatingService, setRotatingService] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
-  const [basePath, setBasePath] = useState('')
   const [healthStates, setHealthStates] = useState<Record<string, HealthState>>({})
-
-  // Auto-fill basePath from config-service's JARVIS_ROOT (volume-mounted path)
-  useEffect(() => {
-    if (data?.jarvis_root && !basePath) {
-      setBasePath(data.jarvis_root)
-    }
-  }, [data?.jarvis_root]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive the effective state for each row (local override or defaults from server)
   const getRowState = useCallback(
@@ -109,10 +101,7 @@ export default function ServicesPage() {
     setResults(null)
     setRotateResult(null)
     mutation.mutate(
-      {
-        services: items,
-        base_path: basePath.trim() || null,
-      },
+      { services: items },
       {
         onSuccess: (resp) => {
           setResults(resp.results)
@@ -129,17 +118,14 @@ export default function ServicesPage() {
         },
       },
     )
-  }, [data, getRowState, mutation, basePath])
+  }, [data, getRowState, mutation])
 
   const handleRotateKey = useCallback(
     (serviceName: string) => {
       setRotatingService(serviceName)
       setRotateResult(null)
       rotateMutation.mutate(
-        {
-          service_name: serviceName,
-          base_path: basePath.trim() || null,
-        },
+        { service_name: serviceName },
         {
           onSuccess: (resp) => {
             setRotateResult(resp)
@@ -153,7 +139,7 @@ export default function ServicesPage() {
         },
       )
     },
-    [rotateMutation, basePath],
+    [rotateMutation],
   )
 
   const handleCopyKey = useCallback((key: string) => {
@@ -259,42 +245,17 @@ export default function ServicesPage() {
         })}
       </div>
 
-      {/* Base path + register button */}
-      <div className="space-y-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-        <div>
-          <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-[var(--color-text-muted)]">
-            <FolderOpen size={14} />
-            Jarvis directory (optional)
-          </label>
-          <input
-            type="text"
-            value={basePath}
-            onChange={(e) => setBasePath(e.target.value)}
-            disabled={mutation.isPending}
-            placeholder="/home/alex/jarvis"
-            className={cn(
-              'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-1.5',
-              'text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]',
-              'outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
-              'disabled:opacity-50',
-            )}
-          />
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Writes JARVIS_APP_ID and JARVIS_APP_KEY to each service's .env file
-          </p>
-        </div>
-
-        <button
-          onClick={handleRegister}
-          disabled={mutation.isPending || checkedCount === 0}
-          className={cn(
-            'rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white',
-            'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50',
-          )}
-        >
-          {mutation.isPending ? 'Registering...' : `Register Selected (${checkedCount})`}
-        </button>
-      </div>
+      {/* Register button */}
+      <button
+        onClick={handleRegister}
+        disabled={mutation.isPending || checkedCount === 0}
+        className={cn(
+          'rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white',
+          'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50',
+        )}
+      >
+        {mutation.isPending ? 'Registering...' : `Register Selected (${checkedCount})`}
+      </button>
 
       {/* Rotate key result */}
       {rotateResult && (
