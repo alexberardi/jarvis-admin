@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { RefreshCw, Copy, Check, AlertTriangle, FolderOpen, Info } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -36,6 +36,13 @@ export default function ServicesPage() {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [basePath, setBasePath] = useState('')
   const [healthStates, setHealthStates] = useState<Record<string, HealthState>>({})
+
+  // Auto-fill basePath from config-service's JARVIS_ROOT (volume-mounted path)
+  useEffect(() => {
+    if (data?.jarvis_root && !basePath) {
+      setBasePath(data.jarvis_root)
+    }
+  }, [data?.jarvis_root]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive the effective state for each row (local override or defaults from server)
   const getRowState = useCallback(
