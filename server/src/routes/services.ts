@@ -7,8 +7,6 @@ export async function servicesRoutes(app: FastifyInstance): Promise<void> {
 
   app.get('/registry', async (request, reply) => {
     const configUrl = app.config.configServiceUrl
-    console.log(`[services/registry] auth header present: ${!!request.headers.authorization}`)
-    console.log(`[services/registry] proxying to: ${configUrl}/v1/services/registry`)
 
     const result = await proxyRequest({
       method: 'GET',
@@ -17,7 +15,6 @@ export async function servicesRoutes(app: FastifyInstance): Promise<void> {
       timeout: 10_000,
     })
 
-    console.log(`[services/registry] upstream returned: ${result.status}`, JSON.stringify(result.data).slice(0, 200))
     reply.code(result.status).send(result.data)
   })
 

@@ -65,7 +65,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
 
   console.log(`[jarvis-admin] Service URLs: auth=${config.authUrl}, config=${config.configServiceUrl}, llm=${config.llmProxyUrl}, cc=${config.commandCenterUrl}`)
 
-  const app = Fastify({ logger: true })
+  const app = Fastify({ logger: false })
 
   await app.register(cors, { origin: true })
 

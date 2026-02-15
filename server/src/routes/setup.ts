@@ -1,4 +1,7 @@
 import type { FastifyInstance } from 'fastify'
+import { savePersistedConfig } from '../config.js'
+import { resolveServiceUrls } from '../services/configService.js'
+import type { Config } from '../config.js'
 
 interface ProbeBody {
   url: string
@@ -16,7 +19,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get('/status', async (_request, reply) => {
     return reply.send({
-      configured: !!app.config.authUrl,
+      configured: !!app.config.authUrl && !!app.config.configServiceUrl,
     })
   })
 
@@ -72,7 +75,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
 
   /**
    * Save setup configuration (Auth URL and Config URL).
-   * Updates the in-memory config so the server can start using them.
+   * Persists to ~/.jarvis/admin.json and updates the in-memory config.
    */
   app.post<{ Body: { authUrl: string; configUrl: string } }>(
     '/configure',
@@ -88,24 +91,25 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
           .send({ error: 'Both authUrl and configUrl are required' })
       }
 
+      const cleanAuthUrl = authUrl.replace(/\/$/, '')
+      const cleanConfigUrl = configUrl.replace(/\/$/, '')
+
       // Update the running config
-      app.config.authUrl = authUrl.replace(/\/$/, '')
-      app.config.configServiceUrl = configUrl.replace(/\/$/, '')
+      app.config.authUrl = cleanAuthUrl
+      app.config.configServiceUrl = cleanConfigUrl
 
       // Re-resolve service URLs from the new config service
+      const SERVICE_NAME_TO_CONFIG: Record<string, keyof Config> = {
+        'jarvis-auth': 'authUrl',
+        'jarvis-llm-proxy-api': 'llmProxyUrl',
+        'jarvis-command-center': 'commandCenterUrl',
+        auth: 'authUrl',
+        'llm-proxy': 'llmProxyUrl',
+        'command-center': 'commandCenterUrl',
+      }
+
       try {
-        const { resolveServiceUrls } = await import(
-          '../services/configService.js'
-        )
-
-        const SERVICE_NAME_TO_CONFIG: Record<string, keyof typeof app.config> =
-          {
-            auth: 'authUrl',
-            'llm-proxy': 'llmProxyUrl',
-            'command-center': 'commandCenterUrl',
-          }
-
-        const serviceMap = await resolveServiceUrls(configUrl)
+        const serviceMap = await resolveServiceUrls(cleanConfigUrl)
         for (const [serviceName, configKey] of Object.entries(
           SERVICE_NAME_TO_CONFIG,
         )) {
@@ -117,6 +121,14 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
       } catch {
         // Config service may not have all services registered yet
       }
+
+      // Persist to disk so it survives server restarts
+      savePersistedConfig({
+        authUrl: app.config.authUrl,
+        configServiceUrl: app.config.configServiceUrl,
+        llmProxyUrl: app.config.llmProxyUrl,
+        commandCenterUrl: app.config.commandCenterUrl,
+      })
 
       return reply.send({ ok: true })
     },
