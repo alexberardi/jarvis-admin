@@ -45,6 +45,12 @@ export async function proxyRequest(opts: ProxyOptions): Promise<ProxyResponse> {
     }
 
     return { status: response.status, data, headers: responseHeaders }
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      return { status: 504, data: { detail: 'Upstream request timed out' }, headers: {} }
+    }
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { status: 502, data: { detail: `Upstream unavailable: ${message}` }, headers: {} }
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
   }

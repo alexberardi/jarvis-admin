@@ -58,9 +58,22 @@ Service URLs are resolved automatically at startup via `jarvis-config-service` �
 
 ## Dependencies
 
-- **Runtime**: React 19, React Router, TanStack Query, Axios, Lucide icons, Sonner (toasts)
-- **Styling**: Tailwind CSS v4, CSS custom properties for theming
-- **Backend**: jarvis-auth (8007) for authentication, jarvis-settings-server (8014) for settings CRUD
+**Frontend Libraries:**
+- React 19, React Router, TanStack Query, Axios, Lucide icons, Sonner (toasts)
+- Tailwind CSS v4, CSS custom properties for theming
+
+**Service Dependencies:**
+- ✅ **Required**: `jarvis-config-service` (8013) - Network discovery to find services
+- ✅ **Required**: `jarvis-auth` (8007) - User authentication (superuser only)
+- ✅ **Required**: `jarvis-settings-server` (8014) - Settings CRUD operations
+
+**Used By:**
+- Administrators (web browser)
+
+**Impact if Down:**
+- ⚠️ No web UI for settings management
+- ✅ All backend services continue to work
+- ✅ Settings can still be managed via direct API calls or env vars
 
 ## Adding New Pages
 

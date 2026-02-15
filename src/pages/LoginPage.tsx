@@ -1,13 +1,15 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
 import { getSetupStatus } from '@/api/auth'
+import { apiClient } from '@/api/client'
 import { cn } from '@/lib/utils'
 
 type Mode = 'loading' | 'setup' | 'login'
 
 export default function LoginPage() {
   const { state, login, setup } = useAuth()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('loading')
   const [email, setEmail] = useState('')
   const [username, setUsername] = useState('')
@@ -17,15 +19,35 @@ export default function LoginPage() {
 
   useEffect(() => {
     let cancelled = false
-    getSetupStatus()
-      .then((res) => {
+
+    async function checkSetup() {
+      // First check if the backend has service URLs configured
+      try {
+        const { data } = await apiClient.get<{ configured: boolean }>('/api/setup/status')
+        if (!cancelled && !data.configured) {
+          navigate('/setup', { replace: true })
+          return
+        }
+      } catch {
+        // Backend unreachable — redirect to setup wizard
+        if (!cancelled) {
+          navigate('/setup', { replace: true })
+          return
+        }
+      }
+
+      // URLs are configured — check if we need first-user setup
+      try {
+        const res = await getSetupStatus()
         if (!cancelled) setMode(res.needs_setup ? 'setup' : 'login')
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setMode('login')
-      })
+      }
+    }
+
+    checkSetup()
     return () => { cancelled = true }
-  }, [])
+  }, [navigate])
 
   if (state.isAuthenticated) {
     return <Navigate to="/settings" replace />

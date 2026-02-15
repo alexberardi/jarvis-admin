@@ -11,6 +11,7 @@ import { servicesRoutes } from './routes/services.js'
 import { containersRoutes } from './routes/containers.js'
 import { systemRoutes } from './routes/system.js'
 import { nodesRoutes } from './routes/nodes.js'
+import { setupRoutes } from './routes/setup.js'
 import { resolveServiceUrls } from './services/configService.js'
 import type { DockerService } from './services/docker.js'
 import type { ComposeService } from './services/compose.js'
@@ -32,8 +33,13 @@ declare module 'fastify' {
   }
 }
 
-/** Map short service names from config-service to Config property names. */
+/** Map service names from config-service to Config property names.
+ *  Supports both full names (jarvis-auth) and short names (auth). */
 const SERVICE_NAME_TO_CONFIG: Record<string, keyof Config> = {
+  'jarvis-auth': 'authUrl',
+  'jarvis-llm-proxy-api': 'llmProxyUrl',
+  'jarvis-command-center': 'commandCenterUrl',
+  // Short-name fallbacks
   auth: 'authUrl',
   'llm-proxy': 'llmProxyUrl',
   'command-center': 'commandCenterUrl',
@@ -57,9 +63,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     )
   }
 
-  if (!config.authUrl) {
-    throw new Error('AUTH_URL is required. Set it in your environment or register "auth" in config-service.')
-  }
+  // authUrl may be empty on first run — the setup wizard will configure it
 
   const app = Fastify({ logger: false })
 
@@ -78,6 +82,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(containersRoutes, { prefix: '/api/containers' })
   await app.register(systemRoutes, { prefix: '/api/system' })
   await app.register(nodesRoutes, { prefix: '/api/nodes' })
+  await app.register(setupRoutes, { prefix: '/api/setup' })
 
   // Serve static frontend in production
   if (config.staticDir && existsSync(config.staticDir)) {
