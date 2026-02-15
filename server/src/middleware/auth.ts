@@ -17,6 +17,7 @@ export async function requireSuperuser(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<void> {
+  console.log(`[requireSuperuser] called for ${request.method} ${request.url}`)
   const authHeader = request.headers.authorization
   if (!authHeader?.startsWith('Bearer ')) {
     reply.code(401).send({ error: 'Missing or invalid authorization header' })
