@@ -84,6 +84,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.decorate('docker', opts.docker ?? null)
   app.decorate('compose', opts.compose ?? null)
   app.decorate('registry', opts.registry ?? null)
+  app.decorateRequest('user', null)
 
   await app.register(healthRoutes)
   await app.register(authRoutes, { prefix: '/api/auth' })
