@@ -69,6 +69,17 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
 
   await app.register(cors, { origin: true })
 
+  // Request logging for debugging
+  app.addHook('onResponse', (request, reply, done) => {
+    console.log(`${request.method} ${request.url} → ${reply.statusCode}`)
+    done()
+  })
+
+  app.setErrorHandler((error, request, reply) => {
+    console.error(`ERROR ${request.method} ${request.url}:`, error)
+    reply.code(error.statusCode ?? 500).send({ error: error.message })
+  })
+
   app.decorate('config', config)
   app.decorate('docker', opts.docker ?? null)
   app.decorate('compose', opts.compose ?? null)
