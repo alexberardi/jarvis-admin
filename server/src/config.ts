@@ -14,7 +14,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   return {
     port: parseInt(env.PORT ?? '8016', 10),
     // Service URLs default to localhost; overridden by config-service discovery at startup
-    authUrl: env.AUTH_URL ?? '',
+    authUrl: env.AUTH_URL ?? 'http://localhost:8007',
     configServiceUrl: env.CONFIG_SERVICE_URL ?? 'http://localhost:8013',
     llmProxyUrl: env.LLM_PROXY_URL ?? 'http://localhost:8000',
     commandCenterUrl: env.COMMAND_CENTER_URL ?? 'http://localhost:8002',

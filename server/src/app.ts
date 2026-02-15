@@ -63,7 +63,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     )
   }
 
-  // authUrl may be empty on first run — the setup wizard will configure it
+  console.log(`[jarvis-admin] Service URLs: auth=${config.authUrl}, config=${config.configServiceUrl}, llm=${config.llmProxyUrl}, cc=${config.commandCenterUrl}`)
 
   const app = Fastify({ logger: false })
 
