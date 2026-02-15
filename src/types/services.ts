@@ -11,6 +11,7 @@ export interface KnownServiceEntry {
 
 export interface ServiceRegistryResponse {
   services: KnownServiceEntry[]
+  jarvis_root: string | null
 }
 
 export interface ServiceRegisterItem {
