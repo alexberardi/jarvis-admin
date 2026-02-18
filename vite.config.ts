@@ -5,7 +5,7 @@ import path from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const backendPort = env.PORT || '8016'
+  const backendPort = env.PORT || '7711'
   const backendUrl = `http://localhost:${backendPort}`
 
   return {
@@ -16,6 +16,7 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
+      port: 7710,
       proxy: {
         '/api': backendUrl,
         '/health': backendUrl,

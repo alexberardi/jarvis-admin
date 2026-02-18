@@ -115,7 +115,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
         )) {
           const url = serviceMap.get(serviceName)
           if (url) {
-            ;(app.config as Record<string, unknown>)[configKey] = url
+            ;(app.config as unknown as Record<string, unknown>)[configKey] = url
           }
         }
       } catch {

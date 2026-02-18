@@ -9,7 +9,7 @@ describe('requireSuperuser middleware', () => {
 
   beforeAll(async () => {
     app = await buildApp({
-      config: { authUrl: 'http://fake-auth:8007' },
+      config: { authUrl: 'http://fake-auth:7701' },
     })
     await app.ready()
   })

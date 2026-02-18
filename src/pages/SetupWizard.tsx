@@ -7,8 +7,8 @@ type ProbeStatus = 'idle' | 'probing' | 'ok' | 'error'
 
 export default function SetupWizard() {
   const navigate = useNavigate()
-  const [authUrl, setAuthUrl] = useState('http://localhost:8007')
-  const [configUrl, setConfigUrl] = useState('http://localhost:8013')
+  const [authUrl, setAuthUrl] = useState('http://localhost:7701')
+  const [configUrl, setConfigUrl] = useState('http://localhost:7700')
   const [authStatus, setAuthStatus] = useState<ProbeStatus>('idle')
   const [configStatus, setConfigStatus] = useState<ProbeStatus>('idle')
   const [authError, setAuthError] = useState('')
@@ -122,7 +122,7 @@ export default function SetupWizard() {
                   setAuthStatus('idle')
                 }}
                 className={inputClass}
-                placeholder="http://localhost:8007"
+                placeholder="http://localhost:7701"
               />
               <button
                 type="button"
@@ -160,7 +160,7 @@ export default function SetupWizard() {
                   setConfigStatus('idle')
                 }}
                 className={inputClass}
-                placeholder="http://localhost:8013"
+                placeholder="http://localhost:7700"
               />
               <button
                 type="button"

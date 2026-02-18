@@ -17,8 +17,8 @@ describe('services routes', () => {
   beforeAll(async () => {
     app = await buildApp({
       config: {
-        authUrl: 'http://fake-auth:8007',
-        configServiceUrl: 'http://fake-config:8013',
+        authUrl: 'http://fake-auth:7701',
+        configServiceUrl: 'http://fake-config:7700',
       },
     })
     await app.ready()
@@ -36,7 +36,7 @@ describe('services routes', () => {
     it('proxies registry request to config service', async () => {
       const registryResponse = {
         services: [
-          { name: 'jarvis-auth', default_port: 8007, description: 'Auth', health_path: '/health', config_registered: true, auth_registered: true, current_host: null, current_port: null },
+          { name: 'jarvis-auth', default_port: 7701, description: 'Auth', health_path: '/health', config_registered: true, auth_registered: true, current_host: null, current_port: null },
         ],
       }
 
@@ -77,7 +77,7 @@ describe('services routes', () => {
         method: 'POST',
         url: '/api/services/register',
         headers: { authorization: 'Bearer valid-token' },
-        payload: { services: [{ name: 'jarvis-auth', host: 'localhost', port: 8007 }] },
+        payload: { services: [{ name: 'jarvis-auth', host: 'localhost', port: 7701 }] },
       })
 
       expect(res.statusCode).toBe(200)
@@ -101,7 +101,7 @@ describe('services routes', () => {
         method: 'POST',
         url: '/api/services/probe',
         headers: { authorization: 'Bearer valid-token' },
-        payload: { host: 'localhost', port: 8007, health_path: '/health' },
+        payload: { host: 'localhost', port: 7701, health_path: '/health' },
       })
 
       expect(res.statusCode).toBe(200)

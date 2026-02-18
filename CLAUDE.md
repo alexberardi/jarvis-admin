@@ -8,7 +8,7 @@ Web admin dashboard for managing Jarvis service settings. Superuser-only access.
 # Setup
 npm install
 
-# Dev server (http://localhost:5173)
+# Dev server (http://localhost:7710)
 npm run dev
 
 # Type check
@@ -37,7 +37,7 @@ src/
 
 ## Auth Flow
 
-1. Login via `POST /auth/login` to jarvis-auth (port 8007)
+1. Login via `POST /auth/login` to jarvis-auth (port 7701)
 2. Non-superuser accounts are rejected at the frontend (error shown, tokens not stored)
 3. Tokens stored in localStorage, attached to settings-server requests via axios interceptor
 4. On 401 from settings-server, auto-refresh is attempted; if that fails, redirect to login
@@ -48,8 +48,8 @@ Service URLs are resolved automatically at startup via `jarvis-config-service` �
 
 **Discovery flow:**
 1. Check localStorage cache for a previously-discovered config service URL; validate with `/info` probe
-2. Scan `localhost` ports 8013-8020, hitting `/info` on each
-3. If not found, discover local IP via WebRTC, then scan the /24 subnet on ports 8013-8020
+2. Scan `localhost` ports 7700-7711, hitting `/info` on each
+3. If not found, discover local IP via WebRTC, then scan the /24 subnet on ports 7700-7711
 4. First response where `{"service": "jarvis-config-service"}` matches wins
 5. Use config service's `GET /services/jarvis-auth` to resolve auth URL; settings API lives on the config service itself
 6. Cache discovered config URL in localStorage for fast subsequent loads
@@ -63,9 +63,9 @@ Service URLs are resolved automatically at startup via `jarvis-config-service` �
 - Tailwind CSS v4, CSS custom properties for theming
 
 **Service Dependencies:**
-- ✅ **Required**: `jarvis-config-service` (8013) - Network discovery to find services
-- ✅ **Required**: `jarvis-auth` (8007) - User authentication (superuser only)
-- ✅ **Required**: `jarvis-settings-server` (8014) - Settings CRUD operations
+- ✅ **Required**: `jarvis-config-service` (7700) - Network discovery to find services
+- ✅ **Required**: `jarvis-auth` (7701) - User authentication (superuser only)
+- ✅ **Required**: `jarvis-settings-server` (7708) - Settings CRUD operations
 
 **Used By:**
 - Administrators (web browser)
