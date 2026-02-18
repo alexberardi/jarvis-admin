@@ -2,15 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vites
 import { buildApp } from '../../src/app.js'
 import type { FastifyInstance } from 'fastify'
 import type { DockerService, ContainerInfo, ContainerStats } from '../../src/services/docker.js'
-
-function mockSuperuserAuth(): void {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ id: 1, email: 'admin@test.com', is_superuser: true }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    ),
-  )
-}
+import { mockSuperuserAuth } from '../helpers.js'
 
 function createMockDocker(containers: ContainerInfo[] = []): DockerService {
   return {

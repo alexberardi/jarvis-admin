@@ -1,15 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest'
 import { buildApp } from '../../src/app.js'
 import type { FastifyInstance } from 'fastify'
-
-function mockSuperuserAuth(): void {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-    new Response(
-      JSON.stringify({ id: 1, email: 'admin@test.com', is_superuser: true }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    ),
-  )
-}
+import { mockSuperuserAuth } from '../helpers.js'
 
 describe('services routes', () => {
   let app: FastifyInstance
