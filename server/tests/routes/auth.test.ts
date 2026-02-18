@@ -7,7 +7,7 @@ describe('auth routes', () => {
 
   beforeAll(async () => {
     app = await buildApp({
-      config: { authUrl: 'http://fake-auth:8007' },
+      config: { authUrl: 'http://fake-auth:7701' },
     })
     await app.ready()
   })
@@ -47,7 +47,7 @@ describe('auth routes', () => {
 
       // Verify the fetch was called with correct URL and body
       expect(fetch).toHaveBeenCalledWith(
-        'http://fake-auth:8007/auth/login',
+        'http://fake-auth:7701/auth/login',
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ email: 'admin@test.com', password: 'password123' }),

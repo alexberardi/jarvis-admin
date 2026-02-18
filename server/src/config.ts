@@ -47,7 +47,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   const persisted = loadPersistedConfig()
 
   return {
-    port: parseInt(env.PORT ?? '8016', 10),
+    port: parseInt(env.PORT ?? '7711', 10),
     // Priority: persisted (from setup wizard) > env var > empty (triggers setup wizard)
     authUrl: persisted.authUrl ?? env.AUTH_URL ?? '',
     configServiceUrl: persisted.configServiceUrl ?? env.CONFIG_SERVICE_URL ?? '',

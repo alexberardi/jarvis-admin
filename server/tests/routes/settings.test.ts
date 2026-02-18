@@ -17,8 +17,8 @@ describe('settings routes', () => {
   beforeAll(async () => {
     app = await buildApp({
       config: {
-        authUrl: 'http://fake-auth:8007',
-        configServiceUrl: 'http://fake-config:8013',
+        authUrl: 'http://fake-auth:7701',
+        configServiceUrl: 'http://fake-config:7700',
       },
     })
     await app.ready()

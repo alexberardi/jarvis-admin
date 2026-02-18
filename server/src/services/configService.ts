@@ -21,7 +21,7 @@ interface ServicesResponse {
 /**
  * Resolve service URLs from jarvis-config-service.
  *
- * @param configServiceUrl - Base URL of config-service (e.g., "http://localhost:8013")
+ * @param configServiceUrl - Base URL of config-service (e.g., "http://localhost:7700")
  * @returns Map of service name → URL
  * @throws Error if config-service is unreachable
  */

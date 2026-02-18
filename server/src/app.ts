@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
 import { type Config, loadConfig } from './config.js'
+import type { AuthUser } from './middleware/auth.js'
 import { healthRoutes } from './routes/health.js'
 import { authRoutes } from './routes/auth.js'
 import { settingsRoutes } from './routes/settings.js'
@@ -75,7 +76,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     done()
   })
 
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler((error: Error & { statusCode?: number }, request, reply) => {
     console.error(`ERROR ${request.method} ${request.url}:`, error)
     reply.code(error.statusCode ?? 500).send({ error: error.message })
   })
@@ -84,7 +85,8 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.decorate('docker', opts.docker ?? null)
   app.decorate('compose', opts.compose ?? null)
   app.decorate('registry', opts.registry ?? null)
-  app.decorateRequest('user', null)
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Fastify pattern: initial value placeholder
+  app.decorateRequest('user', null!)
 
   await app.register(healthRoutes)
   await app.register(authRoutes, { prefix: '/api/auth' })

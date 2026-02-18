@@ -36,7 +36,7 @@ const sampleContainers: ContainerInfo[] = [
     image: 'jarvis-auth:latest',
     state: 'running',
     status: 'Up 2 hours',
-    ports: [{ private: 8007, public: 8007 }],
+    ports: [{ private: 7701, public: 7701 }],
     labels: { 'com.jarvis.managed': 'true' },
     created: '2024-01-01T00:00:00Z',
   },
@@ -46,7 +46,7 @@ const sampleContainers: ContainerInfo[] = [
     image: 'jarvis-logs:latest',
     state: 'running',
     status: 'Up 2 hours',
-    ports: [{ private: 8006, public: 8006 }],
+    ports: [{ private: 7702, public: 7702 }],
     labels: {},
     created: '2024-01-01T00:00:00Z',
   },
@@ -59,7 +59,7 @@ describe('container routes', () => {
   beforeAll(async () => {
     mockDocker = createMockDocker(sampleContainers)
     app = await buildApp({
-      config: { authUrl: 'http://fake-auth:8007' },
+      config: { authUrl: 'http://fake-auth:7701' },
       docker: mockDocker,
     })
     await app.ready()
@@ -148,7 +148,7 @@ describe('container routes without Docker', () => {
 
   beforeAll(async () => {
     app = await buildApp({
-      config: { authUrl: 'http://fake-auth:8007' },
+      config: { authUrl: 'http://fake-auth:7701' },
       // No docker service
     })
     await app.ready()

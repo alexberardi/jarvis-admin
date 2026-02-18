@@ -14,7 +14,7 @@ const testRegistry = {
       name: 'Jarvis Auth',
       description: 'JWT authentication service',
       category: 'core',
-      port: 8007,
+      port: 7701,
       image: 'jarvis-auth:latest',
       healthCheck: '/health',
       dependsOn: [],
@@ -25,7 +25,7 @@ const testRegistry = {
       name: 'Command Center',
       description: 'Central voice/command API',
       category: 'core',
-      port: 8002,
+      port: 7703,
       image: 'jarvis-command-center:latest',
       healthCheck: '/health',
       dependsOn: ['auth'],
@@ -36,7 +36,7 @@ const testRegistry = {
       name: 'Jarvis Recipes',
       description: 'Recipe management',
       category: 'optional',
-      port: 8001,
+      port: 7030,
       image: 'jarvis-recipes:latest',
       healthCheck: '/health',
       dependsOn: ['auth'],
@@ -48,7 +48,7 @@ const testRegistry = {
       name: 'Jarvis OCR',
       description: 'OCR service',
       category: 'optional',
-      port: 5009,
+      port: 7031,
       image: 'jarvis-ocr:latest',
       healthCheck: '/health',
       dependsOn: [],
@@ -89,7 +89,7 @@ describe('RegistryService', () => {
     const auth = registry.getServiceById('auth')
     expect(auth).toBeDefined()
     expect(auth!.name).toBe('Jarvis Auth')
-    expect(auth!.port).toBe(8007)
+    expect(auth!.port).toBe(7701)
   })
 
   it('returns undefined for unknown id', () => {

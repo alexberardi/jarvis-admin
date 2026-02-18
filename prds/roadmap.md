@@ -48,8 +48,8 @@ This PRD defines the feature roadmap for jarvis-admin: which capabilities live h
 ### Current Architecture
 ```
 Frontend-only SPA (no backend of its own)
-├── Talks to jarvis-auth (port 8007) for authentication
-├── Talks to jarvis-config-service (port 8013) for settings + service registry
+├── Talks to jarvis-auth (port 7701) for authentication
+├── Talks to jarvis-config-service (port 7700) for settings + service registry
 └── Network discovery finds these automatically
 ```
 
@@ -116,7 +116,7 @@ The admin currently runs as a pure frontend SPA that talks directly to jarvis-au
 
 **Log viewer (integrated with jarvis-logs):**
 - [ ] Per-service log viewer with tail + search
-- [ ] Query logs from `jarvis-logs` service (port 8006) — not just Docker container logs
+- [ ] Query logs from `jarvis-logs` service (port 7702) — not just Docker container logs
 - [ ] Severity filtering and highlighting
 - [ ] Time range selection
 - [ ] Real-time streaming via WebSocket
