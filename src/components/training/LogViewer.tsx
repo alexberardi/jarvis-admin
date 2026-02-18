@@ -48,9 +48,11 @@ export default function LogViewer({ pipelineState }: LogViewerProps) {
     }
   }, [])
 
-  // Connect when pipeline starts running
+  // Connect when pipeline starts running — connectSSE subscribes to an external
+  // EventSource stream and updates state via callbacks, which is a valid effect pattern.
   useEffect(() => {
     if (pipelineState === 'running') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       connectSSE()
     }
 

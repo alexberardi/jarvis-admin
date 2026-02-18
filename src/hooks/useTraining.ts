@@ -2,12 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPipelineStatus, startBuild, cancelBuild, getArtifacts } from '@/api/training'
 import type { PipelineStatus, BuildRequest, ArtifactsResponse } from '@/types/training'
 
-export function usePipelineStatus(polling = false) {
+export function usePipelineStatus() {
   return useQuery<PipelineStatus>({
     queryKey: ['pipeline-status'],
     queryFn: getPipelineStatus,
     staleTime: 5_000,
-    refetchInterval: polling ? 3_000 : false,
+    refetchInterval: (query) => query.state.data?.state === 'running' ? 3_000 : false,
   })
 }
 
