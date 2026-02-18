@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -9,18 +8,12 @@ import LogViewer from '@/components/training/LogViewer'
 import type { PipelineStep, BuildConfig } from '@/types/training'
 
 export default function TrainingPage() {
-  const [polling, setPolling] = useState(false)
-
   const {
     data: status,
     isLoading: statusLoading,
     refetch: refetchStatus,
     isFetching: statusFetching,
-  } = usePipelineStatus(polling)
-
-  useEffect(() => {
-    setPolling(status?.state === 'running')
-  }, [status?.state])
+  } = usePipelineStatus()
 
   const {
     data: artifacts,

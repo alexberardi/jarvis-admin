@@ -37,13 +37,36 @@ const USER_KEY = 'jarvis-admin:user'
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    user: null,
-    accessToken: null,
-    refreshToken: null,
-    isAuthenticated: false,
-    isLoading: true,
-    error: null,
+  const [state, setState] = useState<AuthState>(() => {
+    const storedAccess = localStorage.getItem(ACCESS_KEY)
+    const storedRefresh = localStorage.getItem(REFRESH_KEY)
+    const storedUser = localStorage.getItem(USER_KEY)
+
+    if (storedAccess && storedRefresh && storedUser) {
+      try {
+        const user = JSON.parse(storedUser) as AuthUser
+        setAuthToken(storedAccess)
+        return {
+          user,
+          accessToken: storedAccess,
+          refreshToken: storedRefresh,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        }
+      } catch {
+        // Corrupted stored data — fall through to defaults
+      }
+    }
+
+    return {
+      user: null,
+      accessToken: null,
+      refreshToken: null,
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+    }
   })
 
   const logout = useCallback(() => {
@@ -84,32 +107,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       logout()
       return null
-    }
-  }, [logout])
-
-  // Bootstrap from localStorage on mount
-  useEffect(() => {
-    const storedAccess = localStorage.getItem(ACCESS_KEY)
-    const storedRefresh = localStorage.getItem(REFRESH_KEY)
-    const storedUser = localStorage.getItem(USER_KEY)
-
-    if (storedAccess && storedRefresh && storedUser) {
-      try {
-        const user = JSON.parse(storedUser) as AuthUser
-        setAuthToken(storedAccess)
-        setState({
-          user,
-          accessToken: storedAccess,
-          refreshToken: storedRefresh,
-          isAuthenticated: true,
-          isLoading: false,
-          error: null,
-        })
-      } catch {
-        logout()
-      }
-    } else {
-      setState((prev) => ({ ...prev, isLoading: false }))
     }
   }, [logout])
 
@@ -205,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')

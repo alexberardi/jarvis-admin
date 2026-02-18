@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { writeFileSync, mkdirSync, rmSync } from 'node:fs'
+import { writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { createRegistryService, type RegistryService } from '../../src/services/registry.js'
 
