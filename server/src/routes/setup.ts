@@ -18,9 +18,26 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
    * Frontend uses this to decide whether to show the setup wizard.
    */
   app.get('/status', async (_request, reply) => {
-    return reply.send({
-      configured: !!app.config.authUrl && !!app.config.configServiceUrl,
-    })
+    const { authUrl, configServiceUrl } = app.config
+
+    // URLs must be set
+    if (!authUrl || !configServiceUrl) {
+      return reply.send({ configured: false })
+    }
+
+    // Probe auth service to detect stale/unreachable URLs
+    try {
+      const res = await fetch(`${authUrl.replace(/\/$/, '')}/health`, {
+        signal: AbortSignal.timeout(3000),
+      })
+      if (!res.ok) {
+        return reply.send({ configured: false, reason: 'auth_unreachable' })
+      }
+    } catch {
+      return reply.send({ configured: false, reason: 'auth_unreachable' })
+    }
+
+    return reply.send({ configured: true })
   })
 
   /**

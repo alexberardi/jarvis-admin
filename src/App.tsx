@@ -13,6 +13,7 @@ import TrainingPage from '@/pages/TrainingPage'
 import NodesPage from '@/pages/NodesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import SetupWizard from '@/pages/SetupWizard'
+import LlmSetupWizard from '@/pages/LlmSetupWizard'
 
 const queryClient = new QueryClient()
 
@@ -25,6 +26,7 @@ export default function App() {
             <Routes>
               <Route path="/setup" element={<SetupWizard />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/llm-setup" element={<LlmSetupWizard />} />
               <Route element={<AppShell />}>
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/settings" element={<SettingsPage />} />

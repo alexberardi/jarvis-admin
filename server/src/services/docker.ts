@@ -24,6 +24,7 @@ export interface DockerService {
   getContainerStatus(id: string): Promise<ContainerInfo | null>
   restartContainer(id: string): Promise<void>
   getContainerStats(id: string): Promise<ContainerStats | null>
+  execInContainer(id: string, cmd: string[], env?: string[]): Promise<string>
 }
 
 function toContainerInfo(container: Docker.ContainerInfo): ContainerInfo {
@@ -92,6 +93,31 @@ export async function createDockerService(socketPath: string): Promise<DockerSer
     async restartContainer(id: string): Promise<void> {
       const container = docker.getContainer(id)
       await container.restart({ t: 10 })
+    },
+
+    async execInContainer(id: string, cmd: string[], env: string[] = []): Promise<string> {
+      const container = docker.getContainer(id)
+      const exec = await container.exec({
+        Cmd: cmd,
+        Env: env,
+        AttachStdout: true,
+        AttachStderr: true,
+      })
+
+      const stream = await exec.start({ hijack: true, stdin: false })
+      const chunks: Buffer[] = []
+
+      return new Promise((resolve, reject) => {
+        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+        stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+        stream.on('error', reject)
+
+        // Timeout after 10 minutes (large model downloads)
+        setTimeout(() => {
+          stream.destroy()
+          reject(new Error('Exec timed out after 10 minutes'))
+        }, 600_000)
+      })
     },
 
     async getContainerStats(id: string): Promise<ContainerStats | null> {
