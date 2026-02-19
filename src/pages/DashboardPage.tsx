@@ -1,12 +1,29 @@
-import { RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { RefreshCw, Brain } from 'lucide-react'
 import { toast } from 'sonner'
 import { useContainers, useRestartContainer } from '@/hooks/useContainers'
+import { useLlmStatus } from '@/hooks/useLlmSetup'
 import ServiceHealthCard from '@/components/dashboard/ServiceHealthCard'
 import { cn } from '@/lib/utils'
 
+const LLM_SETUP_DISMISSED_KEY = 'jarvis-admin:llm-setup-dismissed'
+
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const { data, isLoading, isError, error, refetch, isFetching } = useContainers()
   const restartMutation = useRestartContainer()
+  const llmStatus = useLlmStatus()
+  const [showLlmBanner, setShowLlmBanner] = useState(false)
+
+  useEffect(() => {
+    if (llmStatus.data && !llmStatus.data.configured) {
+      const dismissed = localStorage.getItem(LLM_SETUP_DISMISSED_KEY)
+      if (!dismissed) {
+        setShowLlmBanner(true)
+      }
+    }
+  }, [llmStatus.data])
 
   const handleRestart = (id: string) => {
     restartMutation.mutate(id, {
@@ -66,6 +83,39 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {showLlmBanner && (
+        <div className="flex items-center justify-between rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-4">
+          <div className="flex items-center gap-3">
+            <Brain size={20} className="text-[var(--color-primary)]" />
+            <div>
+              <p className="text-sm font-medium text-[var(--color-text)]">
+                LLM not configured
+              </p>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Set up a language model to enable voice command processing
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                localStorage.setItem(LLM_SETUP_DISMISSED_KEY, 'true')
+                setShowLlmBanner(false)
+              }}
+              className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              Dismiss
+            </button>
+            <button
+              onClick={() => navigate('/llm-setup')}
+              className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-white hover:opacity-90"
+            >
+              Set up LLM
+            </button>
+          </div>
+        </div>
+      )}
 
       {containers.length === 0 && (
         <div className="py-12 text-center">

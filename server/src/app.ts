@@ -12,6 +12,7 @@ import { containersRoutes } from './routes/containers.js'
 import { systemRoutes } from './routes/system.js'
 import { nodesRoutes } from './routes/nodes.js'
 import { setupRoutes } from './routes/setup.js'
+import { llmSetupRoutes } from './routes/llm-setup.js'
 import { resolveServiceUrls } from './services/configService.js'
 import type { DockerService } from './services/docker.js'
 import type { ComposeService } from './services/compose.js'
@@ -95,6 +96,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(systemRoutes, { prefix: '/api/system' })
   await app.register(nodesRoutes, { prefix: '/api/nodes' })
   await app.register(setupRoutes, { prefix: '/api/setup' })
+  await app.register(llmSetupRoutes, { prefix: '/api/llm-setup' })
 
   // Serve static frontend in production
   if (config.staticDir && existsSync(config.staticDir)) {
