@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest'
 import { buildApp } from '../../src/app.js'
 import type { FastifyInstance } from 'fastify'
 
@@ -198,7 +198,15 @@ describe('setup routes - configured', () => {
     await app.close()
   })
 
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('returns configured: true when URLs are set', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('OK', { status: 200 }),
+    )
+
     const res = await app.inject({
       method: 'GET',
       url: '/api/setup/status',

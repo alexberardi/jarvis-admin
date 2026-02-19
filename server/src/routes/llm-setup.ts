@@ -158,7 +158,7 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
 
     // Validate inputs to prevent command injection
     const REPO_PATTERN = /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/
-    const FILENAME_PATTERN = /^[a-zA-Z0-9_.\-]+$/
+    const FILENAME_PATTERN = /^[a-zA-Z0-9_.-]+$/
 
     if (!REPO_PATTERN.test(repo)) {
       return reply.code(400).send({ error: 'Invalid repo format. Expected: owner/repo-name' })
