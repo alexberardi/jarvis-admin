@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, Brain } from 'lucide-react'
 import { toast } from 'sonner'
@@ -14,16 +14,12 @@ export default function DashboardPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useContainers()
   const restartMutation = useRestartContainer()
   const llmStatus = useLlmStatus()
-  const [showLlmBanner, setShowLlmBanner] = useState(false)
+  const [dismissed, setDismissed] = useState(
+    () => !!localStorage.getItem(LLM_SETUP_DISMISSED_KEY),
+  )
 
-  useEffect(() => {
-    if (llmStatus.data && !llmStatus.data.configured) {
-      const dismissed = localStorage.getItem(LLM_SETUP_DISMISSED_KEY)
-      if (!dismissed) {
-        setShowLlmBanner(true)
-      }
-    }
-  }, [llmStatus.data])
+  const showLlmBanner =
+    !!llmStatus.data && !llmStatus.data.configured && !dismissed
 
   const handleRestart = (id: string) => {
     restartMutation.mutate(id, {
@@ -101,7 +97,7 @@ export default function DashboardPage() {
             <button
               onClick={() => {
                 localStorage.setItem(LLM_SETUP_DISMISSED_KEY, 'true')
-                setShowLlmBanner(false)
+                setDismissed(true)
               }}
               className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
             >
