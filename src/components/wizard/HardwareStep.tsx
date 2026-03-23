@@ -10,7 +10,6 @@ export default function HardwareStep() {
 
   useEffect(() => {
     if (state.hardware) return
-    setLoading(true)
     getHardwareInfo()
       .then((hw) => {
         dispatch({ type: 'SET_HARDWARE', hardware: hw })

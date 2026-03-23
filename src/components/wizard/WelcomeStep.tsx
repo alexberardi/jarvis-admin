@@ -11,7 +11,6 @@ export default function WelcomeStep() {
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    setChecking(true)
     getInstallStatus()
       .then(setStatus)
       .catch(() => setStatus({ configured: false, reason: 'error' }))
