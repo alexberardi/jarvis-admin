@@ -6,13 +6,13 @@ import { type Config, loadConfig } from './config.js'
 import { healthRoutes } from './routes/health.js'
 import { authRoutes } from './routes/auth.js'
 import { settingsRoutes } from './routes/settings.js'
-import { trainingRoutes } from './routes/training.js'
 import { servicesRoutes } from './routes/services.js'
 import { containersRoutes } from './routes/containers.js'
 import { systemRoutes } from './routes/system.js'
 import { nodesRoutes } from './routes/nodes.js'
 import { setupRoutes } from './routes/setup.js'
 import { llmSetupRoutes } from './routes/llm-setup.js'
+import { installRoutes } from './routes/install.js'
 import { resolveServiceUrls } from './services/configService.js'
 import type { DockerService } from './services/docker.js'
 import type { ComposeService } from './services/compose.js'
@@ -49,13 +49,15 @@ const SERVICE_NAME_TO_CONFIG: Record<string, keyof Config> = {
 export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> {
   const config = { ...loadConfig(), ...opts.config }
 
-  // Resolve service URLs from config-service (override localhost defaults)
+  // Resolve service URLs from config-service (only fill in blanks — env vars take priority)
   try {
     const serviceMap = await resolveServiceUrls(config.configServiceUrl)
     for (const [serviceName, configKey] of Object.entries(SERVICE_NAME_TO_CONFIG)) {
-      const url = serviceMap.get(serviceName)
-      if (url) {
-        ;(config as Record<string, unknown>)[configKey] = url
+      if (!(config as Record<string, unknown>)[configKey]) {
+        const url = serviceMap.get(serviceName)
+        if (url) {
+          ;(config as Record<string, unknown>)[configKey] = url
+        }
       }
     }
   } catch (err) {
@@ -90,13 +92,13 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(healthRoutes)
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(settingsRoutes, { prefix: '/api/settings' })
-  await app.register(trainingRoutes, { prefix: '/api/training' })
   await app.register(servicesRoutes, { prefix: '/api/services' })
   await app.register(containersRoutes, { prefix: '/api/containers' })
   await app.register(systemRoutes, { prefix: '/api/system' })
   await app.register(nodesRoutes, { prefix: '/api/nodes' })
   await app.register(setupRoutes, { prefix: '/api/setup' })
   await app.register(llmSetupRoutes, { prefix: '/api/llm-setup' })
+  await app.register(installRoutes, { prefix: '/api/install' })
 
   // Serve static frontend in production
   if (config.staticDir && existsSync(config.staticDir)) {
