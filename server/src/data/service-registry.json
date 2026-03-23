@@ -1,0 +1,239 @@
+{
+  "version": "3.0.0",
+  "services": [
+    {
+      "id": "jarvis-config-service",
+      "name": "Config Service",
+      "description": "Centralized configuration and service discovery hub",
+      "category": "core",
+      "port": 7700,
+      "image": "ghcr.io/alexberardi/jarvis-config-service:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["postgres"],
+      "database": "jarvis_config",
+      "dbDriverPrefix": "postgresql://",
+      "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
+        { "name": "MIGRATIONS_DATABASE_URL", "description": "PostgreSQL URL for Alembic migrations", "required": true },
+        { "name": "JARVIS_CONFIG_ADMIN_TOKEN", "description": "Admin token for write operations", "required": true, "secret": true, "secretRef": "JARVIS_CONFIG_ADMIN_TOKEN" },
+        { "name": "JARVIS_AUTH_ADMIN_TOKEN", "description": "Token for auth admin endpoints", "required": true, "secret": true, "secretRef": "JARVIS_AUTH_ADMIN_TOKEN" },
+        { "name": "JARVIS_AUTH_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:7701" }
+      ]
+    },
+    {
+      "id": "jarvis-auth",
+      "name": "Auth Service",
+      "description": "JWT authentication with register, login, refresh, and logout",
+      "category": "core",
+      "port": 7701,
+      "image": "ghcr.io/alexberardi/jarvis-auth:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["postgres", "jarvis-config-service"],
+      "database": "jarvis_auth",
+      "dbDriverPrefix": "postgresql+psycopg2://",
+      "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
+        { "name": "AUTH_SECRET_KEY", "description": "JWT signing key", "required": true, "secret": true, "secretRef": "AUTH_SECRET_KEY" },
+        { "name": "JARVIS_AUTH_ADMIN_TOKEN", "description": "Admin token for auth endpoints", "required": true, "secret": true, "secretRef": "JARVIS_AUTH_ADMIN_TOKEN" },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-logs",
+      "name": "Logging Service",
+      "description": "Centralized logging for all Jarvis services via Loki",
+      "category": "core",
+      "port": 7702,
+      "image": "ghcr.io/alexberardi/jarvis-logs:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["loki", "jarvis-auth"],
+      "envVars": [
+        { "name": "LOKI_URL", "description": "Loki push endpoint", "required": true, "default": "http://loki:3100" },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-command-center",
+      "name": "Command Center",
+      "description": "Central voice/command API, node management, and tool routing",
+      "category": "core",
+      "port": 7703,
+      "image": "ghcr.io/alexberardi/jarvis-command-center:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
+      "database": "jarvis_command_center",
+      "dbDriverPrefix": "postgresql://",
+      "llmInterfaceOptions": [
+        { "id": "JarvisToolModel", "name": "Llama Tool Model", "description": "Full tool descriptions with all examples (default)", "default": true },
+        { "id": "Qwen25MediumUntrained", "name": "Qwen 2.5 Medium", "description": "Optimized for Qwen 2.5 7B-14B models" },
+        { "id": "HermesMediumUntrained", "name": "Hermes 8B Instruct", "description": "Hermes 3 with native function calling" }
+      ],
+      "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
+        { "name": "ADMIN_API_KEY", "description": "Admin endpoint protection", "required": true, "secret": true, "secretRef": "ADMIN_API_KEY" },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-whisper-api",
+      "name": "Whisper STT",
+      "description": "Speech-to-text via whisper.cpp (base.en model included)",
+      "category": "recommended",
+      "port": 7706,
+      "image": "ghcr.io/alexberardi/jarvis-whisper-api:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
+      "database": "jarvis_whisper",
+      "dbDriverPrefix": "postgresql+psycopg2://",
+      "modelOptions": [
+        { "id": "base.en", "name": "Base English", "size": "~140MB", "default": true, "builtin": true },
+        { "id": "small.en", "name": "Small English", "size": "~460MB" },
+        { "id": "medium.en", "name": "Medium English", "size": "~1.5GB" },
+        { "id": "large-v3", "name": "Large v3 (Multilingual)", "size": "~3GB" }
+      ],
+      "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-tts",
+      "name": "Text-to-Speech",
+      "description": "Text-to-speech synthesis via Piper for voice responses",
+      "category": "recommended",
+      "port": 7707,
+      "image": "ghcr.io/alexberardi/jarvis-tts:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["jarvis-auth", "jarvis-config-service"],
+      "envVars": [
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-llm-proxy-api",
+      "name": "LLM Proxy",
+      "description": "LLM inference backend (GGUF/MLX on macOS, GGUF/vLLM on Linux)",
+      "category": "recommended",
+      "port": 7704,
+      "image": "ghcr.io/alexberardi/jarvis-llm-proxy-api:latest",
+      "healthCheck": "/health",
+      "dependsOn": [],
+      "nativeOnly": true,
+      "envVars": []
+    },
+    {
+      "id": "jarvis-notifications",
+      "name": "Notifications",
+      "description": "Push notifications, inbox, and device token management",
+      "category": "recommended",
+      "port": 7712,
+      "image": "ghcr.io/alexberardi/jarvis-notifications:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
+      "database": "jarvis_notifications",
+      "dbDriverPrefix": "postgresql://",
+      "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-settings-server",
+      "name": "Settings Server",
+      "description": "Runtime settings aggregator for service configuration",
+      "category": "recommended",
+      "port": 7708,
+      "image": "ghcr.io/alexberardi/jarvis-settings-server:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["jarvis-auth", "jarvis-config-service"],
+      "envVars": [
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-web",
+      "name": "Web Chat",
+      "description": "Web chat interface for interacting with Jarvis from a browser",
+      "category": "optional",
+      "port": 7722,
+      "image": "ghcr.io/alexberardi/jarvis-web:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["jarvis-auth", "jarvis-command-center"],
+      "envVars": [
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-mcp",
+      "name": "MCP Server",
+      "description": "Model Context Protocol server for Claude Code integration",
+      "category": "optional",
+      "port": 7709,
+      "image": "ghcr.io/alexberardi/jarvis-mcp:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["jarvis-config-service", "jarvis-logs"],
+      "envVars": [
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    },
+    {
+      "id": "jarvis-admin",
+      "name": "Admin Dashboard",
+      "description": "Web admin dashboard for managing Jarvis services and settings",
+      "category": "optional",
+      "port": 7710,
+      "image": "ghcr.io/alexberardi/jarvis-admin:latest",
+      "healthCheck": "/health",
+      "dependsOn": ["jarvis-auth", "jarvis-config-service"],
+      "envVars": [
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ]
+    }
+  ],
+  "infrastructure": [
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "description": "Primary database — stores users, commands, settings, and service config",
+      "image": "postgres:16-alpine",
+      "port": 5432,
+      "envVars": [
+        { "name": "POSTGRES_USER", "description": "Database superuser", "required": true, "default": "jarvis" },
+        { "name": "POSTGRES_PASSWORD", "description": "Database password", "required": true, "secret": true, "secretRef": "POSTGRES_PASSWORD" },
+        { "name": "POSTGRES_DB", "description": "Default database name", "required": true, "default": "jarvis_config" }
+      ],
+      "volumes": ["jarvis-postgres-data:/var/lib/postgresql/data"]
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "description": "Task queue — used for long-running jobs and async pipelines",
+      "image": "redis:7-alpine",
+      "port": 6379,
+      "envVars": [
+        { "name": "REDIS_PASSWORD", "description": "Redis password", "required": true, "secret": true, "secretRef": "REDIS_PASSWORD" }
+      ],
+      "volumes": ["jarvis-redis-data:/data"]
+    },
+    {
+      "id": "loki",
+      "name": "Loki",
+      "description": "Logging database — collects and indexes logs from all services",
+      "image": "grafana/loki:2.9.0",
+      "port": 3100,
+      "envVars": [],
+      "volumes": ["jarvis-loki-data:/loki"]
+    },
+    {
+      "id": "grafana",
+      "name": "Grafana",
+      "description": "Monitoring dashboard — visualize logs and service health metrics",
+      "image": "grafana/grafana:latest",
+      "port": 3001,
+      "envVars": [
+        { "name": "GF_SECURITY_ADMIN_PASSWORD", "description": "Grafana admin password", "required": true, "default": "jarvis" }
+      ],
+      "volumes": ["jarvis-grafana-data:/var/lib/grafana"]
+    }
+  ]
+}

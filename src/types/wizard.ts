@@ -1,0 +1,109 @@
+export interface HardwareInfo {
+  platform: 'darwin' | 'linux'
+  arch: string
+  totalMemoryGb: number
+  gpuName: string | null
+  gpuVramMb: number | null
+  recommendedBackends: string[]
+  recommendedBackend: string
+}
+
+export interface WizardState {
+  currentStep: number
+  totalSteps: number
+  enabledModules: string[]
+  portOverrides: Record<string, number>
+  infraPortOverrides: Record<string, number>
+  secrets: Record<string, string>
+  dbUser: string
+  whisperModel: string
+  llmInterface: string
+  deploymentMode: 'local' | 'remote-llm'
+  remoteLlmUrl: string
+  remoteWhisperUrl: string
+  platform: 'darwin' | 'linux'
+  hardware: HardwareInfo | null
+}
+
+export type WizardAction =
+  | { type: 'SET_STEP'; step: number }
+  | { type: 'NEXT_STEP' }
+  | { type: 'PREV_STEP' }
+  | { type: 'SET_ENABLED_MODULES'; modules: string[] }
+  | { type: 'TOGGLE_MODULE'; serviceId: string; enabled: boolean }
+  | { type: 'SET_PORT_OVERRIDE'; serviceId: string; port: number }
+  | { type: 'SET_INFRA_PORT_OVERRIDE'; infraId: string; port: number }
+  | { type: 'SET_SECRET'; name: string; value: string }
+  | { type: 'SET_SECRETS'; secrets: Record<string, string> }
+  | { type: 'SET_DB_USER'; user: string }
+  | { type: 'SET_WHISPER_MODEL'; model: string }
+  | { type: 'SET_LLM_INTERFACE'; interfaceId: string }
+  | { type: 'SET_DEPLOYMENT_MODE'; mode: 'local' | 'remote-llm' }
+  | { type: 'SET_REMOTE_LLM_URL'; url: string }
+  | { type: 'SET_REMOTE_WHISPER_URL'; url: string }
+  | { type: 'SET_PLATFORM'; platform: 'darwin' | 'linux' }
+  | { type: 'SET_HARDWARE'; hardware: HardwareInfo }
+
+export interface InstallStatus {
+  configured: boolean
+  composePath?: string
+  reason?: string
+}
+
+export interface HealthStatus {
+  [serviceId: string]: {
+    healthy: boolean
+    url: string
+    error?: string
+  }
+}
+
+export interface GenerateResult {
+  ok: boolean
+  composePath: string
+  files: string[]
+  serviceCount: number
+}
+
+export interface RegisterResult {
+  registered: string[]
+  failed: Array<{ serviceId: string; error: string }>
+  needsRestart: boolean
+}
+
+export interface ServiceDefinition {
+  id: string
+  name: string
+  description: string
+  category: 'core' | 'recommended' | 'optional'
+  port: number
+  image: string
+  healthCheck: string
+  dependsOn: string[]
+  nativeOnly?: boolean
+  database?: string
+  modelOptions?: Array<{
+    id: string
+    name: string
+    size: string
+    default?: boolean
+    builtin?: boolean
+  }>
+  llmInterfaceOptions?: Array<{
+    id: string
+    name: string
+    description: string
+    default?: boolean
+  }>
+}
+
+export interface ServiceRegistry {
+  version: string
+  services: ServiceDefinition[]
+  infrastructure: Array<{
+    id: string
+    name: string
+    description: string
+    port: number
+  }>
+}

@@ -100,6 +100,7 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
       'inference.gguf.n_threads',
       'inference.vllm.quantization',
       'inference.vllm.gpu_memory_utilization',
+      'llm.interface',
     ])
     const invalidKeys = Object.keys(settings).filter((k) => !ALLOWED_KEYS.has(k))
     if (invalidKeys.length > 0) {
@@ -110,16 +111,45 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(503).send({ error: 'LLM proxy URL not configured' })
     }
 
-    const settingsResult = await proxyRequest({
-      method: 'PUT',
-      url: `${llmUrl}/settings/`,
-      headers: { Authorization: request.headers.authorization! },
-      body: { settings },
-      timeout: 10_000,
-    })
+    // Separate llm.interface (goes to config-service for command-center)
+    // from model.* / inference.* (goes to llm-proxy)
+    const promptProvider = settings['llm.interface'] as string | undefined
+    const llmProxySettings = { ...settings }
+    delete llmProxySettings['llm.interface']
 
-    if (settingsResult.status !== 200) {
-      return reply.code(settingsResult.status).send(settingsResult.data)
+    // Write LLM proxy settings
+    let settingsResult = { status: 200, data: {} as unknown }
+    if (Object.keys(llmProxySettings).length > 0) {
+      settingsResult = await proxyRequest({
+        method: 'PUT',
+        url: `${llmUrl}/settings/`,
+        headers: { Authorization: request.headers.authorization! },
+        body: { settings: llmProxySettings },
+        timeout: 10_000,
+      })
+
+      if (settingsResult.status !== 200) {
+        return reply.code(settingsResult.status).send(settingsResult.data)
+      }
+    }
+
+    // Write prompt provider to config-service (for command-center)
+    let promptProviderResult: string | undefined
+    if (promptProvider && app.config.configServiceUrl) {
+      try {
+        const ppResult = await proxyRequest({
+          method: 'PUT',
+          url: `${app.config.configServiceUrl}/v1/settings/jarvis-command-center/llm.interface`,
+          headers: { Authorization: request.headers.authorization! },
+          body: { value: promptProvider },
+          timeout: 10_000,
+        })
+        if (ppResult.status === 200) {
+          promptProviderResult = promptProvider
+        }
+      } catch (err) {
+        console.warn('[llm-setup] Failed to set prompt provider:', err)
+      }
     }
 
     // Restart llm-proxy containers if Docker is available
@@ -142,6 +172,7 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({
       success: true,
       settingsResult: settingsResult.data,
+      promptProvider: promptProviderResult,
       message: 'Settings saved. LLM proxy restarting.',
     })
   })
