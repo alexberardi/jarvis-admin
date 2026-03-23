@@ -11,6 +11,8 @@ export interface LlmModel {
   vramMb: number
   gated: boolean
   quantization: string
+  /** Prompt provider name for command-center (llm.interface setting) */
+  promptProvider: string
 }
 
 export const LLM_MODELS: LlmModel[] = [
@@ -27,6 +29,7 @@ export const LLM_MODELS: LlmModel[] = [
     vramMb: 4096,
     gated: false,
     quantization: 'awq',
+    promptProvider: 'Qwen25MediumUntrained',
   },
   {
     id: 'llama-3.2-3b',
@@ -41,6 +44,7 @@ export const LLM_MODELS: LlmModel[] = [
     vramMb: 4096,
     gated: true,
     quantization: 'awq',
+    promptProvider: 'Llama32_3B_Compressed',
   },
   {
     id: 'qwen3-8b',
@@ -55,6 +59,7 @@ export const LLM_MODELS: LlmModel[] = [
     vramMb: 7168,
     gated: false,
     quantization: 'awq',
+    promptProvider: 'Qwen25MediumUntrained',
   },
   {
     id: 'llama-3.1-8b',
@@ -69,6 +74,7 @@ export const LLM_MODELS: LlmModel[] = [
     vramMb: 7168,
     gated: true,
     quantization: 'awq',
+    promptProvider: 'Llama31MediumUntrained',
   },
   {
     id: 'mistral-nemo-12b',
@@ -83,6 +89,7 @@ export const LLM_MODELS: LlmModel[] = [
     vramMb: 10240,
     gated: false,
     quantization: 'awq',
+    promptProvider: 'Mistral7bMediumUntrained',
   },
   {
     id: 'qwen3-14b',
@@ -97,5 +104,6 @@ export const LLM_MODELS: LlmModel[] = [
     vramMb: 12288,
     gated: false,
     quantization: 'awq',
+    promptProvider: 'Qwen3LargeUntrained',
   },
 ]

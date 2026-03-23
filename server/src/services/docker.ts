@@ -35,7 +35,7 @@ function toContainerInfo(container: Docker.ContainerInfo): ContainerInfo {
     image: container.Image,
     state: container.State,
     status: container.Status,
-    ports: container.Ports.map((p) => ({
+    ports: (container.Ports ?? []).map((p) => ({
       private: p.PrivatePort,
       public: p.PublicPort ?? null,
     })),

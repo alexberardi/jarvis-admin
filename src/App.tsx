@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
@@ -9,13 +10,61 @@ import LoginPage from '@/pages/LoginPage'
 import SettingsPage from '@/pages/SettingsPage'
 import ServicesPage from '@/pages/ServicesPage'
 import DashboardPage from '@/pages/DashboardPage'
-import TrainingPage from '@/pages/TrainingPage'
 import NodesPage from '@/pages/NodesPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import SetupWizard from '@/pages/SetupWizard'
 import LlmSetupWizard from '@/pages/LlmSetupWizard'
+import { getInstallStatus } from '@/api/install'
 
 const queryClient = new QueryClient()
+
+function AppRoutes() {
+  const [checking, setChecking] = useState(true)
+  const [needsInstall, setNeedsInstall] = useState(false)
+
+  useEffect(() => {
+    getInstallStatus()
+      .then((status) => {
+        setNeedsInstall(!status.configured)
+      })
+      .catch(() => {
+        // If we can't reach the backend, don't force install wizard
+        setNeedsInstall(false)
+      })
+      .finally(() => setChecking(false))
+  }, [])
+
+  if (checking) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--color-background)]">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[var(--color-primary)] border-t-transparent" />
+      </div>
+    )
+  }
+
+  return (
+    <Routes>
+      <Route path="/setup" element={<SetupWizard />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/llm-setup" element={<LlmSetupWizard />} />
+      <Route element={<AppShell />}>
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/services" element={<ServicesPage />} />
+        <Route path="/nodes" element={<NodesPage />} />
+        <Route
+          path="/"
+          element={
+            needsInstall
+              ? <Navigate to="/setup" replace />
+              : <Navigate to="/dashboard" replace />
+          }
+        />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+    </Routes>
+  )
+}
 
 export default function App() {
   return (
@@ -23,20 +72,7 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <BrowserRouter>
-            <Routes>
-              <Route path="/setup" element={<SetupWizard />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/llm-setup" element={<LlmSetupWizard />} />
-              <Route element={<AppShell />}>
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/services" element={<ServicesPage />} />
-                <Route path="/training" element={<TrainingPage />} />
-                <Route path="/nodes" element={<NodesPage />} />
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Route>
-            </Routes>
+            <AppRoutes />
           </BrowserRouter>
           <Toaster position="bottom-right" richColors />
         </AuthProvider>
