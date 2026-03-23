@@ -16,7 +16,13 @@ npx tsc -b
 
 # Build
 npm run build
+
+# Docker dev (recommended — auto-started by jarvis CLI)
+# Dockerfile.dev + docker-compose.dev.yaml with hot reload
+docker compose -f docker-compose.dev.yaml up -d
 ```
+
+**Note:** The `./jarvis` CLI now starts jarvis-admin in Docker mode automatically. You typically don't need to run it manually.
 
 ## Architecture
 
