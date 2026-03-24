@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, XCircle, Loader2, Play } from 'lucide-react'
+import { CheckCircle2, XCircle, Loader2, Play, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { useInstallStream } from '@/hooks/useInstallStream'
@@ -25,43 +25,16 @@ export default function InstallStep() {
       setPhase('generating')
       await generateInstall(state)
 
-      // Phase 2: Pull images (SSE stream)
+      // Phase 2: Pull images (SSE stream → Promise)
       setPhase('pulling')
-      await new Promise<void>((resolve, reject) => {
-        pullStream.start('/api/install/pull')
-        const interval = setInterval(() => {
-          if (pullStream.done) {
-            clearInterval(interval)
-            if (pullStream.exitCode === 0) resolve()
-            else reject(new Error(`docker compose pull failed (exit ${pullStream.exitCode})`))
-          }
-          if (pullStream.error) {
-            clearInterval(interval)
-            reject(new Error(pullStream.error))
-          }
-        }, 500)
-      })
+      await pullStream.run('/api/install/pull')
 
-      // Phase 3: Start services (SSE stream)
+      // Phase 3: Start services (SSE stream → Promise)
       setPhase('starting')
-      await new Promise<void>((resolve, reject) => {
-        startStream.start('/api/install/start')
-        const interval = setInterval(() => {
-          if (startStream.done) {
-            clearInterval(interval)
-            if (startStream.exitCode === 0) resolve()
-            else reject(new Error(`docker compose up failed (exit ${startStream.exitCode})`))
-          }
-          if (startStream.error) {
-            clearInterval(interval)
-            reject(new Error(startStream.error))
-          }
-        }, 500)
-      })
+      await startStream.run('/api/install/start')
 
       // Phase 4: Wait for services to be healthy, then register
       setPhase('registering')
-      // Wait a few seconds for services to start
       await new Promise((r) => setTimeout(r, 5000))
       await registerServices(state.portOverrides)
 
@@ -98,7 +71,9 @@ export default function InstallStep() {
             ? 'Ready to install. This will pull Docker images and start all services.'
             : phase === 'done'
               ? 'Installation complete! All services are running.'
-              : 'Installing...'}
+              : phase === 'error'
+                ? 'Installation encountered an error.'
+                : 'Installing...'}
         </p>
       </div>
 
@@ -180,8 +155,8 @@ export default function InstallStep() {
         <div className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-500">{error}</div>
       )}
 
-      {/* Start button */}
-      {phase === 'idle' && (
+      {/* Start / Retry button */}
+      {(phase === 'idle' || phase === 'error') && (
         <button
           type="button"
           onClick={runInstall}
@@ -190,8 +165,8 @@ export default function InstallStep() {
             'hover:opacity-90 transition-opacity',
           )}
         >
-          <Play size={18} />
-          Start Installation
+          {phase === 'error' ? <RotateCcw size={18} /> : <Play size={18} />}
+          {phase === 'error' ? 'Retry Installation' : 'Start Installation'}
         </button>
       )}
     </div>
