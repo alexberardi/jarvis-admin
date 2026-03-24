@@ -194,6 +194,8 @@ function generateServiceBlock(
 
   // Environment
   lines.push('    environment:')
+  // Set PORT so the service listens on the expected port inside the container
+  lines.push(`      PORT: "${service.port}"`)
   if (service.database) {
     const driver = service.dbDriverPrefix ?? 'postgresql://'
     lines.push(
