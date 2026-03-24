@@ -70,10 +70,10 @@ describe('service-registry', () => {
     expect(ids).toContain('loki')
   })
 
-  it('llm-proxy is marked nativeOnly', () => {
+  it('llm-proxy is marked as GPU service', () => {
     const llm = getServiceById(registry, 'jarvis-llm-proxy-api')
     expect(llm).toBeDefined()
-    expect(llm!.nativeOnly).toBe(true)
+    expect((llm as unknown as Record<string, unknown>).gpu).toBe(true)
   })
 
   it('does not contain removed services (ocr, recipes)', () => {

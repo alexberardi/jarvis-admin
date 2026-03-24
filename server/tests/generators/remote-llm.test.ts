@@ -88,7 +88,7 @@ describe('Remote LLM (Pi 5) deployment', () => {
   })
 
   describe('macOS with remote LLM', () => {
-    it('excludes nativeOnly services from compose on darwin', () => {
+    it('excludes GPU services from compose on darwin', () => {
       const state: WizardState = {
         ...makePi5State(),
         platform: 'darwin',
@@ -96,9 +96,9 @@ describe('Remote LLM (Pi 5) deployment', () => {
       }
       const services = getComposeServices(state, registry)
       const ids = services.map((s) => s.id)
-      // nativeOnly=true + darwin = excluded
+      // gpu=true + darwin = excluded (runs natively on macOS)
       expect(ids).not.toContain('jarvis-llm-proxy-api')
-      // non-native services still included
+      // non-GPU services still included
       expect(ids).toContain('jarvis-tts')
     })
   })

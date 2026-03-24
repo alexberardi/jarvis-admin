@@ -14,7 +14,7 @@ import { serviceIdToPortVar } from './port-utils.js'
 
 /**
  * Returns all enabled services (core + selected recommended + selected optional).
- * On macOS (darwin), filters out nativeOnly services (e.g., llm-proxy).
+ * On macOS (darwin), filters out GPU services (e.g., llm-proxy) that run natively.
  */
 export function getAllEnabledServices(
   state: WizardState,
@@ -32,7 +32,7 @@ export function getAllEnabledServices(
 
 /**
  * Returns services to include in docker-compose.
- * Excludes nativeOnly services on macOS.
+ * Excludes GPU services on macOS (they run natively via Metal/MLX).
  */
 export function getComposeServices(
   state: WizardState,
@@ -40,7 +40,7 @@ export function getComposeServices(
 ): ServiceDefinition[] {
   const all = getAllEnabledServices(state, registry)
   if (state.platform === 'darwin') {
-    return all.filter((s) => !s.nativeOnly)
+    return all.filter((s) => !(s as unknown as { gpu?: boolean }).gpu)
   }
   return all
 }
