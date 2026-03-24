@@ -214,6 +214,7 @@ jobs:
           # Server
           cp -r server/dist/* npm-pkg/server/dist/
           cp server/package.json npm-pkg/server/
+          cp server/package-lock.json npm-pkg/server/
           cp server/src/data/service-registry.json npm-pkg/server/src/data/
 
           # Frontend
