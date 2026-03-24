@@ -7,6 +7,7 @@ set -e
 REPO="alexberardi/jarvis-admin"
 INSTALL_DIR="$HOME/.jarvis/bin"
 BINARY_NAME="jarvis-admin"
+SERVICE_NAME="jarvis-admin"
 
 # Colors (if terminal supports them)
 RED='\033[0;31m'
@@ -110,18 +111,101 @@ setup_path() {
   export PATH="${INSTALL_DIR}:${PATH}"
 }
 
+# Set up systemd service (Linux) or launchd (macOS) for autostart
+setup_autostart() {
+  if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
+    info "Setting up systemd service..."
+
+    SERVICE_FILE="$HOME/.config/systemd/user/${SERVICE_NAME}.service"
+    mkdir -p "$(dirname "$SERVICE_FILE")"
+
+    cat > "$SERVICE_FILE" << UNIT
+[Unit]
+Description=Jarvis Admin Dashboard
+After=network.target docker.service
+
+[Service]
+Type=simple
+ExecStart=${INSTALL_DIR}/${BINARY_NAME}
+Restart=on-failure
+RestartSec=5
+Environment=PORT=7711
+Environment=STATIC_DIR=${INSTALL_DIR}/public
+
+[Install]
+WantedBy=default.target
+UNIT
+
+    systemctl --user daemon-reload
+    systemctl --user enable "$SERVICE_NAME" 2>/dev/null || true
+    systemctl --user restart "$SERVICE_NAME"
+
+    # Enable lingering so user services start at boot (not just on login)
+    loginctl enable-linger "$(whoami)" 2>/dev/null || true
+
+    success "Systemd service installed and started"
+
+  elif [ "$OS" = "darwin" ]; then
+    info "Setting up launchd service..."
+
+    PLIST_DIR="$HOME/Library/LaunchAgents"
+    PLIST_FILE="$PLIST_DIR/com.jarvis.admin.plist"
+    mkdir -p "$PLIST_DIR"
+
+    cat > "$PLIST_FILE" << PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.jarvis.admin</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>${INSTALL_DIR}/${BINARY_NAME}</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PORT</key>
+    <string>7711</string>
+    <key>STATIC_DIR</key>
+    <string>${INSTALL_DIR}/public</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>${HOME}/.jarvis/logs/admin.log</string>
+  <key>StandardErrorPath</key>
+  <string>${HOME}/.jarvis/logs/admin.log</string>
+</dict>
+</plist>
+PLIST
+
+    mkdir -p "$HOME/.jarvis/logs"
+    launchctl unload "$PLIST_FILE" 2>/dev/null || true
+    launchctl load "$PLIST_FILE"
+
+    success "LaunchAgent installed and started"
+
+  else
+    # Fallback: just start in background
+    info "Starting jarvis-admin in background..."
+    STATIC_DIR="${INSTALL_DIR}/public" PORT=7711 \
+      nohup "${INSTALL_DIR}/${BINARY_NAME}" > "$HOME/.jarvis/logs/admin.log" 2>&1 &
+    success "Started (PID: $!)"
+  fi
+}
+
 # Print success message
 print_success() {
   printf "\n"
-  printf "${GREEN}${BOLD}Jarvis Admin installed successfully!${NC}\n"
+  printf "${GREEN}${BOLD}Jarvis Admin is running!${NC}\n"
   printf "\n"
-  printf "  To get started, run:\n"
+  printf "  Open ${BLUE}http://localhost:7711${NC} in your browser to get started.\n"
   printf "\n"
-  printf "    ${BOLD}source ~/.bashrc${NC}    # reload PATH\n"
-
-  printf "    ${BOLD}jarvis-admin${NC}          # start the setup wizard\n"
-  printf "\n"
-  printf "  Then open ${BLUE}http://localhost:7711${NC} in your browser.\n"
+  printf "  The admin service starts automatically on boot.\n"
+  printf "  Manage it with: ${BOLD}systemctl --user status jarvis-admin${NC}\n"
   printf "\n"
 }
 
@@ -134,6 +218,7 @@ main() {
   get_latest_version
   install_binary
   setup_path
+  setup_autostart
   print_success
 }
 
