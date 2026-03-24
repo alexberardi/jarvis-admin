@@ -90,16 +90,27 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         recommendedBackends.push('gguf')
       }
     } else if (plat === 'linux') {
-      // Linux: check for NVIDIA GPU
+      // Linux: check for NVIDIA GPU(s)
       try {
         const output = execSync(
           'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits',
           { encoding: 'utf-8', timeout: 10_000 },
         )
-        const parts = output.trim().split(', ')
-        if (parts.length >= 2) {
-          gpuName = parts[0]
-          gpuVramMb = parseInt(parts[1], 10)
+        const lines = output.trim().split('\n').filter(Boolean)
+        let totalVram = 0
+        const gpuNames: string[] = []
+        for (const line of lines) {
+          const parts = line.split(', ')
+          if (parts.length >= 2) {
+            gpuNames.push(parts[0].trim())
+            totalVram += parseInt(parts[1], 10)
+          }
+        }
+        if (gpuNames.length > 0) {
+          gpuName = gpuNames.length === 1
+            ? gpuNames[0]
+            : `${gpuNames.length}x ${gpuNames[0]}`
+          gpuVramMb = totalVram
         }
       } catch {
         // No NVIDIA GPU
