@@ -117,10 +117,7 @@ print_success() {
   printf "\n"
   printf "  To get started, run:\n"
   printf "\n"
-
-  if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
-    printf "    ${BOLD}source ~/.bashrc${NC}    # reload PATH (one time)\n"
-  fi
+  printf "    ${BOLD}source ~/.bashrc${NC}    # reload PATH\n"
 
   printf "    ${BOLD}jarvis-admin${NC}          # start the setup wizard\n"
   printf "\n"
