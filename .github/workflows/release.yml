@@ -104,11 +104,20 @@ jobs:
           timeout 5 bundle/${{ matrix.artifact }} || true
           echo "Binary created successfully"
 
-      - name: Upload artifact
+      - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: bundle/${{ matrix.artifact }}
+
+      - name: Upload public assets (once)
+        if: matrix.target == 'linux-x64'
+        run: tar czf public.tar.gz -C bundle public
+      - uses: actions/upload-artifact@v4
+        if: matrix.target == 'linux-x64'
+        with:
+          name: public-assets
+          path: public.tar.gz
 
   # Create GitHub Release with binaries
   release:
@@ -127,9 +136,12 @@ jobs:
           mkdir -p release
           for dir in binaries/*/; do
             name=$(basename "$dir")
-            cp "$dir/$name" "release/$name"
-            chmod +x "release/$name"
+            # Skip non-binary dirs (public-assets)
+            [[ -f "$dir/$name" ]] && cp "$dir/$name" "release/$name" && chmod +x "release/$name"
           done
+
+          # Copy public assets tarball
+          cp binaries/public-assets/public.tar.gz release/ 2>/dev/null || true
 
           # Create checksums
           cd release

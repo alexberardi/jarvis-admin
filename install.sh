@@ -75,7 +75,16 @@ install_binary() {
   fi
 
   chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
-  success "Installed to ${INSTALL_DIR}/${BINARY_NAME}"
+  success "Installed binary to ${INSTALL_DIR}/${BINARY_NAME}"
+
+  # Download frontend assets
+  PUBLIC_URL="https://github.com/${REPO}/releases/download/${VERSION}/public.tar.gz"
+  info "Downloading frontend assets..."
+  if curl -fsSL "$PUBLIC_URL" | tar xz -C "$INSTALL_DIR"; then
+    success "Frontend assets installed to ${INSTALL_DIR}/public/"
+  else
+    error "Failed to download frontend assets"
+  fi
 }
 
 # Add to PATH if needed
@@ -106,17 +115,17 @@ print_success() {
   printf "\n"
   printf "${GREEN}${BOLD}Jarvis Admin installed successfully!${NC}\n"
   printf "\n"
-  printf "  Start the setup wizard:\n"
-  printf "    ${BOLD}jarvis-admin${NC}\n"
-  printf "\n"
-  printf "  Then open ${BLUE}http://localhost:7711${NC} in your browser.\n"
+  printf "  To get started, run:\n"
   printf "\n"
 
   if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
-    printf "  ${BOLD}Note:${NC} Restart your terminal or run:\n"
-    printf "    export PATH=\"\$HOME/.jarvis/bin:\$PATH\"\n"
-    printf "\n"
+    printf "    ${BOLD}source ~/.bashrc${NC}    # reload PATH (one time)\n"
   fi
+
+  printf "    ${BOLD}jarvis-admin${NC}          # start the setup wizard\n"
+  printf "\n"
+  printf "  Then open ${BLUE}http://localhost:7711${NC} in your browser.\n"
+  printf "\n"
 }
 
 # Main
