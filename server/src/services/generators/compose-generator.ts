@@ -188,14 +188,25 @@ function generateServiceBlock(
   lines.push(`    image: ${image}`)
   lines.push(`    container_name: ${service.id}`)
 
-  // Ports
+  // Ports — containerPort is the port the service listens on inside the container
+  // (may differ from the external port when the Dockerfile hardcodes a port)
+  const containerPort = (service as unknown as { containerPort?: number }).containerPort ?? service.port
   lines.push('    ports:')
-  lines.push(`      - "\${${portVar}:-${hostPort}}:${service.port}"`)
+  lines.push(`      - "\${${portVar}:-${hostPort}}:${containerPort}"`)
 
   // Environment
   lines.push('    environment:')
-  // Set PORT so the service listens on the expected port inside the container
-  lines.push(`      PORT: "${service.port}"`)
+  // Set port env vars so the service listens on the expected port inside the container.
+  // Different services use different env var names for their port.
+  const portVarMap: Record<string, string[]> = {
+    'jarvis-tts': ['TTS_PORT'],
+    'jarvis-logs': ['LOG_SERVER_PORT'],
+    'jarvis-notifications': ['NOTIFICATIONS_PORT'],
+  }
+  const portVarNames = portVarMap[service.id] ?? ['PORT']
+  for (const pv of portVarNames) {
+    lines.push(`      ${pv}: "${service.port}"`)
+  }
   if (service.database) {
     const driver = service.dbDriverPrefix ?? 'postgresql://'
     lines.push(
@@ -268,7 +279,7 @@ function generateServiceBlock(
 
   // Healthcheck
   lines.push('    healthcheck:')
-  lines.push(`      test: ["CMD", "curl", "-f", "http://localhost:${service.port}${service.healthCheck}"]`)
+  lines.push(`      test: ["CMD", "curl", "-f", "http://localhost:${containerPort}${service.healthCheck}"]`)
   lines.push('      interval: 30s')
   lines.push('      timeout: 10s')
   lines.push('      retries: 3')
