@@ -79,7 +79,7 @@ describe('compose-generator', () => {
     expect(output).toContain('JARVIS_APP_KEY')
   })
 
-  describe('macOS nativeOnly exclusion', () => {
+  describe('macOS GPU service exclusion', () => {
     it('excludes llm-proxy from compose on darwin', () => {
       const state = makeState({
         platform: 'darwin',
