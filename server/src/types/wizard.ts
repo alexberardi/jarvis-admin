@@ -49,4 +49,5 @@ export interface RegisterResult {
   registered: string[]
   failed: Array<{ serviceId: string; error: string }>
   needsRestart: boolean
+  appKeys?: Record<string, { appId: string; appKey: string }>
 }
