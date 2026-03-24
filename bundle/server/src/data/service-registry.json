@@ -17,7 +17,7 @@
         { "name": "MIGRATIONS_DATABASE_URL", "description": "PostgreSQL URL for Alembic migrations", "required": true },
         { "name": "JARVIS_CONFIG_ADMIN_TOKEN", "description": "Admin token for write operations", "required": true, "secret": true, "secretRef": "JARVIS_CONFIG_ADMIN_TOKEN" },
         { "name": "JARVIS_AUTH_ADMIN_TOKEN", "description": "Token for auth admin endpoints", "required": true, "secret": true, "secretRef": "JARVIS_AUTH_ADMIN_TOKEN" },
-        { "name": "JARVIS_AUTH_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:7701" }
+        { "name": "JARVIS_AUTH_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:8000" }
       ]
     },
     {
@@ -26,6 +26,7 @@
       "description": "JWT authentication with register, login, refresh, and logout",
       "category": "core",
       "port": 7701,
+      "containerPort": 8000,
       "image": "ghcr.io/alexberardi/jarvis-auth:latest",
       "healthCheck": "/health",
       "dependsOn": ["postgres", "jarvis-config-service"],
@@ -49,7 +50,8 @@
       "dependsOn": ["loki", "jarvis-auth"],
       "envVars": [
         { "name": "LOKI_URL", "description": "Loki push endpoint", "required": true, "default": "http://loki:3100" },
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
+        { "name": "JARVIS_AUTH_BASE_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:8000" }
       ]
     },
     {
@@ -58,6 +60,7 @@
       "description": "Central voice/command API, node management, and tool routing",
       "category": "core",
       "port": 7703,
+      "containerPort": 8002,
       "image": "ghcr.io/alexberardi/jarvis-command-center:latest",
       "healthCheck": "/health",
       "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
@@ -93,7 +96,8 @@
       ],
       "envVars": [
         { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
+        { "name": "JARVIS_AUTH_BASE_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:8000" }
       ]
     },
     {
@@ -118,8 +122,11 @@
       "image": "ghcr.io/alexberardi/jarvis-llm-proxy-api:latest",
       "healthCheck": "/health",
       "dependsOn": [],
-      "nativeOnly": true,
-      "envVars": []
+      "gpu": true,
+      "envVars": [],
+      "ipc": "host",
+      "shmSize": "8gb",
+      "modelVolume": true
     },
     {
       "id": "jarvis-notifications",
@@ -157,21 +164,8 @@
       "category": "optional",
       "port": 7722,
       "image": "ghcr.io/alexberardi/jarvis-web:latest",
-      "healthCheck": "/health",
+      "healthCheck": "/",
       "dependsOn": ["jarvis-auth", "jarvis-command-center"],
-      "envVars": [
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
-      ]
-    },
-    {
-      "id": "jarvis-mcp",
-      "name": "MCP Server",
-      "description": "Model Context Protocol server for Claude Code integration",
-      "category": "optional",
-      "port": 7709,
-      "image": "ghcr.io/alexberardi/jarvis-mcp:latest",
-      "healthCheck": "/health",
-      "dependsOn": ["jarvis-config-service", "jarvis-logs"],
       "envVars": [
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
       ]

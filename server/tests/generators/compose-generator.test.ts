@@ -62,7 +62,6 @@ describe('compose-generator', () => {
   it('excludes non-enabled optional services', () => {
     const state = makeState({ enabledModules: [] })
     const output = generateCompose(state, registry)
-    expect(output).not.toContain('jarvis-mcp:')
     expect(output).not.toContain('jarvis-web:')
   })
 
@@ -108,6 +107,21 @@ describe('compose-generator', () => {
       const all = getAllEnabledServices(state, registry)
       const ids = all.map((s) => s.id)
       expect(ids).toContain('jarvis-llm-proxy-api')
+    })
+  })
+
+  describe('GPU service config', () => {
+    it('adds nvidia deploy config for llm-proxy on linux', () => {
+      const state = makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-llm-proxy-api', 'jarvis-tts'],
+      })
+      const output = generateCompose(state, registry)
+      expect(output).toContain('driver: nvidia')
+      expect(output).toContain('capabilities: [gpu]')
+      expect(output).toContain('ipc: host')
+      expect(output).toContain('shm_size: "8gb"')
+      expect(output).toContain('.models')
     })
   })
 

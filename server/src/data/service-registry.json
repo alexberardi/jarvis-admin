@@ -17,7 +17,7 @@
         { "name": "MIGRATIONS_DATABASE_URL", "description": "PostgreSQL URL for Alembic migrations", "required": true },
         { "name": "JARVIS_CONFIG_ADMIN_TOKEN", "description": "Admin token for write operations", "required": true, "secret": true, "secretRef": "JARVIS_CONFIG_ADMIN_TOKEN" },
         { "name": "JARVIS_AUTH_ADMIN_TOKEN", "description": "Token for auth admin endpoints", "required": true, "secret": true, "secretRef": "JARVIS_AUTH_ADMIN_TOKEN" },
-        { "name": "JARVIS_AUTH_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:7701" }
+        { "name": "JARVIS_AUTH_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:8000" }
       ]
     },
     {
@@ -96,7 +96,8 @@
       ],
       "envVars": [
         { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
+        { "name": "JARVIS_AUTH_BASE_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:8000" }
       ]
     },
     {
@@ -122,7 +123,10 @@
       "healthCheck": "/health",
       "dependsOn": [],
       "gpu": true,
-      "envVars": []
+      "envVars": [],
+      "ipc": "host",
+      "shmSize": "8gb",
+      "modelVolume": true
     },
     {
       "id": "jarvis-notifications",
@@ -160,21 +164,8 @@
       "category": "optional",
       "port": 7722,
       "image": "ghcr.io/alexberardi/jarvis-web:latest",
-      "healthCheck": "/health",
+      "healthCheck": "/",
       "dependsOn": ["jarvis-auth", "jarvis-command-center"],
-      "envVars": [
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
-      ]
-    },
-    {
-      "id": "jarvis-mcp",
-      "name": "MCP Server",
-      "description": "Model Context Protocol server for Claude Code integration",
-      "category": "optional",
-      "port": 7709,
-      "image": "ghcr.io/alexberardi/jarvis-mcp:latest",
-      "healthCheck": "/health",
-      "dependsOn": ["jarvis-config-service", "jarvis-logs"],
       "envVars": [
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
       ]

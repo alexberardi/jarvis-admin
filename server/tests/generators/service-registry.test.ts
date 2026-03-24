@@ -50,7 +50,6 @@ describe('service-registry', () => {
     const optional = getOptionalServices(registry)
     const ids = optional.map((s) => s.id)
     expect(ids).toContain('jarvis-web')
-    expect(ids).toContain('jarvis-mcp')
     expect(ids).toContain('jarvis-admin')
   })
 
@@ -73,7 +72,7 @@ describe('service-registry', () => {
   it('llm-proxy is marked as GPU service', () => {
     const llm = getServiceById(registry, 'jarvis-llm-proxy-api')
     expect(llm).toBeDefined()
-    expect((llm as unknown as Record<string, unknown>).gpu).toBe(true)
+    expect(llm!.gpu).toBe(true)
   })
 
   it('does not contain removed services (ocr, recipes)', () => {
