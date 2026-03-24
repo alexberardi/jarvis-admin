@@ -118,7 +118,7 @@
       "image": "ghcr.io/alexberardi/jarvis-llm-proxy-api:dev",
       "healthCheck": "/health",
       "dependsOn": [],
-      "nativeOnly": true,
+      "gpu": true,
       "envVars": []
     },
     {
