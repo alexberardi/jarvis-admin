@@ -61,10 +61,12 @@ export default function LlmStep() {
   const handleModelSelect = (model: LlmModel) => {
     setSelectedModel(model)
     setError(null)
-    if (model.gated) {
+    if (model.gated && !hfToken.trim()) {
+      // Gated model and no token entered yet — prompt for it
       setPhase('token')
     } else {
-      handleDownload(model, '')
+      // Non-gated or token already provided — download directly
+      handleDownload(model, hfToken.trim())
     }
   }
 
@@ -173,6 +175,25 @@ export default function LlmStep() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Optional HF token for authenticated downloads */}
+          <div>
+            <label htmlFor="hf-token" className="mb-1 block text-xs text-[var(--color-text-muted)]">
+              HuggingFace Token (optional — speeds up downloads, required for gated models)
+            </label>
+            <input
+              id="hf-token"
+              type="password"
+              value={hfToken}
+              onChange={(e) => setHfToken(e.target.value)}
+              placeholder="hf_..."
+              className={cn(
+                'w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] px-3 py-2',
+                'text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]',
+                'outline-none focus:ring-2 focus:ring-[var(--color-primary)]',
+              )}
+            />
           </div>
 
           <div className="space-y-2">
