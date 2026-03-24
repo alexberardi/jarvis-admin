@@ -8,7 +8,7 @@ import { generateEnv } from '../services/generators/env-generator.js'
 import { generateInitDbScript } from '../services/generators/init-db-generator.js'
 import { generateAllSecrets } from '../services/generators/secret-generator.js'
 import { parseRegistry } from '../services/generators/service-registry.js'
-import { pollServiceHealth, registerServices, getDefaultEnabledModules } from '../services/orchestrator.js'
+import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
 import type { WizardState, HardwareInfo, InstallStatus } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
 import registryData from '../data/service-registry.json' with { type: 'json' }
@@ -220,7 +220,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   })
 
   /**
-   * SSE: docker compose up -d
+   * SSE: tiered startup — infra → config → auth → register → all services
    */
   app.get('/start', async (request, reply) => {
     const composePath = getComposePath()
@@ -237,26 +237,29 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       'X-Accel-Buffering': 'no',
     })
 
-    const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d'], {
-      cwd: composePath,
-      env: { ...process.env, ...loadEnvFile(composePath) },
-    })
+    const envVars = loadEnvFile(composePath)
+    const adminToken = envVars.JARVIS_CONFIG_ADMIN_TOKEN ?? ''
+    const portOverrides = {} as Record<string, number>
 
-    child.stdout.on('data', (chunk: Buffer) => {
-      reply.raw.write(`data: ${JSON.stringify({ stream: 'stdout', text: chunk.toString() })}\n\n`)
-    })
-    child.stderr.on('data', (chunk: Buffer) => {
-      reply.raw.write(`data: ${JSON.stringify({ stream: 'stderr', text: chunk.toString() })}\n\n`)
-    })
+    const emit = (data: Record<string, unknown>) => {
+      try {
+        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+      } catch {
+        // Client disconnected
+      }
+    }
 
-    request.raw.on('close', () => {
-      child.kill()
-    })
+    try {
+      const result = await tieredStartup(
+        composeFile, composePath, registry.services, adminToken, portOverrides, emit,
+      )
 
-    child.on('close', (code) => {
-      reply.raw.write(`data: ${JSON.stringify({ done: true, code })}\n\n`)
-      reply.raw.end()
-    })
+      emit({ done: true, code: result.success ? 0 : 1, error: result.error })
+    } catch (err) {
+      emit({ done: true, code: 1, error: err instanceof Error ? err.message : String(err) })
+    }
+
+    reply.raw.end()
   })
 
   /**

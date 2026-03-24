@@ -3,7 +3,7 @@ import { CheckCircle2, XCircle, Loader2, Play, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { useInstallStream } from '@/hooks/useInstallStream'
-import { generateInstall, registerServices, getInstallHealth } from '@/api/install'
+import { generateInstall, getInstallHealth } from '@/api/install'
 import TerminalOutput from './TerminalOutput'
 import type { HealthStatus } from '@/types/wizard'
 
@@ -29,18 +29,14 @@ export default function InstallStep() {
       setPhase('pulling')
       await pullStream.run('/api/install/pull')
 
-      // Phase 3: Start services (SSE stream → Promise)
+      // Phase 3: Tiered startup — infra → config → auth → register → all services
+      // This single SSE stream handles starting, registration, and credential injection
       setPhase('starting')
       await startStream.run('/api/install/start')
 
-      // Phase 4: Wait for services to be healthy, then register
-      setPhase('registering')
-      await new Promise((r) => setTimeout(r, 5000))
-      await registerServices(state.portOverrides)
-
-      // Phase 5: Verify health
+      // Phase 4: Verify health
       setPhase('verifying')
-      await new Promise((r) => setTimeout(r, 3000))
+      await new Promise((r) => setTimeout(r, 5000))
       const health = await getInstallHealth()
       setHealthStatus(health)
 
@@ -55,7 +51,6 @@ export default function InstallStep() {
     { key: 'generating', label: 'Generate configuration' },
     { key: 'pulling', label: 'Pull Docker images' },
     { key: 'starting', label: 'Start services' },
-    { key: 'registering', label: 'Register services' },
     { key: 'verifying', label: 'Verify health' },
   ]
 

@@ -1,8 +1,11 @@
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { execSync, spawn } from 'node:child_process'
 import type { ServiceDefinition, ServiceRegistry } from '../types/service-registry.js'
 import type { HealthStatus, RegisterResult } from '../types/wizard.js'
 
 /**
- * Service tiers for ordered health polling.
+ * Service tiers for ordered startup and health polling.
  * Higher tiers depend on lower tiers being healthy.
  */
 const TIER_ORDER = [
@@ -23,10 +26,8 @@ export async function pollServiceHealth(
   const status: HealthStatus = {}
   const host = hostOverride ?? 'localhost'
 
-  // Build fast lookup
   const serviceMap = new Map(services.map((s) => [s.id, s]))
 
-  // Poll tiered services first
   for (const tier of TIER_ORDER) {
     for (const id of tier) {
       const svc = serviceMap.get(id)
@@ -38,7 +39,6 @@ export async function pollServiceHealth(
     }
   }
 
-  // Then all remaining services in parallel
   const remaining = [...serviceMap.values()]
   const results = await Promise.all(
     remaining.map(async (svc) => {
@@ -67,62 +67,113 @@ async function checkHealth(url: string): Promise<{ healthy: boolean; url: string
 }
 
 /**
- * Register services with config-service.
+ * Wait for a service to become healthy, polling every 2 seconds.
+ */
+async function waitForHealth(
+  host: string, port: number, healthPath: string, maxWaitSeconds: number,
+): Promise<boolean> {
+  const url = `http://${host}:${port}${healthPath}`
+  const deadline = Date.now() + maxWaitSeconds * 1000
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
+      if (res.ok) return true
+    } catch {
+      // Not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+  return false
+}
+
+/**
+ * Register all services with config-service using the batch endpoint.
  * Config-service auto-creates app-clients in auth and returns app keys.
+ * Injects the keys into the .env file.
  */
 export async function registerServices(
   services: ServiceDefinition[],
   configServiceUrl: string,
   adminToken: string,
   portOverrides: Record<string, number>,
+  composePath?: string,
 ): Promise<RegisterResult> {
-  const registered: string[] = []
-  const failed: Array<{ serviceId: string; error: string }> = []
+  // Build batch JSON (same format as ./jarvis CLI)
+  const serviceList = services
+    .filter((s) => s.id !== 'jarvis-admin') // Admin doesn't need registration
+    .map((s) => ({
+      name: s.id,
+      host: 'localhost',
+      port: portOverrides[s.id] ?? s.port,
+    }))
 
-  for (const svc of services) {
-    const port = portOverrides[svc.id] ?? svc.port
-    try {
-      const res = await fetch(`${configServiceUrl}/v1/services/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Admin-Token': adminToken,
-        },
-        body: JSON.stringify({
-          name: svc.id,
-          display_name: svc.name,
-          description: svc.description,
-          url: `http://${svc.id}:${svc.port}`,
-          health_check_url: `http://${svc.id}:${svc.port}${svc.healthCheck}`,
-          port,
-        }),
-        signal: AbortSignal.timeout(10_000),
-      })
+  try {
+    const res = await fetch(`${configServiceUrl}/v1/services/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Jarvis-Admin-Token': adminToken,
+      },
+      body: JSON.stringify({ services: serviceList }),
+      signal: AbortSignal.timeout(30_000),
+    })
 
-      if (res.ok) {
-        registered.push(svc.id)
-      } else {
-        const body = await res.text()
-        failed.push({ serviceId: svc.id, error: `HTTP ${res.status}: ${body}` })
+    if (!res.ok) {
+      const body = await res.text()
+      return {
+        registered: [],
+        failed: [{ serviceId: 'batch', error: `HTTP ${res.status}: ${body}` }],
+        needsRestart: false,
       }
-    } catch (err) {
-      failed.push({
-        serviceId: svc.id,
-        error: err instanceof Error ? err.message : String(err),
-      })
     }
-  }
 
-  return {
-    registered,
-    failed,
-    needsRestart: registered.length > 0,
+    const data = await res.json() as {
+      results: Array<{
+        name: string
+        auth_created?: boolean
+        auth_ok?: boolean
+        app_key?: string
+      }>
+    }
+
+    const registered: string[] = []
+    const failed: Array<{ serviceId: string; error: string }> = []
+    const appKeys: Record<string, { appId: string; appKey: string }> = {}
+
+    for (const r of data.results ?? []) {
+      registered.push(r.name)
+      if (r.app_key) {
+        appKeys[r.name] = { appId: r.name, appKey: r.app_key }
+      }
+    }
+
+    // Inject app keys into .env file
+    if (composePath && Object.keys(appKeys).length > 0) {
+      const envFile = join(composePath, '.env')
+      if (existsSync(envFile)) {
+        let envContent = readFileSync(envFile, 'utf-8')
+        envContent = injectAppKeys(envContent, appKeys)
+        writeFileSync(envFile, envContent)
+      }
+    }
+
+    return {
+      registered,
+      failed,
+      needsRestart: Object.keys(appKeys).length > 0,
+      appKeys,
+    }
+  } catch (err) {
+    return {
+      registered: [],
+      failed: [{ serviceId: 'batch', error: err instanceof Error ? err.message : String(err) }],
+      needsRestart: false,
+    }
   }
 }
 
 /**
  * Update .env file with app keys returned from registration.
- * Returns the updated env content.
  */
 export function injectAppKeys(
   envContent: string,
@@ -141,6 +192,123 @@ export function injectAppKeys(
     )
   }
   return updated
+}
+
+/**
+ * Run tiered startup: start services in dependency order, wait for health,
+ * register, inject keys, restart services that got new credentials.
+ *
+ * Emits SSE events for UI progress.
+ */
+export async function tieredStartup(
+  composeFile: string,
+  composePath: string,
+  services: ServiceDefinition[],
+  adminToken: string,
+  portOverrides: Record<string, number>,
+  emit: (data: Record<string, unknown>) => void,
+): Promise<{ success: boolean; error?: string }> {
+  const env = { ...process.env, ...loadEnvFromFile(composePath) }
+  const configPort = portOverrides['jarvis-config-service'] ?? 7700
+  const authPort = portOverrides['jarvis-auth'] ?? 7701
+
+  const composeCmd = (args: string[]) =>
+    new Promise<number>((resolve) => {
+      const child = spawn('docker', ['compose', '-f', composeFile, ...args], {
+        cwd: composePath,
+        env,
+      })
+      child.stdout.on('data', (chunk: Buffer) => {
+        emit({ stream: 'stdout', text: chunk.toString() })
+      })
+      child.stderr.on('data', (chunk: Buffer) => {
+        emit({ stream: 'stderr', text: chunk.toString() })
+      })
+      child.on('close', (code) => resolve(code ?? 1))
+    })
+
+  // Step 1: Start infrastructure (postgres, redis, loki, grafana)
+  emit({ phase: 'infra', message: 'Starting infrastructure...' })
+  await composeCmd(['up', '-d', 'postgres', 'redis', 'loki', 'grafana'])
+
+  // Wait for postgres to be healthy
+  emit({ phase: 'infra', message: 'Waiting for PostgreSQL...' })
+  for (let i = 0; i < 30; i++) {
+    try {
+      execSync('docker exec jarvis-postgres pg_isready -U jarvis', { timeout: 3000, stdio: 'pipe' })
+      break
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000))
+    }
+  }
+
+  // Step 2: Start config-service (tier 0)
+  emit({ phase: 'tier0', message: 'Starting config-service...' })
+  await composeCmd(['up', '-d', 'jarvis-config-service'])
+  emit({ phase: 'tier0', message: 'Waiting for config-service to be healthy...' })
+  const configHealthy = await waitForHealth('localhost', configPort, '/health', 30)
+  if (!configHealthy) {
+    return { success: false, error: 'config-service failed to start' }
+  }
+
+  // Step 3: Start auth (tier 1)
+  emit({ phase: 'tier1', message: 'Starting auth service...' })
+  await composeCmd(['up', '-d', 'jarvis-auth'])
+  emit({ phase: 'tier1', message: 'Waiting for auth to be healthy...' })
+  const authHealthy = await waitForHealth('localhost', authPort, '/health', 30)
+  if (!authHealthy) {
+    return { success: false, error: 'auth service failed to start' }
+  }
+
+  // Step 4: Register all services + get app keys
+  emit({ phase: 'register', message: 'Registering services and generating credentials...' })
+  const configServiceUrl = `http://localhost:${configPort}`
+  const enabledServices = services.filter((s) => s.category === 'core' || s.category === 'recommended' || s.category === 'optional')
+  const regResult = await registerServices(enabledServices, configServiceUrl, adminToken, portOverrides, composePath)
+
+  if (regResult.failed.length > 0) {
+    emit({ phase: 'register', message: `Warning: ${regResult.failed.length} service(s) failed to register` })
+  }
+  if (regResult.registered.length > 0) {
+    emit({ phase: 'register', message: `Registered ${regResult.registered.length} service(s)` })
+  }
+
+  // Step 5: Start all remaining services (they now have credentials in .env)
+  emit({ phase: 'services', message: 'Starting all services...' })
+  // Reload env after key injection
+  const updatedEnv = { ...process.env, ...loadEnvFromFile(composePath) }
+  const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d', '--force-recreate'], {
+    cwd: composePath,
+    env: updatedEnv,
+  })
+  await new Promise<void>((resolve) => {
+    child.stdout.on('data', (chunk: Buffer) => {
+      emit({ stream: 'stdout', text: chunk.toString() })
+    })
+    child.stderr.on('data', (chunk: Buffer) => {
+      emit({ stream: 'stderr', text: chunk.toString() })
+    })
+    child.on('close', () => resolve())
+  })
+
+  emit({ phase: 'done', message: 'All services started' })
+  return { success: true }
+}
+
+function loadEnvFromFile(composePath: string): Record<string, string> {
+  const envFile = join(composePath, '.env')
+  if (!existsSync(envFile)) return {}
+
+  const vars: Record<string, string> = {}
+  const content = readFileSync(envFile, 'utf-8')
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx === -1) continue
+    vars[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1)
+  }
+  return vars
 }
 
 /**
