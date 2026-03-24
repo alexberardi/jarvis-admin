@@ -25,36 +25,35 @@ describe('dependency-resolver', () => {
       expect(deps).toEqual([])
     })
 
-    it('returns optional dependencies for jarvis-mcp', () => {
-      // jarvis-mcp depends on jarvis-logs which is core, not optional
-      const deps = getRequiredDependencies(registry, 'jarvis-mcp')
-      // jarvis-config-service and jarvis-logs are core, so no optional deps
+    it('returns optional dependencies for jarvis-web', () => {
+      // jarvis-web depends on jarvis-auth + jarvis-command-center, both core
+      const deps = getRequiredDependencies(registry, 'jarvis-web')
       expect(deps).toEqual([])
     })
   })
 
   describe('resolveModuleToggle', () => {
     it('adds service when enabling', () => {
-      const result = resolveModuleToggle(registry, [], 'jarvis-mcp', true)
-      expect(result.enabled).toContain('jarvis-mcp')
+      const result = resolveModuleToggle(registry, [], 'jarvis-web', true)
+      expect(result.enabled).toContain('jarvis-web')
       expect(result.warnings).toHaveLength(0)
     })
 
     it('removes service when disabling', () => {
       const result = resolveModuleToggle(
         registry,
-        ['jarvis-mcp', 'jarvis-web'],
-        'jarvis-mcp',
+        ['jarvis-admin', 'jarvis-web'],
+        'jarvis-admin',
         false,
       )
-      expect(result.enabled).not.toContain('jarvis-mcp')
+      expect(result.enabled).not.toContain('jarvis-admin')
       expect(result.enabled).toContain('jarvis-web')
     })
   })
 
   describe('validateModuleSelection', () => {
     it('passes for valid selections', () => {
-      const result = validateModuleSelection(registry, ['jarvis-mcp'])
+      const result = validateModuleSelection(registry, ['jarvis-web'])
       expect(result.valid).toBe(true)
     })
 

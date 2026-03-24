@@ -42,8 +42,10 @@ export interface ServiceDefinition {
   modelOptions?: ModelOption[]
   /** LLM interface/prompt provider options */
   llmInterfaceOptions?: LlmInterfaceOption[]
-  /** true = excluded from compose on macOS, installed natively (e.g., llm-proxy) */
-  nativeOnly?: boolean
+  /** true = requires GPU; excluded from compose on macOS (runs natively via Metal/MLX) */
+  gpu?: boolean
+  /** Port the service listens on inside the container (if different from `port`) */
+  containerPort?: number
   /** Override image for GHCR (if different from `image` field) */
   ghcrImage?: string
 }

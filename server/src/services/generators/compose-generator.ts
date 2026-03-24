@@ -40,7 +40,7 @@ export function getComposeServices(
 ): ServiceDefinition[] {
   const all = getAllEnabledServices(state, registry)
   if (state.platform === 'darwin') {
-    return all.filter((s) => !(s as unknown as { gpu?: boolean }).gpu)
+    return all.filter((s) => !s.gpu)
   }
   return all
 }
@@ -190,7 +190,7 @@ function generateServiceBlock(
 
   // Ports — containerPort is the port the service listens on inside the container
   // (may differ from the external port when the Dockerfile hardcodes a port)
-  const containerPort = (service as unknown as { containerPort?: number }).containerPort ?? service.port
+  const containerPort = service.containerPort ?? service.port
   lines.push('    ports:')
   lines.push(`      - "\${${portVar}:-${hostPort}}:${containerPort}"`)
 
@@ -267,10 +267,31 @@ function generateServiceBlock(
     }
   }
 
-  // Volumes (whisper non-default model)
+  // GPU services: NVIDIA deploy config, ipc, shm_size, model volume
+  const isGpu = service.gpu === true
+  if (isGpu) {
+    lines.push('    ipc: host')
+    lines.push('    shm_size: "8gb"')
+    lines.push('    deploy:')
+    lines.push('      resources:')
+    lines.push('        reservations:')
+    lines.push('          devices:')
+    lines.push('            - driver: nvidia')
+    lines.push('              count: all')
+    lines.push('              capabilities: [gpu]')
+  }
+
+  // Volumes
+  const vols: string[] = []
   if (nonDefaultWhisper) {
+    vols.push('      - ./models:/models:ro')
+  }
+  if (isGpu) {
+    vols.push('      - ${MODELS_DIR:-./.models}:/app/.models:ro')
+  }
+  if (vols.length > 0) {
     lines.push('    volumes:')
-    lines.push('      - ./models:/models:ro')
+    lines.push(...vols)
   }
 
   // extra_hosts for reaching host services (e.g., native llm-proxy on macOS)
