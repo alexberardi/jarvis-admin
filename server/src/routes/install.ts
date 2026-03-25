@@ -9,6 +9,7 @@ import { generateInitDbScript } from '../services/generators/init-db-generator.j
 import { generateAllSecrets } from '../services/generators/secret-generator.js'
 import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
+import { savePersistedConfig } from '../config.js'
 import type { WizardState, HardwareInfo, InstallStatus } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
 import registryData from '../data/service-registry.json' with { type: 'json' }
@@ -253,6 +254,25 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const result = await tieredStartup(
         composeFile, composePath, registry.services, adminToken, portOverrides, emit,
       )
+
+      // Persist service URLs so the admin server can proxy to them
+      if (result.success) {
+        const authPort = envVars.AUTH_PORT ?? '7701'
+        const configPort = envVars.CONFIG_SERVICE_PORT ?? '7700'
+        const llmPort = envVars.LLM_PROXY_API_PORT ?? '7704'
+        const ccPort = envVars.COMMAND_CENTER_PORT ?? '7703'
+
+        const urls = {
+          authUrl: `http://localhost:${authPort}`,
+          configServiceUrl: `http://localhost:${configPort}`,
+          llmProxyUrl: `http://localhost:${llmPort}`,
+          commandCenterUrl: `http://localhost:${ccPort}`,
+        }
+        savePersistedConfig(urls)
+
+        // Update in-memory config so subsequent requests work immediately
+        Object.assign(app.config, urls)
+      }
 
       emit({ done: true, code: result.success ? 0 : 1, error: result.error })
     } catch (err) {
