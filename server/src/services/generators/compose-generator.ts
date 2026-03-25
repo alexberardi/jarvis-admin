@@ -254,6 +254,8 @@ function generateServiceBlock(
 
   // LLM proxy needs model service config and backend env vars
   if (service.id === 'jarvis-llm-proxy-api') {
+    // Auth URL required at import time (before config-client init runs)
+    lines.push('      JARVIS_AUTH_BASE_URL: http://jarvis-auth:8000')
     lines.push('      MODEL_SERVICE_URL: http://localhost:7705')
     lines.push('      MODEL_SERVICE_PORT: "7705"')
     lines.push('      VLLM_WORKER_MULTIPROC_METHOD: spawn')
