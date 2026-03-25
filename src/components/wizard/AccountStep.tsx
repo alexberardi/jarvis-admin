@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createAccount } from '@/api/install'
-import { login } from '@/api/auth'
+import { setup } from '@/api/auth'
 import { setAuthToken } from '@/api/client'
 
 export default function AccountStep() {
@@ -23,10 +22,8 @@ export default function AccountStep() {
     setError(null)
 
     try {
-      await createAccount(email, password, displayName)
-
-      // Auto-login so the LLM step (next) has a valid JWT
-      const tokens = await login(email, password)
+      // Uses /auth/setup — auto-promotes first user to superuser
+      const tokens = await setup(email, password, displayName)
       setAuthToken(tokens.access_token)
       localStorage.setItem('access_token', tokens.access_token)
       localStorage.setItem('refresh_token', tokens.refresh_token)
