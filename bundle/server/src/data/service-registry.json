@@ -121,9 +121,15 @@
       "port": 7704,
       "image": "ghcr.io/alexberardi/jarvis-llm-proxy-api:latest",
       "healthCheck": "/health",
-      "dependsOn": [],
+      "dependsOn": ["postgres"],
+      "database": "jarvis_llm_proxy",
+      "dbDriverPrefix": "postgresql+psycopg2://",
       "gpu": true,
-      "envVars": [],
+      "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
+        { "name": "MIGRATIONS_DATABASE_URL", "description": "PostgreSQL URL for Alembic migrations", "required": true },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+      ],
       "ipc": "host",
       "shmSize": "8gb",
       "modelVolume": true

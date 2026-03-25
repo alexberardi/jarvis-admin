@@ -252,6 +252,19 @@ function generateServiceBlock(
   lines.push('      JARVIS_APP_ID: ${JARVIS_APP_ID_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
   lines.push('      JARVIS_APP_KEY: ${JARVIS_APP_KEY_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
 
+  // LLM proxy needs model service config and backend env vars
+  if (service.id === 'jarvis-llm-proxy-api') {
+    lines.push('      RUN_MODEL_SERVICE: "true"')
+    lines.push('      MODEL_SERVICE_PORT: "7705"')
+    lines.push('      VLLM_WORKER_MULTIPROC_METHOD: spawn')
+    lines.push('      JARVIS_MODEL_BACKEND: ${JARVIS_MODEL_BACKEND:-GGUF}')
+    lines.push('      JARVIS_MODEL_NAME: ${JARVIS_MODEL_NAME:-}')
+    lines.push('      JARVIS_MODEL_CHAT_FORMAT: ${JARVIS_MODEL_CHAT_FORMAT:-chatml}')
+    lines.push('      JARVIS_MODEL_CONTEXT_WINDOW: ${JARVIS_MODEL_CONTEXT_WINDOW:-32768}')
+    lines.push('      HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN:-}')
+    lines.push('      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0')
+  }
+
   // Dependencies
   if (service.dependsOn.length > 0) {
     lines.push('    depends_on:')
@@ -267,7 +280,7 @@ function generateServiceBlock(
     }
   }
 
-  // LLM proxy has no CMD in Dockerfile — compose must provide the command
+  // LLM proxy: no CMD in Dockerfile, needs command + model service config
   if (service.id === 'jarvis-llm-proxy-api') {
     lines.push('    command: >-')
     lines.push('      python -m uvicorn main:app')
