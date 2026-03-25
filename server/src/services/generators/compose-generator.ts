@@ -254,7 +254,7 @@ function generateServiceBlock(
 
   // LLM proxy needs model service config and backend env vars
   if (service.id === 'jarvis-llm-proxy-api') {
-    lines.push('      RUN_MODEL_SERVICE: "true"')
+    lines.push('      MODEL_SERVICE_URL: http://localhost:7705')
     lines.push('      MODEL_SERVICE_PORT: "7705"')
     lines.push('      VLLM_WORKER_MULTIPROC_METHOD: spawn')
     lines.push('      JARVIS_MODEL_BACKEND: ${JARVIS_MODEL_BACKEND:-GGUF}')
@@ -263,6 +263,12 @@ function generateServiceBlock(
     lines.push('      JARVIS_MODEL_CONTEXT_WINDOW: ${JARVIS_MODEL_CONTEXT_WINDOW:-32768}')
     lines.push('      HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN:-}')
     lines.push('      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0')
+  }
+
+  // Settings server needs the auth secret for JWT validation
+  if (service.id === 'jarvis-settings-server') {
+    lines.push('      JARVIS_AUTH_SECRET_KEY: ${AUTH_SECRET_KEY}')
+    lines.push('      JARVIS_AUTH_ALGORITHM: HS256')
   }
 
   // Dependencies
@@ -280,12 +286,14 @@ function generateServiceBlock(
     }
   }
 
-  // LLM proxy: no CMD in Dockerfile, needs command + model service config
+  // Command center: run Alembic migrations before starting the server
+  if (service.id === 'jarvis-command-center') {
+    lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${containerPort}"]`)
+  }
+
+  // LLM proxy: no CMD in Dockerfile — run migrations, start model service + API
   if (service.id === 'jarvis-llm-proxy-api') {
-    lines.push('    command: >-')
-    lines.push('      python -m uvicorn main:app')
-    lines.push('      --host 0.0.0.0')
-    lines.push('      --port 7704')
+    lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
   }
 
   // GPU services: NVIDIA deploy config, ipc, shm_size, model volume
@@ -321,10 +329,21 @@ function generateServiceBlock(
 
   // Healthcheck
   lines.push('    healthcheck:')
-  lines.push(`      test: ["CMD", "curl", "-f", "http://localhost:${containerPort}${service.healthCheck}"]`)
+  if (service.id === 'jarvis-command-center') {
+    // CC image doesn't include curl — use python urllib instead
+    lines.push(`      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${containerPort}${service.healthCheck}')"]`)
+  } else {
+    lines.push(`      test: ["CMD", "curl", "-f", "http://localhost:${containerPort}${service.healthCheck}"]`)
+  }
   lines.push('      interval: 30s')
   lines.push('      timeout: 10s')
   lines.push('      retries: 3')
+  // LLM proxy needs extra time for model loading
+  if (service.id === 'jarvis-llm-proxy-api') {
+    lines.push('      start_period: 120s')
+  } else if (service.database) {
+    lines.push('      start_period: 30s')
+  }
 
   lines.push('    networks:')
   lines.push('      - jarvis')
