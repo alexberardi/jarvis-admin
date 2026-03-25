@@ -238,7 +238,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     })
 
     const envVars = loadEnvFile(composePath)
-    const adminToken = envVars.JARVIS_CONFIG_ADMIN_TOKEN ?? ''
+    const adminToken = envVars.JARVIS_AUTH_ADMIN_TOKEN ?? ''
     const portOverrides = {} as Record<string, number>
 
     const emit = (data: Record<string, unknown>) => {
@@ -276,7 +276,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const envVars = loadEnvFile(composePath)
-      const adminToken = envVars.JARVIS_CONFIG_ADMIN_TOKEN ?? ''
+      const adminToken = envVars.JARVIS_AUTH_ADMIN_TOKEN ?? ''
       const configPort = parseInt(envVars.CONFIG_SERVICE_PORT ?? '7700', 10)
       const configServiceUrl = `http://localhost:${configPort}`
       const portOverrides = (request.body as { portOverrides?: Record<string, number> })?.portOverrides ?? {}
