@@ -24,6 +24,17 @@ export function setLogoutFunction(fn: () => void): void {
   logoutFn = fn
 }
 
+// Ensure Authorization header is set from localStorage (survives page refresh)
+apiClient.interceptors.request.use((config) => {
+  if (!config.headers['Authorization']) {
+    const token = localStorage.getItem('access_token')
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`
+    }
+  }
+  return config
+})
+
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
