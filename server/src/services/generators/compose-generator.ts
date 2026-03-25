@@ -267,6 +267,14 @@ function generateServiceBlock(
     }
   }
 
+  // LLM proxy has no CMD in Dockerfile — compose must provide the command
+  if (service.id === 'jarvis-llm-proxy-api') {
+    lines.push('    command: >-')
+    lines.push('      python -m uvicorn main:app')
+    lines.push('      --host 0.0.0.0')
+    lines.push('      --port 7704')
+  }
+
   // GPU services: NVIDIA deploy config, ipc, shm_size, model volume
   const isGpu = service.gpu === true
   if (isGpu) {
