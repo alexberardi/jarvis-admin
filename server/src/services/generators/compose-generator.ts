@@ -318,7 +318,7 @@ function generateServiceBlock(
     vols.push('      - ./models:/models:ro')
   }
   if (isGpu) {
-    vols.push('      - ${MODELS_DIR:-./.models}:/app/.models:ro')
+    vols.push('      - ${MODELS_DIR:-./.models}:/app/.models')
   }
   if (vols.length > 0) {
     lines.push('    volumes:')
