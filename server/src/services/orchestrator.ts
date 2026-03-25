@@ -273,11 +273,16 @@ export async function tieredStartup(
     emit({ phase: 'register', message: `Registered ${regResult.registered.length} service(s)` })
   }
 
-  // Step 5: Start all remaining services (they now have credentials in .env)
-  emit({ phase: 'services', message: 'Starting all services...' })
+  // Step 5: Start remaining services (skip tier 0-1 — they're already healthy)
+  const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth'])
+  const remaining = services
+    .filter((s) => !alreadyRunning.has(s.id))
+    .map((s) => s.id)
+
+  emit({ phase: 'services', message: `Starting ${remaining.length} remaining services...` })
   // Reload env after key injection
   const updatedEnv = { ...process.env, ...loadEnvFromFile(composePath) }
-  const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d', '--force-recreate'], {
+  const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d', '--force-recreate', ...remaining], {
     cwd: composePath,
     env: updatedEnv,
   })
