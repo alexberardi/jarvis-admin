@@ -252,11 +252,16 @@ function generateServiceBlock(
   lines.push('      JARVIS_APP_ID: ${JARVIS_APP_ID_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
   lines.push('      JARVIS_APP_KEY: ${JARVIS_APP_KEY_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
 
+  // Auth URL fallback — services that depend on jarvis-auth need this so they
+  // don't fail if config-service isn't ready yet at startup time
+  if (service.dependsOn.includes('jarvis-auth')) {
+    lines.push('      JARVIS_AUTH_BASE_URL: http://jarvis-auth:8000')
+  }
+
   // LLM proxy needs model service config and backend env vars
   if (service.id === 'jarvis-llm-proxy-api') {
     lines.push('      MODEL_SERVICE_URL: http://localhost:7705')
     lines.push('      MODEL_SERVICE_PORT: "7705"')
-    lines.push('      JARVIS_AUTH_BASE_URL: http://jarvis-auth:8000')
     lines.push('      VLLM_WORKER_MULTIPROC_METHOD: spawn')
     lines.push('      JARVIS_MODEL_BACKEND: ${JARVIS_MODEL_BACKEND:-GGUF}')
     lines.push('      JARVIS_MODEL_NAME: ${JARVIS_MODEL_NAME:-}')
