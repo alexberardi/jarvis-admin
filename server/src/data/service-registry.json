@@ -121,7 +121,7 @@
       "port": 7704,
       "image": "ghcr.io/alexberardi/jarvis-llm-proxy-api:latest",
       "healthCheck": "/health",
-      "dependsOn": ["postgres"],
+      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
       "database": "jarvis_llm_proxy",
       "dbDriverPrefix": "postgresql+psycopg2://",
       "gpu": true,
@@ -195,7 +195,7 @@
       "id": "postgres",
       "name": "PostgreSQL",
       "description": "Primary database — stores users, commands, settings, and service config",
-      "image": "postgres:16-alpine",
+      "image": "pgvector/pgvector:pg16",
       "port": 5432,
       "envVars": [
         { "name": "POSTGRES_USER", "description": "Database superuser", "required": true, "default": "jarvis" },
