@@ -11,6 +11,7 @@ import SettingsPage from '@/pages/SettingsPage'
 import ServicesPage from '@/pages/ServicesPage'
 import DashboardPage from '@/pages/DashboardPage'
 import NodesPage from '@/pages/NodesPage'
+import ModelsPage from '@/pages/ModelsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import SetupWizard from '@/pages/SetupWizard'
 import LlmSetupWizard from '@/pages/LlmSetupWizard'
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/services" element={<ServicesPage />} />
+        <Route path="/models" element={<ModelsPage />} />
         <Route path="/nodes" element={<NodesPage />} />
         <Route
           path="/"

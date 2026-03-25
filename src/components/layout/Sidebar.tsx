@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Server, Cpu } from 'lucide-react'
+import { LayoutDashboard, Settings, Server, Cpu, Box } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SystemInfoBar from './SystemInfoBar'
 import type { LucideIcon } from 'lucide-react'
@@ -14,6 +14,7 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Settings', icon: Settings, path: '/settings' },
   { label: 'Services', icon: Server, path: '/services' },
+  { label: 'Models', icon: Box, path: '/models' },
   { label: 'Nodes', icon: Cpu, path: '/nodes' },
 ]
 
