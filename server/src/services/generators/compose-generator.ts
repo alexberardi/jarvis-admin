@@ -256,6 +256,7 @@ function generateServiceBlock(
   if (service.id === 'jarvis-llm-proxy-api') {
     lines.push('      MODEL_SERVICE_URL: http://localhost:7705')
     lines.push('      MODEL_SERVICE_PORT: "7705"')
+    lines.push('      JARVIS_AUTH_BASE_URL: http://jarvis-auth:8000')
     lines.push('      VLLM_WORKER_MULTIPROC_METHOD: spawn')
     lines.push('      JARVIS_MODEL_BACKEND: ${JARVIS_MODEL_BACKEND:-GGUF}')
     lines.push('      JARVIS_MODEL_NAME: ${JARVIS_MODEL_NAME:-}')
