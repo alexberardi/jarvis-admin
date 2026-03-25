@@ -15,8 +15,8 @@ const STEPS = [
   { label: 'Services', component: ServicesStep },
   { label: 'Review', component: ReviewStep },
   { label: 'Install', component: InstallStep },
-  { label: 'LLM', component: LlmStep },
   { label: 'Account', component: AccountStep },
+  { label: 'LLM', component: LlmStep },
 ]
 
 function WizardContent() {

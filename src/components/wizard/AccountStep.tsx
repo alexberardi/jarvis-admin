@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { CheckCircle2, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createAccount } from '@/api/install'
+import { login } from '@/api/auth'
+import { setAuthToken } from '@/api/client'
 
 export default function AccountStep() {
   const [email, setEmail] = useState('')
@@ -22,6 +24,13 @@ export default function AccountStep() {
 
     try {
       await createAccount(email, password, displayName)
+
+      // Auto-login so the LLM step (next) has a valid JWT
+      const tokens = await login(email, password)
+      setAuthToken(tokens.access_token)
+      localStorage.setItem('access_token', tokens.access_token)
+      localStorage.setItem('refresh_token', tokens.refresh_token)
+
       setCreated(true)
     } catch (err) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
@@ -48,7 +57,7 @@ export default function AccountStep() {
           </div>
         </div>
         <p className="text-sm text-[var(--color-text-muted)]">
-          You can now log in with these credentials. Click "Finish" to go to the dashboard.
+          You're logged in. Click "Next" to configure your LLM model.
         </p>
       </div>
     )
