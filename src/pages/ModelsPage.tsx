@@ -8,6 +8,7 @@ export default function ModelsPage() {
   const [hfToken, setHfToken] = useState('')
   const [customRepo, setCustomRepo] = useState('')
   const [customFilename, setCustomFilename] = useState('')
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
 
   const { data: installed, isLoading: loadingInstalled } = useInstalledModels()
   const { data: suggested } = useSuggestedModels()
@@ -15,11 +16,13 @@ export default function ModelsPage() {
   const deleteMutation = useDeleteModel()
 
   function handleDownload(repo: string, filename?: string) {
+    const key = `${repo}/${filename ?? ''}`
+    setDownloadingKey(key)
     downloadMutation.mutate(
       { repo, filename: filename || undefined, token: hfToken || undefined },
       {
-        onSuccess: (res) => toast.success(res.message),
-        onError: (err) => toast.error(err instanceof Error ? err.message : 'Download failed'),
+        onSuccess: (res) => { toast.success(res.message); setDownloadingKey(null) },
+        onError: (err) => { toast.error(err instanceof Error ? err.message : 'Download failed'); setDownloadingKey(null) },
       },
     )
   }
@@ -131,7 +134,7 @@ export default function ModelsPage() {
                 </div>
                 <button
                   onClick={() => handleDownload(model.repo, model.filename)}
-                  disabled={downloadMutation.isPending}
+                  disabled={downloadingKey !== null}
                   className={cn(
                     'ml-4 flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
                     isInstalled
@@ -140,7 +143,7 @@ export default function ModelsPage() {
                   )}
                 >
                   <Download size={14} />
-                  {downloadMutation.isPending ? 'Downloading...' : isInstalled ? 'Re-download' : 'Download'}
+                  {downloadingKey === `${model.repo}/${model.filename}` ? 'Downloading...' : isInstalled ? 'Re-download' : 'Download'}
                 </button>
               </div>
             )
@@ -179,11 +182,11 @@ export default function ModelsPage() {
           </div>
           <button
             onClick={handleCustomDownload}
-            disabled={!customRepo || downloadMutation.isPending}
+            disabled={!customRepo || downloadingKey !== null}
             className="flex items-center gap-2 rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
           >
             <Download size={14} />
-            {downloadMutation.isPending ? 'Downloading...' : 'Download'}
+            {downloadingKey === `${customRepo}/${customFilename}` ? 'Downloading...' : 'Download'}
           </button>
         </div>
       </section>
