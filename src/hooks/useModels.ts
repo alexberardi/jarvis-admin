@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getInstalledModels, getSuggestedModels, downloadModel, deleteModel } from '@/api/models'
+import { getInstalledModels, downloadModel, deleteModel } from '@/api/models'
 import type { DownloadRequest } from '@/api/models'
 
 export function useInstalledModels() {
@@ -7,14 +7,6 @@ export function useInstalledModels() {
     queryKey: ['models', 'installed'],
     queryFn: getInstalledModels,
     staleTime: 10_000,
-  })
-}
-
-export function useSuggestedModels() {
-  return useQuery({
-    queryKey: ['models', 'suggested'],
-    queryFn: getSuggestedModels,
-    staleTime: 300_000,
   })
 }
 

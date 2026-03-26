@@ -17,49 +17,6 @@ interface DownloadBody {
   token?: string
 }
 
-const SUGGESTED_MODELS = [
-  {
-    repo: 'Qwen/Qwen3-14B-GGUF',
-    filename: 'Qwen3-14B-Q6_K.gguf',
-    label: 'Qwen 3 14B (Q6_K)',
-    description: 'High-quality 14B model, good balance of speed and quality',
-    sizeEstimate: '11.5 GB',
-    promptProvider: 'Qwen3Medium',
-  },
-  {
-    repo: 'Qwen/Qwen3-14B-GGUF',
-    filename: 'Qwen3-14B-Q4_K_M.gguf',
-    label: 'Qwen 3 14B (Q4_K_M)',
-    description: 'Smaller quantization, faster inference, slightly lower quality',
-    sizeEstimate: '8.7 GB',
-    promptProvider: 'Qwen3Medium',
-  },
-  {
-    repo: 'Qwen/Qwen3-32B-GGUF',
-    filename: 'Qwen3-32B-Q4_K_M.gguf',
-    label: 'Qwen 3 32B (Q4_K_M)',
-    description: 'Larger model, better reasoning, needs ~20 GB VRAM',
-    sizeEstimate: '19.9 GB',
-    promptProvider: 'Qwen3Large',
-  },
-  {
-    repo: 'Qwen/Qwen2.5-7B-Instruct-GGUF',
-    filename: 'qwen2.5-7b-instruct-q4_k_m.gguf',
-    label: 'Qwen 2.5 7B Instruct (Q4_K_M)',
-    description: 'Fast 7B model, good for constrained hardware',
-    sizeEstimate: '4.7 GB',
-    promptProvider: 'Qwen25MediumUntrained',
-  },
-  {
-    repo: 'NousResearch/Hermes-3-Llama-3.1-8B-GGUF',
-    filename: 'Hermes-3-Llama-3.1-8B.Q4_K_M.gguf',
-    label: 'Hermes 3 Llama 3.1 8B (Q4_K_M)',
-    description: 'Versatile 8B model with strong tool-calling support',
-    sizeEstimate: '4.9 GB',
-    promptProvider: 'Hermes3Llama31',
-  },
-]
-
 /** Search paths for the .models directory (local fallback) */
 function findLocalModelsDir(): string | null {
   // Explicit env var takes priority (set in docker-compose for dev)
@@ -120,11 +77,6 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
       console.error('[models] Local list failed:', err)
       return reply.send({ models: [] })
     }
-  })
-
-  /** Return suggested models with prompt provider info */
-  app.get('/suggested', async (_request, reply) => {
-    return reply.send({ models: SUGGESTED_MODELS })
   })
 
   /** Download a model from HuggingFace */

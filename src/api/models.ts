@@ -6,15 +6,6 @@ export interface ModelInfo {
   sizeFormatted: string
 }
 
-export interface SuggestedModel {
-  repo: string
-  filename: string
-  label: string
-  description: string
-  sizeEstimate: string
-  promptProvider: string
-}
-
 export interface DownloadRequest {
   repo: string
   filename?: string
@@ -23,11 +14,6 @@ export interface DownloadRequest {
 
 export async function getInstalledModels(): Promise<ModelInfo[]> {
   const { data } = await apiClient.get<{ models: ModelInfo[] }>('/api/models/installed')
-  return data.models
-}
-
-export async function getSuggestedModels(): Promise<SuggestedModel[]> {
-  const { data } = await apiClient.get<{ models: SuggestedModel[] }>('/api/models/suggested')
   return data.models
 }
 
