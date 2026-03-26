@@ -3,7 +3,8 @@ import { Download, CheckCircle2, AlertTriangle, Loader2, Lock } from 'lucide-rea
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { LLM_MODELS, type LlmModel } from '@/data/models'
-import { useConfigureLlm, useDownloadModel } from '@/hooks/useLlmSetup'
+import { useConfigureLlm } from '@/hooks/useLlmSetup'
+import { useDownloadModel } from '@/hooks/useModels'
 
 type Phase = 'select' | 'token' | 'downloading' | 'configuring' | 'done'
 
