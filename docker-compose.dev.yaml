@@ -18,10 +18,12 @@ services:
       - ./server/tsconfig.json:/app/server/tsconfig.json
       - ./.env:/app/.env
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${MODELS_DIR:-../jarvis-llm-proxy-api/.models}:/models
     env_file:
       - .env
     environment:
       - PORT=7711
       - DOCKER_SOCKET=/var/run/docker.sock
+      - MODELS_DIR=/models
     extra_hosts:
       - "${DOCKER_HOST_ALIAS:-host.docker.internal}:host-gateway"

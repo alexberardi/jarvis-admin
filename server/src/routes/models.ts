@@ -1,3 +1,7 @@
+import { execFile } from 'node:child_process'
+import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
 
@@ -56,37 +60,65 @@ const SUGGESTED_MODELS = [
   },
 ]
 
+/** Search paths for the .models directory (local fallback) */
+function findLocalModelsDir(): string | null {
+  // Explicit env var takes priority (set in docker-compose for dev)
+  const envDir = process.env.MODELS_DIR
+  if (envDir && existsSync(envDir)) return envDir
+
+  const candidates = [
+    join(homedir(), 'jarvis', 'jarvis-llm-proxy-api', '.models'),
+    join(homedir(), '.jarvis', 'compose', '.models'),
+    join(homedir(), '.jarvis', '.models'),
+  ]
+  for (const dir of candidates) {
+    if (existsSync(dir)) return dir
+  }
+  return null
+}
+
 export async function modelsRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireSuperuser)
 
   /** List installed models in the .models directory */
   app.get('/installed', async (_request, reply) => {
-    const docker = app.docker
-    if (!docker) {
-      return reply.code(503).send({ error: 'Docker is not available' })
+    // Try Docker first
+    const container = await findLlmContainer(app)
+    if (container) {
+      try {
+        const output = await app.docker!.execInContainer(container.id, [
+          'python', '-c',
+          'import os, json; models = []; d = "/app/.models"; [models.append({"name": f, "size": os.path.getsize(os.path.join(d, f))}) for f in os.listdir(d) if f.endswith((".gguf", ".bin")) and os.path.isfile(os.path.join(d, f))]; print(json.dumps(models))',
+        ])
+        const raw = extractJson(output)
+        const models: ModelInfo[] = (JSON.parse(raw) as { name: string; size: number }[]).map((m) => ({
+          ...m,
+          sizeFormatted: formatBytes(m.size),
+        }))
+        return reply.send({ models })
+      } catch (err) {
+        console.error('[models] Docker list failed, trying local:', err)
+      }
     }
 
-    const container = findLlmContainer(await docker.listJarvisContainers())
-    if (!container) {
-      return reply.code(503).send({ error: 'LLM proxy container not found or not running' })
+    // Local filesystem fallback
+    const modelsDir = findLocalModelsDir()
+    if (!modelsDir) {
+      return reply.send({ models: [] })
     }
 
     try {
-      const output = await docker.execInContainer(container.id, [
-        'python', '-c',
-        'import os, json; models = []; d = "/app/.models"; [models.append({"name": f, "size": os.path.getsize(os.path.join(d, f))}) for f in os.listdir(d) if f.endswith((".gguf", ".bin")) and os.path.isfile(os.path.join(d, f))]; print(json.dumps(models))',
-      ])
-
-      const raw = extractJson(output)
-      const models: ModelInfo[] = (JSON.parse(raw) as { name: string; size: number }[]).map((m) => ({
-        ...m,
-        sizeFormatted: formatBytes(m.size),
-      }))
-
+      const files = readdirSync(modelsDir)
+      const models: ModelInfo[] = files
+        .filter((f) => f.endsWith('.gguf') || f.endsWith('.bin'))
+        .map((f) => {
+          const size = statSync(join(modelsDir, f)).size
+          return { name: f, size, sizeFormatted: formatBytes(size) }
+        })
       return reply.send({ models })
     } catch (err) {
-      console.error('[models] List failed:', err)
-      return reply.code(500).send({ error: 'Failed to list models' })
+      console.error('[models] Local list failed:', err)
+      return reply.send({ models: [] })
     }
   })
 
@@ -113,37 +145,46 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Invalid filename format' })
     }
 
-    const docker = app.docker
-    if (!docker) {
-      return reply.code(503).send({ error: 'Docker is not available' })
+    // Try Docker first
+    const container = await findLlmContainer(app)
+    if (container) {
+      const env = token ? [`HUGGINGFACE_HUB_TOKEN=${token}`] : []
+      const cmd = filename
+        ? [
+            'python', '-c',
+            'import sys, os; from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id=sys.argv[1], filename=sys.argv[2], local_dir="/app/.models", token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))',
+            repo,
+            filename,
+          ]
+        : [
+            'python', '-c',
+            'import sys, os; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1], local_dir=f"/app/.models/{sys.argv[1].split(\'/\')[-1]}", token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))',
+            repo,
+          ]
+
+      try {
+        const output = await app.docker!.execInContainer(container.id, cmd, env)
+        return reply.send({ success: true, output: output.trim(), message: 'Download complete' })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[models] Docker download failed, trying local:', msg)
+      }
     }
 
-    const container = findLlmContainer(await docker.listJarvisContainers())
-    if (!container) {
-      return reply.code(503).send({ error: 'LLM proxy container not found or not running' })
+    // Local fallback — run python subprocess on host
+    const modelsDir = findLocalModelsDir()
+    if (!modelsDir) {
+      return reply.code(503).send({
+        error: 'No LLM proxy container found and no local .models directory. Start the LLM proxy or create the directory.',
+      })
     }
-
-    const env = token ? [`HUGGINGFACE_HUB_TOKEN=${token}`] : []
-
-    const cmd = filename
-      ? [
-          'python', '-c',
-          'import sys, os; from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id=sys.argv[1], filename=sys.argv[2], local_dir="/app/.models", token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))',
-          repo,
-          filename,
-        ]
-      : [
-          'python', '-c',
-          'import sys, os; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1], local_dir=f"/app/.models/{sys.argv[1].split(\'/\')[-1]}", token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))',
-          repo,
-        ]
 
     try {
-      const output = await docker.execInContainer(container.id, cmd, env)
+      const output = await runLocalPython(modelsDir, repo, filename, token)
       return reply.send({ success: true, output: output.trim(), message: 'Download complete' })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error('[models] Download failed:', msg)
+      console.error('[models] Local download failed:', msg)
       return reply.code(500).send({ error: `Download failed: ${msg}` })
     }
   })
@@ -157,41 +198,87 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Invalid filename' })
     }
 
-    const docker = app.docker
-    if (!docker) {
-      return reply.code(503).send({ error: 'Docker is not available' })
+    // Try Docker first
+    const container = await findLlmContainer(app)
+    if (container) {
+      try {
+        await app.docker!.execInContainer(container.id, [
+          'python', '-c',
+          'import sys, os; p = f"/app/.models/{sys.argv[1]}"; os.remove(p) if os.path.isfile(p) else None; print("ok")',
+          name,
+        ])
+        return reply.send({ success: true })
+      } catch (err) {
+        console.error('[models] Docker delete failed, trying local:', err)
+      }
     }
 
-    const container = findLlmContainer(await docker.listJarvisContainers())
-    if (!container) {
-      return reply.code(503).send({ error: 'LLM proxy container not found or not running' })
+    // Local fallback
+    const modelsDir = findLocalModelsDir()
+    if (!modelsDir) {
+      return reply.code(503).send({ error: 'No models directory found' })
+    }
+
+    const filePath = join(modelsDir, name)
+    if (!existsSync(filePath)) {
+      return reply.code(404).send({ error: 'Model not found' })
     }
 
     try {
-      await docker.execInContainer(container.id, [
-        'python', '-c',
-        'import sys, os; p = f"/app/.models/{sys.argv[1]}"; os.remove(p) if os.path.isfile(p) else None; print("ok")',
-        name,
-      ])
+      unlinkSync(filePath)
       return reply.send({ success: true })
     } catch (err) {
-      console.error('[models] Delete failed:', err)
+      console.error('[models] Local delete failed:', err)
       return reply.code(500).send({ error: 'Failed to delete model' })
     }
   })
 }
 
-function findLlmContainer(containers: { id: string; name: string; state: string }[]) {
-  return containers.find(
-    (c) =>
-      (c.name.includes('llm-proxy') || c.name.includes('llm_proxy')) &&
-      c.name.includes('api') &&
-      c.state === 'running'
-  ) ?? containers.find(
-    (c) =>
-      (c.name.includes('llm-proxy') || c.name.includes('llm_proxy')) &&
-      c.state === 'running'
-  )
+async function findLlmContainer(app: FastifyInstance) {
+  if (!app.docker) return null
+  try {
+    const containers = await app.docker.listJarvisContainers()
+    return containers.find(
+      (c) =>
+        (c.name.includes('llm-proxy') || c.name.includes('llm_proxy')) &&
+        c.name.includes('api') &&
+        c.state === 'running'
+    ) ?? containers.find(
+      (c) =>
+        (c.name.includes('llm-proxy') || c.name.includes('llm_proxy')) &&
+        c.state === 'running'
+    ) ?? null
+  } catch {
+    return null
+  }
+}
+
+function runLocalPython(
+  modelsDir: string,
+  repo: string,
+  filename: string | undefined,
+  token: string | undefined,
+): Promise<string> {
+  const pyCode = filename
+    ? `import sys, os; from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id=sys.argv[1], filename=sys.argv[2], local_dir=sys.argv[3], token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))`
+    : `import sys, os; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[3] + "/" + sys.argv[1].split("/")[-1], token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))`
+
+  const args = filename
+    ? ['python3', '-c', pyCode, repo, filename, modelsDir]
+    : ['python3', '-c', pyCode, repo, '', modelsDir]
+
+  const env = { ...process.env }
+  if (token) env.HUGGINGFACE_HUB_TOKEN = token
+
+  return new Promise((resolve, reject) => {
+    execFile(args[0]!, args.slice(1), { env, timeout: 600_000 }, (err, stdout, stderr) => {
+      if (err) {
+        reject(new Error(stderr || err.message))
+      } else {
+        resolve(stdout)
+      }
+    })
+  })
 }
 
 function formatBytes(bytes: number): string {
