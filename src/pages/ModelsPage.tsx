@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Download, Trash2, HardDrive, Sparkles, Key } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useInstalledModels, useSuggestedModels, useDownloadModel, useDeleteModel } from '@/hooks/useModels'
+import { useInstalledModels, useDownloadModel, useDeleteModel } from '@/hooks/useModels'
+import { LLM_MODELS } from '@/data/models'
 
 export default function ModelsPage() {
   const [hfToken, setHfToken] = useState('')
@@ -11,7 +12,6 @@ export default function ModelsPage() {
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null)
 
   const { data: installed, isLoading: loadingInstalled } = useInstalledModels()
-  const { data: suggested } = useSuggestedModels()
   const downloadMutation = useDownloadModel()
   const deleteMutation = useDeleteModel()
 
@@ -106,20 +106,20 @@ export default function ModelsPage() {
           <h2 className="text-sm font-semibold text-[var(--color-text)]">Suggested Models</h2>
         </div>
         <div className="space-y-3">
-          {suggested?.map((model) => {
+          {LLM_MODELS.map((model) => {
             const isInstalled = installed?.some(
-              (m) => m.name === model.filename || m.name.includes(model.filename),
+              (m) => m.name === model.ggufFilename || m.name.includes(model.ggufFilename),
             )
             return (
               <div
-                key={`${model.repo}/${model.filename}`}
+                key={model.id}
                 className="flex items-center justify-between rounded-md border border-[var(--color-border)] px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-[var(--color-text)]">{model.label}</span>
+                    <span className="text-sm font-medium text-[var(--color-text)]">{model.displayName}</span>
                     <span className="rounded bg-[var(--color-surface-alt)] px-1.5 py-0.5 text-xs text-[var(--color-text-muted)]">
-                      ~{model.sizeEstimate}
+                      ~{model.sizeGguf}
                     </span>
                     {isInstalled && (
                       <span className="rounded bg-green-500/10 px-1.5 py-0.5 text-xs text-green-500">
@@ -127,13 +127,15 @@ export default function ModelsPage() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[var(--color-text-muted)]">{model.description}</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    {model.hfRepoGguf} / {model.ggufFilename}
+                  </p>
                   <p className="text-xs text-[var(--color-text-muted)]">
                     Prompt provider: <code className="text-[var(--color-primary)]">{model.promptProvider}</code>
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDownload(model.repo, model.filename)}
+                  onClick={() => handleDownload(model.hfRepoGguf, model.ggufFilename)}
                   disabled={downloadingKey !== null}
                   className={cn(
                     'ml-4 flex items-center gap-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
@@ -143,7 +145,7 @@ export default function ModelsPage() {
                   )}
                 >
                   <Download size={14} />
-                  {downloadingKey === `${model.repo}/${model.filename}` ? 'Downloading...' : isInstalled ? 'Re-download' : 'Download'}
+                  {downloadingKey === `${model.hfRepoGguf}/${model.ggufFilename}` ? 'Downloading...' : isInstalled ? 'Re-download' : 'Download'}
                 </button>
               </div>
             )
