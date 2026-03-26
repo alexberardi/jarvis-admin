@@ -105,11 +105,31 @@ export async function createDockerService(socketPath: string): Promise<DockerSer
       })
 
       const stream = await exec.start({ hijack: true, stdin: false })
-      const chunks: Buffer[] = []
+
+      // Demux the Docker multiplexed stream into separate stdout/stderr buffers.
+      // Raw hijacked streams prefix each frame with an 8-byte header:
+      //   [stream_type(1), 0, 0, 0, size(4)] + payload
+      // Without demuxing, these binary headers corrupt the output.
+      const stdoutChunks: Buffer[] = []
+      const stderrChunks: Buffer[] = []
+      const { PassThrough } = await import('node:stream')
+      const stdout = new PassThrough()
+      const stderr = new PassThrough()
+
+      stdout.on('data', (chunk: Buffer) => stdoutChunks.push(chunk))
+      stderr.on('data', (chunk: Buffer) => stderrChunks.push(chunk))
+
+      docker.modem.demuxStream(stream, stdout, stderr)
 
       return new Promise((resolve, reject) => {
-        stream.on('data', (chunk: Buffer) => chunks.push(chunk))
-        stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+        stream.on('end', () => {
+          stdout.end()
+          stderr.end()
+          const out = Buffer.concat(stdoutChunks).toString('utf-8')
+          const err = Buffer.concat(stderrChunks).toString('utf-8')
+          // Resolve with stdout; include stderr only if stdout is empty
+          resolve(out || err)
+        })
         stream.on('error', reject)
 
         // Timeout after 10 minutes (large model downloads)
