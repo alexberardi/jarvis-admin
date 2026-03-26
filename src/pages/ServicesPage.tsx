@@ -16,6 +16,7 @@ interface RowState {
   checked: boolean
   host: string
   port: number
+  scheme: string
 }
 
 interface HealthState {
@@ -41,11 +42,12 @@ export default function ServicesPage() {
     (name: string): RowState => {
       if (rowStates[name]) return rowStates[name]
       const entry = data?.services.find((s) => s.name === name)
-      if (!entry) return { checked: false, host: 'localhost', port: 0 }
+      if (!entry) return { checked: false, host: 'localhost', port: 0, scheme: 'http' }
       return {
         checked: entry.config_registered,
         host: entry.current_host ?? 'localhost',
         port: entry.current_port ?? entry.default_port,
+        scheme: entry.current_scheme ?? 'http',
       }
     },
     [rowStates, data],
@@ -59,12 +61,12 @@ export default function ServicesPage() {
   }, [])
 
   const probeHealth = useCallback(
-    async (name: string, host: string, port: number, healthPath: string) => {
+    async (name: string, host: string, port: number, healthPath: string, scheme: string = 'http') => {
       if (!host || !port) return
 
       setHealthStates((prev) => ({ ...prev, [name]: { status: 'probing' } }))
       try {
-        const resp = await probeServiceHealth({ host, port, health_path: healthPath })
+        const resp = await probeServiceHealth({ host, port, health_path: healthPath, scheme })
         setHealthStates((prev) => ({
           ...prev,
           [name]: {
@@ -90,7 +92,7 @@ export default function ServicesPage() {
       .filter((entry) => getRowState(entry.name).checked)
       .map((entry) => {
         const state = getRowState(entry.name)
-        return { name: entry.name, host: state.host, port: state.port }
+        return { name: entry.name, host: state.host, port: state.port, scheme: state.scheme }
       })
 
     if (items.length === 0) {
@@ -213,25 +215,27 @@ export default function ServicesPage() {
               checked={state.checked}
               host={state.host}
               port={state.port}
+              scheme={state.scheme}
               onToggle={() => {
                 const nowChecked = !state.checked
                 updateRow(entry.name, { ...state, checked: nowChecked })
                 if (nowChecked) {
-                  probeHealth(entry.name, state.host, state.port, entry.health_path)
+                  probeHealth(entry.name, state.host, state.port, entry.health_path, state.scheme)
                 } else {
                   setHealthStates((prev) => ({ ...prev, [entry.name]: { status: 'idle' } }))
                 }
               }}
               onHostChange={(host) => updateRow(entry.name, { ...state, host })}
               onPortChange={(port) => updateRow(entry.name, { ...state, port })}
+              onSchemeChange={(scheme) => updateRow(entry.name, { ...state, scheme })}
               onHostBlur={() => {
                 if (state.checked) {
-                  probeHealth(entry.name, state.host, state.port, entry.health_path)
+                  probeHealth(entry.name, state.host, state.port, entry.health_path, state.scheme)
                 }
               }}
               onPortBlur={() => {
                 if (state.checked) {
-                  probeHealth(entry.name, state.host, state.port, entry.health_path)
+                  probeHealth(entry.name, state.host, state.port, entry.health_path, state.scheme)
                 }
               }}
               onRotateKey={() => handleRotateKey(entry.name)}

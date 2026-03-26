@@ -9,9 +9,11 @@ interface ServiceRegistrationRowProps {
   checked: boolean
   host: string
   port: number
+  scheme: string
   onToggle: () => void
   onHostChange: (host: string) => void
   onPortChange: (port: number) => void
+  onSchemeChange: (scheme: string) => void
   onHostBlur: () => void
   onPortBlur: () => void
   onRotateKey: () => void
@@ -79,9 +81,11 @@ export default function ServiceRegistrationRow({
   checked,
   host,
   port,
+  scheme,
   onToggle,
   onHostChange,
   onPortChange,
+  onSchemeChange,
   onHostBlur,
   onPortBlur,
   onRotateKey,
@@ -134,6 +138,21 @@ export default function ServiceRegistrationRow({
       </div>
 
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onSchemeChange(scheme === 'https' ? 'http' : 'https')}
+          disabled={disabled}
+          className={cn(
+            'rounded border px-1.5 py-1 text-xs font-mono',
+            scheme === 'https'
+              ? 'border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400'
+              : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)]',
+            'disabled:opacity-50',
+          )}
+          title="Toggle HTTPS"
+        >
+          {scheme}
+        </button>
         <input
           type="text"
           value={host}
