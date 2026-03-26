@@ -7,6 +7,7 @@ export interface KnownServiceEntry {
   auth_registered: boolean
   current_host: string | null
   current_port: number | null
+  current_scheme: string | null
 }
 
 export interface ServiceRegistryResponse {
@@ -18,6 +19,7 @@ export interface ServiceRegisterItem {
   name: string
   host: string
   port: number
+  scheme?: string
 }
 
 export interface ServiceRegisterRequest {
