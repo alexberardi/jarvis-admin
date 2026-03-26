@@ -100,22 +100,25 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
     // Try Docker first
     const container = await findLlmContainer(app)
     if (container) {
-      const env = token ? [`HUGGINGFACE_HUB_TOKEN=${token}`] : []
+      // Pass token via sys.argv (not env vars) — dockerode env passing breaks in Bun runtime
+      const tokenArg = token ?? ''
       const cmd = filename
         ? [
             'python', '-c',
-            'import sys, os; from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id=sys.argv[1], filename=sys.argv[2], local_dir="/app/.models", token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))',
+            'import sys; from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id=sys.argv[1], filename=sys.argv[2], local_dir="/app/.models", token=sys.argv[3] or None))',
             repo,
             filename,
+            tokenArg,
           ]
         : [
             'python', '-c',
-            'import sys, os; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1], local_dir=f"/app/.models/{sys.argv[1].split(\'/\')[-1]}", token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))',
+            'import sys; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1], local_dir=f"/app/.models/{sys.argv[1].split(\'/\')[-1]}", token=sys.argv[2] or None))',
             repo,
+            tokenArg,
           ]
 
       try {
-        const output = await app.docker!.execInContainer(container.id, cmd, env)
+        const output = await app.docker!.execInContainer(container.id, cmd)
         return reply.send({ success: true, output: output.trim(), message: 'Download complete' })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
