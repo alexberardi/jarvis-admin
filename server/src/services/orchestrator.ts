@@ -98,13 +98,14 @@ export async function registerServices(
   portOverrides: Record<string, number>,
   composePath?: string,
 ): Promise<RegisterResult> {
-  // Build batch JSON (same format as ./jarvis CLI)
+  // Register with Docker container names and internal ports so services
+  // can discover each other via the Docker network (not localhost).
   const serviceList = services
     .filter((s) => s.id !== 'jarvis-admin') // Admin doesn't need registration
     .map((s) => ({
       name: s.id,
-      host: 'localhost',
-      port: portOverrides[s.id] ?? s.port,
+      host: s.id, // Docker container name = service ID
+      port: s.containerPort ?? s.port, // Internal port (e.g. auth=8000, not 7701)
     }))
 
   try {
