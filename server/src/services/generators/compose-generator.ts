@@ -252,10 +252,16 @@ function generateServiceBlock(
   lines.push('      JARVIS_APP_ID: ${JARVIS_APP_ID_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
   lines.push('      JARVIS_APP_KEY: ${JARVIS_APP_KEY_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
 
+  // Auth URL for all services that depend on jarvis-auth.
+  // The ./jarvis CLI injects this into every service's .env (line 599).
+  // Needed because auth-client validates before config-client finishes discovery.
+  const alreadyHasAuthUrl = service.envVars.some((e) => e.name === 'JARVIS_AUTH_BASE_URL')
+  if (service.dependsOn.includes('jarvis-auth') && !alreadyHasAuthUrl) {
+    lines.push('      JARVIS_AUTH_BASE_URL: http://host.docker.internal:${AUTH_PORT:-7701}')
+  }
+
   // LLM proxy needs model service config and backend env vars
   if (service.id === 'jarvis-llm-proxy-api') {
-    // Auth URL required at import time (before config-client init runs)
-    lines.push('      JARVIS_AUTH_BASE_URL: http://jarvis-auth:8000')
     lines.push('      MODEL_SERVICE_URL: http://localhost:7705')
     lines.push('      MODEL_SERVICE_PORT: "7705"')
     lines.push('      VLLM_WORKER_MULTIPROC_METHOD: spawn')
