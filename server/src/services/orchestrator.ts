@@ -98,14 +98,15 @@ export async function registerServices(
   portOverrides: Record<string, number>,
   composePath?: string,
 ): Promise<RegisterResult> {
-  // Register with Docker container names and internal ports so services
-  // can discover each other via the Docker network (not localhost).
+  // Register with host.docker.internal so Docker containers can reach services
+  // via host port mapping. This also supports future multi-machine deployments
+  // where remote services would be re-registered with their actual IP.
   const serviceList = services
     .filter((s) => s.id !== 'jarvis-admin') // Admin doesn't need registration
     .map((s) => ({
       name: s.id,
-      host: s.id, // Docker container name = service ID
-      port: s.containerPort ?? s.port, // Internal port (e.g. auth=8000, not 7701)
+      host: 'host.docker.internal',
+      port: portOverrides[s.id] ?? s.port,
     }))
 
   try {
