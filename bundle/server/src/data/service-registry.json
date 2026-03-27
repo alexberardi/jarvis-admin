@@ -121,7 +121,7 @@
       "port": 7704,
       "image": "ghcr.io/alexberardi/jarvis-llm-proxy-api:latest",
       "healthCheck": "/health",
-      "dependsOn": ["postgres"],
+      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
       "database": "jarvis_llm_proxy",
       "dbDriverPrefix": "postgresql+psycopg2://",
       "gpu": true,
@@ -140,14 +140,19 @@
       "description": "Push notifications, inbox, and device token management",
       "category": "recommended",
       "port": 7712,
+      "containerPort": 7712,
       "image": "ghcr.io/alexberardi/jarvis-notifications:latest",
       "healthCheck": "/health",
       "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
       "database": "jarvis_notifications",
-      "dbDriverPrefix": "postgresql://",
+      "dbDriverPrefix": "postgresql+psycopg2://",
       "envVars": [
         { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+        { "name": "NOTIFICATIONS_PORT", "description": "Server port", "required": false, "default": "7712" },
+        { "name": "AUTH_SECRET_KEY", "description": "JWT signing key (must match jarvis-auth)", "required": true, "secret": true, "secretRef": "AUTH_SECRET_KEY" },
+        { "name": "ADMIN_API_KEY", "description": "Admin endpoint protection", "required": true, "secret": true, "secretRef": "ADMIN_API_KEY" },
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
+        { "name": "JARVIS_AUTH_BASE_URL", "description": "Auth service URL", "required": false, "default": "http://jarvis-auth:8000" }
       ]
     },
     {
@@ -195,7 +200,7 @@
       "id": "postgres",
       "name": "PostgreSQL",
       "description": "Primary database — stores users, commands, settings, and service config",
-      "image": "postgres:16-alpine",
+      "image": "pgvector/pgvector:pg16",
       "port": 5432,
       "envVars": [
         { "name": "POSTGRES_USER", "description": "Database superuser", "required": true, "default": "jarvis" },
