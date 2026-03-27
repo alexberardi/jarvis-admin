@@ -74,6 +74,7 @@
       "envVars": [
         { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
         { "name": "ADMIN_API_KEY", "description": "Admin endpoint protection", "required": true, "secret": true, "secretRef": "ADMIN_API_KEY" },
+        { "name": "JARVIS_AUTH_SECRET_KEY", "description": "JWT signing key (shared with jarvis-auth)", "required": true, "secret": true, "secretRef": "AUTH_SECRET_KEY" },
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
       ]
     },
