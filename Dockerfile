@@ -31,6 +31,8 @@ COPY --from=backend-build /app/server/dist ./server/dist
 # Copy frontend build
 COPY --from=frontend-build /app/dist ./public
 
+ARG JARVIS_VERSION=0.0.0-dev
+ENV JARVIS_VERSION=$JARVIS_VERSION
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV STATIC_DIR=/app/public

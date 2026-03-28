@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useContainers, useRestartContainer } from '@/hooks/useContainers'
 import { useLlmStatus } from '@/hooks/useLlmSetup'
 import ServiceHealthCard from '@/components/dashboard/ServiceHealthCard'
+import UpdateBanner from '@/components/dashboard/UpdateBanner'
 import { cn } from '@/lib/utils'
 
 const LLM_SETUP_DISMISSED_KEY = 'jarvis-admin:llm-setup-dismissed'
@@ -79,6 +80,8 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      <UpdateBanner />
 
       {showLlmBanner && (
         <div className="flex items-center justify-between rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-4">
