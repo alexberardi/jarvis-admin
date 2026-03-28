@@ -140,16 +140,22 @@ export default function ServiceRegistrationRow({
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => onSchemeChange(scheme === 'https' ? 'http' : 'https')}
+          onClick={() => {
+            const order = ['http', 'https', 'mqtt']
+            const next = order[(order.indexOf(scheme) + 1) % order.length]!
+            onSchemeChange(next)
+          }}
           disabled={disabled}
           className={cn(
             'rounded border px-1.5 py-1 text-xs font-mono',
             scheme === 'https'
               ? 'border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400'
-              : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)]',
+              : scheme === 'mqtt'
+                ? 'border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)]',
             'disabled:opacity-50',
           )}
-          title="Toggle HTTPS"
+          title="Toggle scheme"
         >
           {scheme}
         </button>
