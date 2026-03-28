@@ -149,6 +149,11 @@ function generateInfraBlock(
     lines.push('    command: redis-server --requirepass ${REDIS_PASSWORD}')
   }
 
+  // Mosquitto needs a config for anonymous access (no config file needed)
+  if (infra.id === 'mosquitto') {
+    lines.push(`    command: sh -c "printf 'listener 1883\\nallow_anonymous true\\npersistence true\\npersistence_location /mosquitto/data/\\n' > /tmp/mosquitto.conf && exec mosquitto -c /tmp/mosquitto.conf"`)
+  }
+
   // Postgres needs healthcheck and init-db mount
   if (infra.id === 'postgres') {
     lines.push('    healthcheck:')
