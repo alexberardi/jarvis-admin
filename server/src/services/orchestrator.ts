@@ -229,9 +229,9 @@ export async function tieredStartup(
       child.on('close', (code) => resolve(code ?? 1))
     })
 
-  // Step 1: Start infrastructure (postgres, redis, loki, grafana)
+  // Step 1: Start infrastructure (postgres, redis, mosquitto, loki, grafana)
   emit({ phase: 'infra', message: 'Starting infrastructure...' })
-  await composeCmd(['up', '-d', 'postgres', 'redis', 'loki', 'grafana'])
+  await composeCmd(['up', '-d', 'postgres', 'redis', 'mosquitto', 'loki', 'grafana'])
 
   // Wait for postgres to be healthy
   emit({ phase: 'infra', message: 'Waiting for PostgreSQL...' })
