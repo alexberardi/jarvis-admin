@@ -151,7 +151,7 @@ function generateInfraBlock(
 
   // Mosquitto needs a config for anonymous access (no config file needed)
   if (infra.id === 'mosquitto') {
-    lines.push(`    command: sh -c "printf 'listener 1883\\nallow_anonymous true\\npersistence true\\npersistence_location /mosquitto/data/\\n' > /tmp/mosquitto.conf && exec mosquitto -c /tmp/mosquitto.conf"`)
+    lines.push('    command: ["sh", "-c", "echo -e \'listener 1883\\nallow_anonymous true\\npersistence true\\npersistence_location /mosquitto/data/\' > /tmp/mosquitto.conf && exec mosquitto -c /tmp/mosquitto.conf"]')
   }
 
   // Postgres needs healthcheck and init-db mount
