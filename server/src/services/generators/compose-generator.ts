@@ -1,3 +1,4 @@
+// Compose file generator — produces docker-compose.yml from wizard state
 import type { WizardState } from '../../types/wizard.js'
 import type {
   ServiceRegistry,
