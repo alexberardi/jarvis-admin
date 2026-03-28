@@ -216,9 +216,11 @@ function generateServiceBlock(
       `      MIGRATIONS_DATABASE_URL: ${driver}\${DB_USER:-jarvis}:\${POSTGRES_PASSWORD}@postgres:5432/${service.database}`,
     )
   }
+  const alreadyWritten = new Set(portVarNames)
   for (const env of service.envVars) {
-    // Skip DATABASE_URL since we generate it from the database field
+    // Skip vars already written (DATABASE_URL from database field, port vars from portVarMap)
     if (env.name === 'DATABASE_URL' || env.name === 'MIGRATIONS_DATABASE_URL') continue
+    if (alreadyWritten.has(env.name)) continue
     if (env.secretRef) {
       lines.push(`      ${env.name}: \${${env.secretRef}}`)
     } else if (env.default) {
