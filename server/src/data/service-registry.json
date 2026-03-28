@@ -64,7 +64,7 @@
       "containerPort": 8002,
       "image": "ghcr.io/alexberardi/jarvis-command-center:latest",
       "healthCheck": "/health",
-      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
+      "dependsOn": ["postgres", "mosquitto", "jarvis-auth", "jarvis-config-service"],
       "database": "jarvis_command_center",
       "dbDriverPrefix": "postgresql://",
       "llmInterfaceOptions": [
