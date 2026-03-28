@@ -77,10 +77,14 @@ jobs:
       - name: Create standalone binary
         run: |
           cd bundle
-          # Create entry point that sets STATIC_DIR
-          cat > entry.ts << 'ENTRY'
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Create entry point that sets STATIC_DIR and JARVIS_VERSION
+          cat > entry.ts << ENTRY
           import { join, resolve } from 'node:path'
           import { existsSync } from 'node:fs'
+
+          // Inject platform version at compile time
+          process.env.JARVIS_VERSION = '${VERSION}'
 
           // process.execPath gives the real binary path in bun-compiled binaries
           const binaryDir = join(process.execPath, '..')
@@ -270,5 +274,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            JARVIS_VERSION=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

@@ -88,6 +88,24 @@ install_binary() {
   fi
 }
 
+# Write installed version to admin.json for upgrade detection
+write_version() {
+  CONFIG_DIR="$HOME/.jarvis"
+  CONFIG_FILE="$CONFIG_DIR/admin.json"
+  SEMVER="${VERSION#v}"
+  mkdir -p "$CONFIG_DIR"
+
+  if [ -f "$CONFIG_FILE" ]; then
+    # Merge installedVersion into existing config (preserve other keys)
+    EXISTING=$(cat "$CONFIG_FILE")
+    echo "$EXISTING" | sed "s/}$/,\"installedVersion\":\"${SEMVER}\"}/" | \
+      sed 's/,\+/,/g' | sed 's/{,/{/g' > "$CONFIG_FILE.tmp"
+    mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+  else
+    echo "{\"installedVersion\":\"${SEMVER}\"}" > "$CONFIG_FILE"
+  fi
+}
+
 # Add to PATH if needed
 setup_path() {
   if echo "$PATH" | grep -q "$INSTALL_DIR"; then
@@ -217,6 +235,7 @@ main() {
   detect_platform
   get_latest_version
   install_binary
+  write_version
   setup_path
   setup_autostart
   print_success

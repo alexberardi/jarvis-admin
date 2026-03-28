@@ -14,12 +14,13 @@ export interface Config {
   staticDir: string | null
 }
 
-/** Persisted service URLs from the setup wizard. */
+/** Persisted service URLs and version info from the setup wizard. */
 interface PersistedConfig {
   authUrl?: string
   configServiceUrl?: string
   llmProxyUrl?: string
   commandCenterUrl?: string
+  installedVersion?: string
 }
 
 const CONFIG_DIR = join(homedir(), '.jarvis')
