@@ -275,6 +275,33 @@ export async function tieredStartup(
     emit({ phase: 'register', message: `Registered ${regResult.registered.length} service(s)` })
   }
 
+  // Step 4b: Register infrastructure (MQTT broker) — uses CRUD endpoint, not batch
+  const configAdminToken = env.JARVIS_CONFIG_ADMIN_TOKEN ?? ''
+  if (configAdminToken) {
+    try {
+      const mqttPort = portOverrides['mosquitto'] ?? 1884
+      await fetch(`${configServiceUrl}/services`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': configAdminToken,
+        },
+        body: JSON.stringify({
+          name: 'jarvis-mqtt-broker',
+          host: 'host.docker.internal',
+          port: mqttPort,
+          scheme: 'mqtt',
+          description: 'MQTT message broker (Mosquitto)',
+          health_path: '',
+        }),
+        signal: AbortSignal.timeout(10_000),
+      })
+      emit({ phase: 'register', message: 'Registered MQTT broker' })
+    } catch (err) {
+      emit({ phase: 'register', message: `Warning: MQTT broker registration failed: ${err instanceof Error ? err.message : err}` })
+    }
+  }
+
   // Step 5: Start remaining services (skip tier 0-1 — they're already healthy)
   const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth'])
   const remaining = services
