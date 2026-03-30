@@ -167,6 +167,8 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
     // Write files
     mkdirSync(composePath, { recursive: true })
+    // Create .models dir before Docker does, so it's owned by the user (not root)
+    mkdirSync(join(composePath, '.models'), { recursive: true })
     writeFileSync(join(composePath, 'docker-compose.yml'), compose)
     writeFileSync(join(composePath, '.env'), env)
     writeFileSync(join(composePath, 'init-db.sh'), initDb)
