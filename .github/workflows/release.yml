@@ -232,10 +232,16 @@ jobs:
           cp README.md npm-pkg/ 2>/dev/null || true
 
       - name: Install server production deps
+        run: cd npm-pkg/server && npm install --omit=dev
+
+      - name: Break hard links
         run: |
-          cd npm-pkg/server && npm install --omit=dev
-          # Break any hard links so npm pack doesn't choke
-          find . -type f -links +1 -exec cp --remove-destination {} {} \;
+          cd npm-pkg
+          find . -type f -links +1 | while read f; do
+            tmp="$(mktemp)"
+            cp "$f" "$tmp"
+            mv "$tmp" "$f"
+          done
 
       - name: Publish to npm
         run: cd npm-pkg && npm publish --access public
