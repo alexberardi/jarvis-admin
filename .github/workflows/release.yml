@@ -188,9 +188,6 @@ jobs:
   publish-npm:
     needs: build-binaries
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v6
 
@@ -238,7 +235,9 @@ jobs:
         run: cd npm-pkg/server && npm ci --omit=dev
 
       - name: Publish to npm
-        run: cd npm-pkg && npm publish --access public --provenance
+        run: cd npm-pkg && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # Also build Docker image on release
   docker:
