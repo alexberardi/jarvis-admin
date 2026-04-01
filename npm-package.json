@@ -1,6 +1,6 @@
 {
   "name": "@alexberardi/jarvis-admin",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Admin dashboard and setup wizard for Jarvis voice assistant",
   "type": "module",
   "bin": {
