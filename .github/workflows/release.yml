@@ -215,14 +215,14 @@ jobs:
           mkdir -p npm-pkg/public
           mkdir -p npm-pkg/bin
 
-          # Server
-          cp -r server/dist/* npm-pkg/server/dist/
+          # Server (dereference links)
+          cp -rL server/dist/* npm-pkg/server/dist/
           cp server/package.json npm-pkg/server/
           cp server/package-lock.json npm-pkg/server/
           cp server/src/data/service-registry.json npm-pkg/server/src/data/
 
           # Frontend
-          cp -r dist/* npm-pkg/public/
+          cp -rL dist/* npm-pkg/public/
 
           # CLI entry
           cp bin/jarvis-admin.mjs npm-pkg/bin/
@@ -232,7 +232,10 @@ jobs:
           cp README.md npm-pkg/ 2>/dev/null || true
 
       - name: Install server production deps
-        run: cd npm-pkg/server && npm install --omit=dev --install-links
+        run: |
+          cd npm-pkg/server && npm install --omit=dev
+          # Break any hard links so npm pack doesn't choke
+          find . -type f -links +1 -exec cp --remove-destination {} {} \;
 
       - name: Publish to npm
         run: cd npm-pkg && npm publish --access public
