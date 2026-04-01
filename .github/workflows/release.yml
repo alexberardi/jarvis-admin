@@ -232,7 +232,7 @@ jobs:
           cp README.md npm-pkg/ 2>/dev/null || true
 
       - name: Install server production deps
-        run: cd npm-pkg/server && npm ci --omit=dev
+        run: cd npm-pkg/server && npm install --omit=dev --install-links
 
       - name: Publish to npm
         run: cd npm-pkg && npm publish --access public
