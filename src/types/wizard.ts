@@ -23,6 +23,8 @@ export interface WizardState {
   remoteWhisperUrl: string
   platform: 'darwin' | 'linux'
   hardware: HardwareInfo | null
+  installRunning: boolean
+  installComplete: boolean
 }
 
 export type WizardAction =
@@ -43,6 +45,8 @@ export type WizardAction =
   | { type: 'SET_REMOTE_WHISPER_URL'; url: string }
   | { type: 'SET_PLATFORM'; platform: 'darwin' | 'linux' }
   | { type: 'SET_HARDWARE'; hardware: HardwareInfo }
+  | { type: 'SET_INSTALL_RUNNING'; running: boolean }
+  | { type: 'SET_INSTALL_COMPLETE' }
 
 export interface InstallStatus {
   configured: boolean
