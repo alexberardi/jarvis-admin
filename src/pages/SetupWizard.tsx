@@ -25,6 +25,10 @@ function WizardContent() {
   const StepComponent = STEPS[state.currentStep].component
   const isFirst = state.currentStep === 0
   const isLast = state.currentStep === STEPS.length - 1
+  const INSTALL_STEP = 4
+  const isInstallStep = state.currentStep === INSTALL_STEP
+  const installBlocked = isInstallStep && !state.installComplete
+  const navDisabled = state.installRunning || installBlocked
 
   function handleNext() {
     if (isLast) {
@@ -47,8 +51,9 @@ function WizardContent() {
             <button
               key={step.label}
               type="button"
-              onClick={() => dispatch({ type: 'SET_STEP', step: i })}
-              className="flex items-center gap-1"
+              onClick={() => !navDisabled && dispatch({ type: 'SET_STEP', step: i })}
+              disabled={navDisabled}
+              className={cn('flex items-center gap-1', navDisabled && 'cursor-not-allowed')}
             >
               <div
                 className={cn(
@@ -96,7 +101,7 @@ function WizardContent() {
           <button
             type="button"
             onClick={handleBack}
-            disabled={isFirst}
+            disabled={isFirst || navDisabled}
             className={cn(
               'rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm',
               'hover:bg-[var(--color-surface-alt)] transition-colors',
@@ -108,9 +113,11 @@ function WizardContent() {
           <button
             type="button"
             onClick={handleNext}
+            disabled={navDisabled}
             className={cn(
               'rounded-lg bg-[var(--color-primary)] px-6 py-2 text-sm font-medium text-white',
               'hover:opacity-90 transition-opacity',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             {isLast ? 'Finish' : 'Next'}

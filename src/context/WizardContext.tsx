@@ -18,6 +18,8 @@ const initialState: WizardState = {
   remoteWhisperUrl: '',
   platform: 'linux',
   hardware: null,
+  installRunning: false,
+  installComplete: false,
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -79,6 +81,10 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, platform: action.platform }
     case 'SET_HARDWARE':
       return { ...state, hardware: action.hardware, platform: action.hardware.platform }
+    case 'SET_INSTALL_RUNNING':
+      return { ...state, installRunning: action.running }
+    case 'SET_INSTALL_COMPLETE':
+      return { ...state, installRunning: false, installComplete: true }
     default:
       return state
   }

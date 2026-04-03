@@ -44,6 +44,33 @@ The container includes a healthcheck against `GET /health`.
 | jarvis-auth (7701) | Yes | User authentication (superuser only) |
 | jarvis-settings-server (7708) | Yes | Settings CRUD |
 
+## Uninstall
+
+If the installer was interrupted or you need a clean reinstall, run these commands to fully remove all Jarvis state:
+
+```bash
+# 1. Remove generated config files
+rm -rf ~/.jarvis
+
+# 2. Stop and remove all Jarvis containers
+docker ps -a --filter "name=jarvis" -q | xargs -r docker rm -f
+
+# 3. Remove Docker volumes (PostgreSQL data, Redis, etc.)
+docker volume ls --filter "name=jarvis" -q | xargs -r docker volume rm
+
+# 4. Remove the Docker network
+docker network rm jarvis 2>/dev/null
+
+# 5. (Optional) Remove pulled images to free disk space
+docker images --filter "reference=ghcr.io/alexberardi/jarvis-*" -q | xargs -r docker rmi
+docker images --filter "reference=postgres" -q | xargs -r docker rmi
+docker images --filter "reference=redis" -q | xargs -r docker rmi
+docker images --filter "reference=eclipse-mosquitto" -q | xargs -r docker rmi
+docker images --filter "reference=grafana/*" -q | xargs -r docker rmi
+```
+
+After cleanup, re-run the installer from scratch.
+
 ## Tests
 
 ```bash

@@ -10,7 +10,7 @@ import type { HealthStatus } from '@/types/wizard'
 type Phase = 'idle' | 'generating' | 'pulling' | 'starting' | 'registering' | 'verifying' | 'done' | 'error'
 
 export default function InstallStep() {
-  const { state } = useWizard()
+  const { state, dispatch } = useWizard()
   const pullStream = useInstallStream()
   const startStream = useInstallStream()
   const [phase, setPhase] = useState<Phase>('idle')
@@ -19,6 +19,7 @@ export default function InstallStep() {
 
   async function runInstall() {
     setError(null)
+    dispatch({ type: 'SET_INSTALL_RUNNING', running: true })
 
     try {
       // Phase 1: Generate config files
@@ -41,9 +42,11 @@ export default function InstallStep() {
       setHealthStatus(health)
 
       setPhase('done')
+      dispatch({ type: 'SET_INSTALL_COMPLETE' })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setPhase('error')
+      dispatch({ type: 'SET_INSTALL_RUNNING', running: false })
     }
   }
 
