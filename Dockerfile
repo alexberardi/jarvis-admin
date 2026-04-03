@@ -34,11 +34,11 @@ COPY --from=frontend-build /app/dist ./public
 ARG JARVIS_VERSION=0.0.0-dev
 ENV JARVIS_VERSION=$JARVIS_VERSION
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=7711
 ENV STATIC_DIR=/app/public
-EXPOSE 3000
+EXPOSE 7711
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:7711/health || exit 1
 
 CMD ["node", "server/dist/index.js"]
