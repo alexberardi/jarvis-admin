@@ -25,7 +25,7 @@ node server/dist/index.js  # serves frontend + API on :3000
 
 ```bash
 docker build -t jarvis-admin .
-docker run -p 3000:3000 jarvis-admin
+docker run -p 7711:7711 jarvis-admin
 ```
 
 The container includes a healthcheck against `GET /health`.
