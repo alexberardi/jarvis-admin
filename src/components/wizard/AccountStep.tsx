@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { setup } from '@/api/auth'
 import { setAuthToken } from '@/api/client'
@@ -140,23 +140,40 @@ export default function AccountStep() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2">
-          <AlertCircle size={14} className="text-red-500" />
-          <span className="text-sm text-red-500">{error}</span>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2">
+            <AlertCircle size={14} className="text-red-500 shrink-0" />
+            <span className="text-sm text-red-500">{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={!canSubmit}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm',
+              'hover:bg-[var(--color-surface-alt)] transition-colors',
+              'disabled:opacity-50',
+            )}
+          >
+            <RotateCcw size={14} />
+            Retry
+          </button>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleCreate}
-        disabled={!canSubmit}
-        className={cn(
-          'w-full rounded-lg bg-[var(--color-primary)] px-4 py-2 font-medium text-white',
-          'hover:opacity-90 disabled:opacity-50 transition-opacity',
-        )}
-      >
-        {creating ? 'Creating...' : 'Create Superuser Account'}
-      </button>
+      {!error && (
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={!canSubmit}
+          className={cn(
+            'w-full rounded-lg bg-[var(--color-primary)] px-4 py-2 font-medium text-white',
+            'hover:opacity-90 disabled:opacity-50 transition-opacity',
+          )}
+        >
+          {creating ? 'Creating...' : 'Create Superuser Account'}
+        </button>
+      )}
     </div>
   )
 }

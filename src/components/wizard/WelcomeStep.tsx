@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Monitor, Server, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Monitor, Server, AlertCircle, CheckCircle2, Loader2, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { getInstallStatus } from '@/api/install'
@@ -9,12 +9,34 @@ export default function WelcomeStep() {
   const { state, dispatch } = useWizard()
   const [status, setStatus] = useState<InstallStatus | null>(null)
   const [checking, setChecking] = useState(true)
+  const [dockerFailed, setDockerFailed] = useState(false)
+
+  function checkDocker() {
+    setChecking(true)
+    setDockerFailed(false)
+    getInstallStatus()
+      .then((s) => {
+        setStatus(s)
+        const failed = s.reason === 'docker_not_found'
+        setDockerFailed(failed)
+        // Block "Next" if Docker is missing
+        if (failed) {
+          dispatch({ type: 'SET_INSTALL_RUNNING', running: true })
+        } else {
+          dispatch({ type: 'SET_INSTALL_RUNNING', running: false })
+        }
+      })
+      .catch(() => {
+        setStatus({ configured: false, reason: 'error' })
+        setDockerFailed(true)
+        dispatch({ type: 'SET_INSTALL_RUNNING', running: true })
+      })
+      .finally(() => setChecking(false))
+  }
 
   useEffect(() => {
-    getInstallStatus()
-      .then(setStatus)
-      .catch(() => setStatus({ configured: false, reason: 'error' }))
-      .finally(() => setChecking(false))
+    checkDocker()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const dockerOk = status && status.reason !== 'docker_not_found'
@@ -39,7 +61,7 @@ export default function WelcomeStep() {
           ) : (
             <AlertCircle size={20} className="text-red-500" />
           )}
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-medium text-[var(--color-text)]">
               {checking ? 'Checking Docker...' : dockerOk ? 'Docker is running' : 'Docker not found'}
             </p>
@@ -49,6 +71,16 @@ export default function WelcomeStep() {
               </p>
             )}
           </div>
+          {dockerFailed && !checking && (
+            <button
+              type="button"
+              onClick={checkDocker}
+              className="flex items-center gap-1 rounded-md border border-[var(--color-border)] px-2 py-1 text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            >
+              <RotateCcw size={12} />
+              Retry
+            </button>
+          )}
         </div>
       </div>
 

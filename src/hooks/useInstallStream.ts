@@ -30,7 +30,7 @@ export function useInstallStream() {
   })
   const eventSourceRef = useRef<EventSource | null>(null)
 
-  const run = useCallback((url: string): Promise<number> => {
+  const run = useCallback((url: string, onEvent?: (data: Record<string, unknown>) => void): Promise<number> => {
     // Clean up any existing connection
     eventSourceRef.current?.close()
 
@@ -48,36 +48,42 @@ export function useInstallStream() {
 
       es.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data) as
-            | { stream: 'stdout' | 'stderr'; text: string }
-            | { done: true; code: number }
+          const data = JSON.parse(event.data) as Record<string, unknown>
+
+          // Forward all events to the optional callback
+          if (onEvent) {
+            onEvent(data)
+          }
 
           if ('done' in data) {
             setState((prev) => ({
               ...prev,
               running: false,
               done: true,
-              exitCode: data.code,
+              exitCode: data.code as number,
             }))
             es.close()
             if (data.code === 0) {
-              resolve(data.code)
+              resolve(data.code as number)
             } else {
-              reject(new Error(`Process exited with code ${data.code}`))
+              const errMsg = data.error ? String(data.error) : `Process exited with code ${data.code as number}`
+              reject(new Error(errMsg))
             }
             return
           }
 
-          const line: StreamLine = {
-            stream: data.stream,
-            text: data.text,
-            timestamp: Date.now(),
-          }
+          if ('stream' in data && 'text' in data) {
+            const line: StreamLine = {
+              stream: data.stream as 'stdout' | 'stderr',
+              text: data.text as string,
+              timestamp: Date.now(),
+            }
 
-          setState((prev) => ({
-            ...prev,
-            lines: [...prev.lines, line],
-          }))
+            setState((prev) => ({
+              ...prev,
+              lines: [...prev.lines, line],
+            }))
+          }
         } catch {
           // Ignore parse errors
         }

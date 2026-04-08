@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, accessSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, platform, arch, totalmem } from 'node:os'
 import { spawn, execSync } from 'node:child_process'
+import net from 'node:net'
 import type { FastifyInstance } from 'fastify'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
 import { generateEnv } from '../services/generators/env-generator.js'
@@ -10,7 +11,7 @@ import { generateAllSecrets } from '../services/generators/secret-generator.js'
 import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
 import { savePersistedConfig } from '../config.js'
-import type { WizardState, HardwareInfo, InstallStatus } from '../types/wizard.js'
+import type { WizardState, HardwareInfo, InstallState, PreflightCheck, PreflightResult } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
 import registryData from '../data/service-registry.json' with { type: 'json' }
 
@@ -26,122 +27,352 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   const registry = loadRegistry()
 
   /**
-   * Check if Jarvis has been installed (compose files exist).
+   * Check installation state with container awareness.
    */
   app.get('/status', async (_request, reply) => {
     const composePath = getComposePath()
     const composeFile = join(composePath, 'docker-compose.yml')
     const envFile = join(composePath, '.env')
 
-    if (existsSync(composeFile) && existsSync(envFile)) {
-      const status: InstallStatus = { configured: true, composePath }
+    if (!existsSync(composeFile) || !existsSync(envFile)) {
+      // Check Docker availability
+      let dockerAvailable = false
+      try {
+        execSync('docker info', { stdio: 'ignore', timeout: 5000 })
+        dockerAvailable = true
+      } catch {
+        // Docker not available
+      }
+
+      const status: InstallState = {
+        configured: false,
+        reason: dockerAvailable ? 'not_installed' : 'docker_not_found',
+        state: 'fresh',
+      }
       return reply.send(status)
     }
 
-    // Check Docker availability
-    let dockerAvailable = false
+    // Compose file exists — check what containers are running
+    let running: string[] = []
+    let stopped: string[] = []
     try {
-      execSync('docker info', { stdio: 'ignore', timeout: 5000 })
-      dockerAvailable = true
+      const output = execSync(
+        `docker compose -f "${composeFile}" ps --format json`,
+        { cwd: composePath, timeout: 10_000, encoding: 'utf-8', env: { ...process.env, ...loadEnvFile(composePath) } },
+      )
+      // docker compose ps --format json outputs one JSON object per line
+      const lines = output.trim().split('\n').filter(Boolean)
+      for (const line of lines) {
+        try {
+          const container = JSON.parse(line) as { Service: string; State: string }
+          if (container.State === 'running') {
+            running.push(container.Service)
+          } else {
+            stopped.push(container.Service)
+          }
+        } catch {
+          // Skip unparseable lines
+        }
+      }
     } catch {
-      // Docker not available
+      // docker compose ps failed — compose file may exist but no containers
     }
 
-    const status: InstallStatus = {
-      configured: false,
-      reason: dockerAvailable ? 'not_installed' : 'docker_not_found',
+    // Determine state
+    let state: 'generated' | 'partial' | 'running' | 'complete' = 'generated'
+    if (running.length === 0 && stopped.length === 0) {
+      state = 'generated'
+    } else if (running.length > 0 && stopped.length === 0) {
+      // All containers running — check if auth is up (indicates complete setup)
+      const envVars = loadEnvFile(composePath)
+      const authPort = parseInt(envVars.AUTH_PORT ?? '7701', 10)
+      try {
+        const res = await fetch(`http://localhost:${authPort}/health`, { signal: AbortSignal.timeout(3000) })
+        if (res.ok) {
+          state = 'complete'
+        } else {
+          state = 'running'
+        }
+      } catch {
+        state = 'running'
+      }
+    } else {
+      state = 'partial'
+    }
+
+    const status: InstallState = {
+      configured: true,
+      composePath,
+      state,
+      running: running.length > 0 ? running : undefined,
+      stopped: stopped.length > 0 ? stopped : undefined,
     }
     return reply.send(status)
   })
 
   /**
+   * Pre-flight checks before installation begins.
+   * Verifies Docker, Compose, ports, disk space, Docker socket, and NVIDIA runtime.
+   */
+  app.get<{ Querystring: { services?: string } }>('/preflight', async (request, reply) => {
+    const checks: PreflightCheck[] = []
+    const composePath = getComposePath()
+    const dockerSocket = app.config?.dockerSocket ?? '/var/run/docker.sock'
+
+    // Parse enabled services from query param
+    const enabledServiceIds = (request.query as { services?: string }).services?.split(',').filter(Boolean) ?? []
+    const enabledServices = registry.services.filter((s) =>
+      s.category === 'core' || enabledServiceIds.includes(s.id),
+    )
+
+    // 1. Docker
+    try {
+      const output = execSync('docker info', { encoding: 'utf-8', timeout: 5000 })
+      const versionMatch = output.match(/Server Version:\s*(.+)/i)
+      const version = versionMatch?.[1]?.trim() ?? 'unknown'
+      checks.push({ name: 'Docker', status: 'pass', message: `Docker is running (v${version})` })
+    } catch (err) {
+      checks.push({
+        name: 'Docker',
+        status: 'fail',
+        message: 'Docker is not running or not installed',
+        details: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    // 2. Docker Compose
+    try {
+      const output = execSync('docker compose version', { encoding: 'utf-8', timeout: 5000 })
+      checks.push({ name: 'Docker Compose', status: 'pass', message: output.trim() })
+    } catch (err) {
+      checks.push({
+        name: 'Docker Compose',
+        status: 'fail',
+        message: 'Docker Compose is not available',
+        details: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    // 3. Port availability
+    const portsToCheck = enabledServices.map((s) => ({ id: s.id, port: s.port }))
+    const conflicts: Array<{ id: string; port: number }> = []
+
+    await Promise.all(
+      portsToCheck.map(async ({ id, port }) => {
+        const inUse = await isPortInUse(port)
+        if (inUse) {
+          conflicts.push({ id, port })
+        }
+      }),
+    )
+
+    if (conflicts.length > 0) {
+      const coreConflicts = conflicts.filter((c) =>
+        enabledServices.find((s) => s.id === c.id && s.category === 'core'),
+      )
+      const details = conflicts.map((c) => `${c.id} (port ${c.port})`).join(', ')
+      checks.push({
+        name: 'Ports',
+        status: coreConflicts.length > 0 ? 'fail' : 'warn',
+        message: `${conflicts.length} port(s) already in use: ${details}`,
+        details: `Conflicting ports: ${details}`,
+      })
+    } else {
+      checks.push({ name: 'Ports', status: 'pass', message: 'All required ports are available' })
+    }
+
+    // 4. Disk space
+    try {
+      const targetPath = existsSync(composePath) ? composePath : homedir()
+      const output = execSync(`df -k "${targetPath}"`, { encoding: 'utf-8', timeout: 5000 })
+      const lines = output.trim().split('\n')
+      if (lines.length >= 2) {
+        const parts = lines[1].split(/\s+/)
+        // df -k output: Filesystem 1K-blocks Used Available Use% Mounted
+        const availableKb = parseInt(parts[3], 10)
+        const availableGb = Math.round(availableKb / (1024 * 1024))
+        if (availableKb < 2 * 1024 * 1024) {
+          checks.push({
+            name: 'Disk Space',
+            status: 'fail',
+            message: `Only ${availableGb} GB available (minimum 2 GB required)`,
+          })
+        } else if (availableKb < 10 * 1024 * 1024) {
+          checks.push({
+            name: 'Disk Space',
+            status: 'warn',
+            message: `${availableGb} GB available (10+ GB recommended)`,
+          })
+        } else {
+          checks.push({
+            name: 'Disk Space',
+            status: 'pass',
+            message: `${availableGb} GB available`,
+          })
+        }
+      }
+    } catch {
+      checks.push({ name: 'Disk Space', status: 'warn', message: 'Could not determine available disk space' })
+    }
+
+    // 5. Docker socket
+    try {
+      accessSync(dockerSocket, fsConstants.R_OK | fsConstants.W_OK)
+      checks.push({ name: 'Docker Socket', status: 'pass', message: `Docker socket accessible at ${dockerSocket}` })
+    } catch (err) {
+      checks.push({
+        name: 'Docker Socket',
+        status: 'fail',
+        message: `Docker socket not accessible at ${dockerSocket}`,
+        details: err instanceof Error ? err.message : String(err),
+      })
+    }
+
+    // 6. NVIDIA runtime (Linux only)
+    if (platform() === 'linux') {
+      const gpuServicesEnabled = enabledServices.some((s) => s.gpu)
+      try {
+        const output = execSync("docker info --format '{{json .Runtimes}}'", {
+          encoding: 'utf-8',
+          timeout: 5000,
+        })
+        const hasNvidia = output.toLowerCase().includes('nvidia')
+        if (hasNvidia) {
+          checks.push({ name: 'NVIDIA Runtime', status: 'pass', message: 'NVIDIA container runtime detected' })
+        } else if (gpuServicesEnabled) {
+          checks.push({
+            name: 'NVIDIA Runtime',
+            status: 'warn',
+            message: 'NVIDIA runtime not found. GPU services may not work.',
+            details: 'Install the NVIDIA Container Toolkit for GPU acceleration',
+          })
+        }
+      } catch {
+        if (gpuServicesEnabled) {
+          checks.push({
+            name: 'NVIDIA Runtime',
+            status: 'warn',
+            message: 'Could not check for NVIDIA runtime. GPU services may not work.',
+          })
+        }
+      }
+    }
+
+    const canProceed = !checks.some((c) => c.status === 'fail')
+    const result: PreflightResult = { checks, canProceed }
+    return reply.send(result)
+  })
+
+  /**
    * Detect hardware: GPU, RAM, platform.
+   * Wrapped in try/catch so the endpoint never throws.
    */
   app.get('/hardware', async (_request, reply) => {
-    const plat = platform()
-    const archName = arch()
-    const totalMemoryGb = Math.round(totalmem() / (1024 * 1024 * 1024))
+    try {
+      const plat = platform()
+      const archName = arch()
+      const totalMemoryGb = Math.round(totalmem() / (1024 * 1024 * 1024))
 
-    let gpuName: string | null = null
-    let gpuVramMb: number | null = null
-    const recommendedBackends: string[] = []
-    let recommendedBackend = 'gguf'
+      let gpuName: string | null = null
+      let gpuVramMb: number | null = null
+      const recommendedBackends: string[] = []
+      let recommendedBackend = 'gguf'
 
-    if (plat === 'darwin') {
-      // macOS: check for Apple Silicon
-      try {
-        const output = execSync('system_profiler SPDisplaysDataType -json', {
-          encoding: 'utf-8',
-          timeout: 10_000,
-        })
-        const data = JSON.parse(output)
-        const gpu = data?.SPDisplaysDataType?.[0]
-        if (gpu) {
-          gpuName = gpu.sppci_model ?? 'Apple Silicon GPU'
-          gpuVramMb = totalMemoryGb * 1024 // Unified memory
-        }
-      } catch {
-        // Fallback
-      }
-
-      if (archName === 'arm64') {
-        recommendedBackends.push('gguf', 'mlx')
-        recommendedBackend = 'gguf'
-      } else {
-        recommendedBackends.push('gguf')
-      }
-    } else if (plat === 'linux') {
-      // Linux: check for NVIDIA GPU(s)
-      try {
-        const output = execSync(
-          'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits',
-          { encoding: 'utf-8', timeout: 10_000 },
-        )
-        const lines = output.trim().split('\n').filter(Boolean)
-        let totalVram = 0
-        const gpuNames: string[] = []
-        for (const line of lines) {
-          const parts = line.split(', ')
-          if (parts.length >= 2) {
-            gpuNames.push(parts[0].trim())
-            totalVram += parseInt(parts[1], 10)
+      if (plat === 'darwin') {
+        // macOS: check for Apple Silicon
+        try {
+          const output = execSync('system_profiler SPDisplaysDataType -json', {
+            encoding: 'utf-8',
+            timeout: 10_000,
+          })
+          const data = JSON.parse(output)
+          const gpu = data?.SPDisplaysDataType?.[0]
+          if (gpu) {
+            gpuName = gpu.sppci_model ?? 'Apple Silicon GPU'
+            gpuVramMb = totalMemoryGb * 1024 // Unified memory
           }
+        } catch {
+          // Fallback
         }
-        if (gpuNames.length > 0) {
-          gpuName = gpuNames.length === 1
-            ? gpuNames[0]
-            : `${gpuNames.length}x ${gpuNames[0]}`
-          gpuVramMb = totalVram
+
+        if (archName === 'arm64') {
+          recommendedBackends.push('gguf', 'mlx')
+          recommendedBackend = 'gguf'
+        } else {
+          recommendedBackends.push('gguf')
         }
-      } catch {
-        // No NVIDIA GPU
+      } else if (plat === 'linux') {
+        // Linux: check for NVIDIA GPU(s)
+        try {
+          const output = execSync(
+            'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits',
+            { encoding: 'utf-8', timeout: 10_000 },
+          )
+          const lines = output.trim().split('\n').filter(Boolean)
+          let totalVram = 0
+          const gpuNames: string[] = []
+          for (const line of lines) {
+            const parts = line.split(', ')
+            if (parts.length >= 2) {
+              gpuNames.push(parts[0].trim())
+              totalVram += parseInt(parts[1], 10)
+            }
+          }
+          if (gpuNames.length > 0) {
+            gpuName = gpuNames.length === 1
+              ? gpuNames[0]
+              : `${gpuNames.length}x ${gpuNames[0]}`
+            gpuVramMb = totalVram
+          }
+        } catch {
+          // No NVIDIA GPU
+        }
+
+        if (gpuName) {
+          recommendedBackends.push('gguf', 'vllm')
+          recommendedBackend = 'gguf'
+        } else {
+          recommendedBackends.push('gguf')
+        }
       }
 
-      if (gpuName) {
-        recommendedBackends.push('gguf', 'vllm')
-        recommendedBackend = 'gguf'
-      } else {
-        recommendedBackends.push('gguf')
+      // No GPU detected on any platform — offer remote as fallback
+      if (!gpuName && recommendedBackends.length === 0) {
+        recommendedBackends.push('remote')
+        recommendedBackend = 'remote'
       }
-    }
 
-    // ARM without GPU = suggest remote-llm
-    const isArm = archName === 'arm64' || archName === 'aarch64'
-    if (isArm && plat === 'linux' && !gpuName) {
-      recommendedBackend = 'remote'
-    }
+      // ARM without GPU = suggest remote-llm
+      const isArm = archName === 'arm64' || archName === 'aarch64'
+      if (isArm && plat === 'linux' && !gpuName) {
+        recommendedBackend = 'remote'
+      }
 
-    const info: HardwareInfo = {
-      platform: plat === 'darwin' ? 'darwin' : 'linux',
-      arch: archName,
-      totalMemoryGb,
-      gpuName,
-      gpuVramMb,
-      recommendedBackends,
-      recommendedBackend,
-    }
+      const info: HardwareInfo = {
+        platform: plat === 'darwin' ? 'darwin' : 'linux',
+        arch: archName,
+        totalMemoryGb,
+        gpuName,
+        gpuVramMb,
+        recommendedBackends,
+        recommendedBackend,
+      }
 
-    return reply.send(info)
+      return reply.send(info)
+    } catch (err) {
+      // Graceful fallback — never throw from hardware detection
+      console.error('[install] Hardware detection failed:', err)
+      const fallback: HardwareInfo = {
+        platform: platform() === 'darwin' ? 'darwin' : 'linux',
+        arch: arch(),
+        totalMemoryGb: Math.round(totalmem() / (1024 * 1024 * 1024)),
+        gpuName: null,
+        gpuVramMb: null,
+        recommendedBackends: ['remote'],
+        recommendedBackend: 'remote',
+      }
+      return reply.send(fallback)
+    }
   })
 
   /**
@@ -253,8 +484,18 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
+      // Check which services are already healthy before starting
+      const alreadyHealthy = new Set<string>()
+      const currentHealth = await pollServiceHealth(registry.services, portOverrides)
+      for (const [id, status] of Object.entries(currentHealth)) {
+        if (status.healthy) {
+          alreadyHealthy.add(id)
+          emit({ phase: 'preflight', message: `${id} already healthy, will skip` })
+        }
+      }
+
       const result = await tieredStartup(
-        composeFile, composePath, registry.services, adminToken, portOverrides, emit,
+        composeFile, composePath, registry.services, adminToken, portOverrides, emit, alreadyHealthy,
       )
 
       // Persist service URLs so the admin server can proxy to them
@@ -276,7 +517,12 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         Object.assign(app.config, urls)
       }
 
-      emit({ done: true, code: result.success ? 0 : 1, error: result.error })
+      // Emit service health results before closing
+      if (result.serviceHealth) {
+        emit({ phase: 'serviceHealth', serviceHealth: result.serviceHealth })
+      }
+
+      emit({ done: true, code: result.success ? 0 : 1, error: result.error, serviceHealth: result.serviceHealth })
     } catch (err) {
       emit({ done: true, code: 1, error: err instanceof Error ? err.message : String(err) })
     }
@@ -453,4 +699,24 @@ function loadEnvFile(composePath: string): Record<string, string> {
   }
 
   return vars
+}
+
+/**
+ * Check if a port is already in use by trying to listen on it.
+ */
+function isPortInUse(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer()
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(true)
+      } else {
+        resolve(false)
+      }
+    })
+    server.once('listening', () => {
+      server.close(() => resolve(false))
+    })
+    server.listen(port, '127.0.0.1')
+  })
 }

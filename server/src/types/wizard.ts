@@ -51,3 +51,35 @@ export interface RegisterResult {
   needsRestart: boolean
   appKeys?: Record<string, { appId: string; appKey: string }>
 }
+
+export interface ServiceHealthResult {
+  healthy: boolean
+  error?: string
+}
+
+export interface TieredStartupResult {
+  success: boolean
+  error?: string
+  serviceHealth?: Record<string, ServiceHealthResult>
+}
+
+export interface PreflightCheck {
+  name: string
+  status: 'pass' | 'warn' | 'fail'
+  message: string
+  details?: string
+}
+
+export interface PreflightResult {
+  checks: PreflightCheck[]
+  canProceed: boolean
+}
+
+export interface InstallState {
+  configured: boolean
+  composePath?: string
+  reason?: string
+  state?: 'fresh' | 'generated' | 'partial' | 'running' | 'complete'
+  running?: string[]
+  stopped?: string[]
+}
