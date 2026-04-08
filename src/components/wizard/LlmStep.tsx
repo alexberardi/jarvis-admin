@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, CheckCircle2, AlertTriangle, Loader2, Lock } from 'lucide-react'
+import { Download, CheckCircle2, AlertTriangle, Loader2, Lock, RotateCcw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { LLM_MODELS, type LlmModel } from '@/data/models'
@@ -148,9 +148,24 @@ export default function LlmStep() {
       </div>
 
       {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
-          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
-          {error}
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-500">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+            {error}
+          </div>
+          {selectedModel && (
+            <button
+              type="button"
+              onClick={() => handleDownload(selectedModel, hfToken)}
+              className={cn(
+                'flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm',
+                'hover:bg-[var(--color-surface-alt)] transition-colors',
+              )}
+            >
+              <RotateCcw size={14} />
+              Retry Download
+            </button>
+          )}
         </div>
       )}
 

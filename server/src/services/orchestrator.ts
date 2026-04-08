@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { execSync, spawn } from 'node:child_process'
 import type { ServiceDefinition, ServiceRegistry } from '../types/service-registry.js'
-import type { HealthStatus, RegisterResult } from '../types/wizard.js'
+import type { HealthStatus, RegisterResult, ServiceHealthResult, TieredStartupResult } from '../types/wizard.js'
 
 /**
  * Service tiers for ordered startup and health polling.
@@ -70,16 +70,30 @@ async function checkHealth(url: string): Promise<{ healthy: boolean; url: string
  * Wait for a service to become healthy, polling every 2 seconds.
  */
 async function waitForHealth(
-  host: string, port: number, healthPath: string, maxWaitSeconds: number,
+  host: string,
+  port: number,
+  healthPath: string,
+  maxWaitSeconds: number,
+  emit?: (data: Record<string, unknown>) => void,
+  serviceName?: string,
+  phase?: string,
 ): Promise<boolean> {
   const url = `http://${host}:${port}${healthPath}`
   const deadline = Date.now() + maxWaitSeconds * 1000
+  const startTime = Date.now()
+  let lastEmitTime = 0
   while (Date.now() < deadline) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
       if (res.ok) return true
     } catch {
       // Not ready yet
+    }
+    // Emit progress every 5 seconds
+    const elapsed = Math.round((Date.now() - startTime) / 1000)
+    if (emit && serviceName && phase && Date.now() - lastEmitTime >= 5000) {
+      emit({ phase, message: `Waiting for ${serviceName}...`, elapsed })
+      lastEmitTime = Date.now()
     }
     await new Promise((r) => setTimeout(r, 2000))
   }
@@ -153,9 +167,20 @@ export async function registerServices(
     if (composePath && Object.keys(appKeys).length > 0) {
       const envFile = join(composePath, '.env')
       if (existsSync(envFile)) {
-        let envContent = readFileSync(envFile, 'utf-8')
-        envContent = injectAppKeys(envContent, appKeys)
-        writeFileSync(envFile, envContent)
+        const envContent = readFileSync(envFile, 'utf-8')
+        const { content: updatedContent, report } = injectAppKeys(envContent, appKeys)
+        writeFileSync(envFile, updatedContent)
+
+        // Verify all expected keys are present after write
+        const verifyContent = readFileSync(envFile, 'utf-8')
+        const allExpectedKeys = [...report.injected, ...report.appended]
+        const missingKeys = allExpectedKeys.filter((key) => !verifyContent.includes(`${key}=`))
+        if (missingKeys.length > 0) {
+          console.warn(`[orchestrator] Warning: keys missing after .env write: ${missingKeys.join(', ')}`)
+        }
+        if (report.appended.length > 0) {
+          console.log(`[orchestrator] Appended missing keys to .env: ${report.appended.join(', ')}`)
+        }
       }
     }
 
@@ -176,24 +201,48 @@ export async function registerServices(
 
 /**
  * Update .env file with app keys returned from registration.
+ * If a key pattern isn't found in the file, the key-value pair is appended.
+ * Returns a report of what was injected vs appended.
  */
 export function injectAppKeys(
   envContent: string,
   appKeys: Record<string, { appId: string; appKey: string }>,
-): string {
+): { content: string; report: InjectReport } {
   let updated = envContent
+  const injected: string[] = []
+  const appended: string[] = []
+
   for (const [serviceId, { appId, appKey }] of Object.entries(appKeys)) {
     const suffix = serviceId.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase()
-    updated = updated.replace(
-      new RegExp(`JARVIS_APP_ID_${suffix}=.*`),
-      `JARVIS_APP_ID_${suffix}=${appId}`,
-    )
-    updated = updated.replace(
-      new RegExp(`JARVIS_APP_KEY_${suffix}=.*`),
-      `JARVIS_APP_KEY_${suffix}=${appKey}`,
-    )
+    const idKey = `JARVIS_APP_ID_${suffix}`
+    const keyKey = `JARVIS_APP_KEY_${suffix}`
+
+    const idPattern = new RegExp(`${idKey}=.*`)
+    const keyPattern = new RegExp(`${keyKey}=.*`)
+
+    if (idPattern.test(updated)) {
+      updated = updated.replace(idPattern, `${idKey}=${appId}`)
+      injected.push(idKey)
+    } else {
+      updated = updated.trimEnd() + `\n${idKey}=${appId}\n`
+      appended.push(idKey)
+    }
+
+    if (keyPattern.test(updated)) {
+      updated = updated.replace(keyPattern, `${keyKey}=${appKey}`)
+      injected.push(keyKey)
+    } else {
+      updated = updated.trimEnd() + `\n${keyKey}=${appKey}\n`
+      appended.push(keyKey)
+    }
   }
-  return updated
+
+  return { content: updated, report: { injected, appended } }
+}
+
+export interface InjectReport {
+  injected: string[]
+  appended: string[]
 }
 
 /**
@@ -201,6 +250,7 @@ export function injectAppKeys(
  * register, inject keys, restart services that got new credentials.
  *
  * Emits SSE events for UI progress.
+ * Optionally accepts a set of already-healthy service IDs to skip.
  */
 export async function tieredStartup(
   composeFile: string,
@@ -209,10 +259,12 @@ export async function tieredStartup(
   adminToken: string,
   portOverrides: Record<string, number>,
   emit: (data: Record<string, unknown>) => void,
-): Promise<{ success: boolean; error?: string }> {
+  alreadyHealthy?: Set<string>,
+): Promise<TieredStartupResult> {
   const env = { ...process.env, ...loadEnvFromFile(composePath) }
   const configPort = portOverrides['jarvis-config-service'] ?? 7700
   const authPort = portOverrides['jarvis-auth'] ?? 7701
+  const skipSet = alreadyHealthy ?? new Set<string>()
 
   const composeCmd = (args: string[]) =>
     new Promise<number>((resolve) => {
@@ -233,33 +285,46 @@ export async function tieredStartup(
   emit({ phase: 'infra', message: 'Starting infrastructure...' })
   await composeCmd(['up', '-d', 'postgres', 'redis', 'mosquitto', 'loki', 'grafana'])
 
-  // Wait for postgres to be healthy
-  emit({ phase: 'infra', message: 'Waiting for PostgreSQL...' })
-  for (let i = 0; i < 30; i++) {
+  // Wait for postgres to be healthy (60 iterations)
+  emit({ phase: 'infra', message: 'Waiting for PostgreSQL...', attempt: 1, maxAttempts: 60 })
+  for (let i = 0; i < 60; i++) {
     try {
       execSync('docker exec jarvis-postgres pg_isready -U jarvis', { timeout: 3000, stdio: 'pipe' })
       break
     } catch {
+      emit({ phase: 'infra', message: 'Waiting for PostgreSQL...', attempt: i + 1, maxAttempts: 60 })
       await new Promise((r) => setTimeout(r, 1000))
     }
   }
 
   // Step 2: Start config-service (tier 0)
-  emit({ phase: 'tier0', message: 'Starting config-service...' })
-  await composeCmd(['up', '-d', 'jarvis-config-service'])
-  emit({ phase: 'tier0', message: 'Waiting for config-service to be healthy...' })
-  const configHealthy = await waitForHealth('localhost', configPort, '/health', 30)
-  if (!configHealthy) {
-    return { success: false, error: 'config-service failed to start' }
+  if (skipSet.has('jarvis-config-service')) {
+    emit({ phase: 'tier0', message: 'config-service already healthy, skipping...' })
+  } else {
+    emit({ phase: 'tier0', message: 'Starting config-service...' })
+    await composeCmd(['up', '-d', 'jarvis-config-service'])
+    // Initial delay to let the container start before polling
+    await new Promise((r) => setTimeout(r, 5000))
+    emit({ phase: 'tier0', message: 'Waiting for config-service to be healthy...' })
+    const configHealthy = await waitForHealth('localhost', configPort, '/health', 60, emit, 'config-service', 'tier0')
+    if (!configHealthy) {
+      return { success: false, error: 'config-service failed to start' }
+    }
   }
 
   // Step 3: Start auth (tier 1)
-  emit({ phase: 'tier1', message: 'Starting auth service...' })
-  await composeCmd(['up', '-d', 'jarvis-auth'])
-  emit({ phase: 'tier1', message: 'Waiting for auth to be healthy...' })
-  const authHealthy = await waitForHealth('localhost', authPort, '/health', 30)
-  if (!authHealthy) {
-    return { success: false, error: 'auth service failed to start' }
+  if (skipSet.has('jarvis-auth')) {
+    emit({ phase: 'tier1', message: 'auth service already healthy, skipping...' })
+  } else {
+    emit({ phase: 'tier1', message: 'Starting auth service...' })
+    await composeCmd(['up', '-d', 'jarvis-auth'])
+    // Initial delay to let the container start before polling
+    await new Promise((r) => setTimeout(r, 5000))
+    emit({ phase: 'tier1', message: 'Waiting for auth to be healthy...' })
+    const authHealthy = await waitForHealth('localhost', authPort, '/health', 60, emit, 'auth', 'tier1')
+    if (!authHealthy) {
+      return { success: false, error: 'auth service failed to start' }
+    }
   }
 
   // Step 4: Register all services + get app keys
@@ -302,31 +367,58 @@ export async function tieredStartup(
     }
   }
 
-  // Step 5: Start remaining services (skip tier 0-1 — they're already healthy)
-  const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth'])
+  // Step 5: Start remaining services (skip tier 0-1 and already-healthy services)
+  const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth', ...skipSet])
   const remaining = services
     .filter((s) => !alreadyRunning.has(s.id))
     .map((s) => s.id)
 
-  emit({ phase: 'services', message: `Starting ${remaining.length} remaining services...` })
-  // Reload env after key injection
-  const updatedEnv = { ...process.env, ...loadEnvFromFile(composePath) }
-  const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d', '--force-recreate', ...remaining], {
-    cwd: composePath,
-    env: updatedEnv,
-  })
-  await new Promise<void>((resolve) => {
-    child.stdout.on('data', (chunk: Buffer) => {
-      emit({ stream: 'stdout', text: chunk.toString() })
+  if (remaining.length > 0) {
+    emit({ phase: 'services', message: `Starting ${remaining.length} remaining services...` })
+    // Reload env after key injection
+    const updatedEnv = { ...process.env, ...loadEnvFromFile(composePath) }
+    const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d', '--force-recreate', ...remaining], {
+      cwd: composePath,
+      env: updatedEnv,
     })
-    child.stderr.on('data', (chunk: Buffer) => {
-      emit({ stream: 'stderr', text: chunk.toString() })
+    await new Promise<void>((resolve) => {
+      child.stdout.on('data', (chunk: Buffer) => {
+        emit({ stream: 'stdout', text: chunk.toString() })
+      })
+      child.stderr.on('data', (chunk: Buffer) => {
+        emit({ stream: 'stderr', text: chunk.toString() })
+      })
+      child.on('close', () => resolve())
     })
-    child.on('close', () => resolve())
-  })
 
-  emit({ phase: 'done', message: 'All services started' })
-  return { success: true }
+    // Initial delay before health polling
+    await new Promise((r) => setTimeout(r, 5000))
+  }
+
+  // Step 6: Poll health of all started services
+  emit({ phase: 'health', message: 'Checking service health...' })
+  const serviceHealth: Record<string, ServiceHealthResult> = {}
+  const allStarted = services.filter((s) => s.healthCheck)
+
+  const healthResults = await Promise.all(
+    allStarted.map(async (svc) => {
+      const port = portOverrides[svc.id] ?? svc.port
+      const healthy = await waitForHealth('localhost', port, svc.healthCheck, 60, emit, svc.id, 'health')
+      const result: ServiceHealthResult = healthy
+        ? { healthy: true }
+        : { healthy: false, error: `${svc.id} failed health check after 60s` }
+      emit({ phase: 'health', service: svc.id, healthy: result.healthy, error: result.error })
+      return { id: svc.id, result }
+    }),
+  )
+
+  for (const { id, result } of healthResults) {
+    serviceHealth[id] = result
+  }
+
+  const unhealthyCount = Object.values(serviceHealth).filter((h) => !h.healthy).length
+  emit({ phase: 'done', message: unhealthyCount > 0 ? `Started with ${unhealthyCount} unhealthy service(s)` : 'All services started' })
+  return { success: true, serviceHealth }
 }
 
 function loadEnvFromFile(composePath: string): Record<string, string> {

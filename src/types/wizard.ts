@@ -52,6 +52,26 @@ export interface InstallStatus {
   configured: boolean
   composePath?: string
   reason?: string
+  state?: 'fresh' | 'generated' | 'partial' | 'running' | 'complete'
+  running?: string[]
+  stopped?: string[]
+}
+
+export interface PreflightCheck {
+  name: string
+  status: 'pass' | 'warn' | 'fail'
+  message: string
+  details?: string
+}
+
+export interface PreflightResult {
+  checks: PreflightCheck[]
+  canProceed: boolean
+}
+
+export interface ServiceHealthResult {
+  healthy: boolean
+  error?: string
 }
 
 export interface HealthStatus {

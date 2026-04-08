@@ -39,6 +39,16 @@ detect_platform() {
 
   BINARY="jarvis-admin-${OS}-${ARCH}"
   info "Detected platform: ${OS}-${ARCH}"
+
+  # Detect TrueNAS SCALE
+  IS_TRUENAS=false
+  if [ -d "/usr/share/truenas" ]; then
+    IS_TRUENAS=true
+    info "Detected TrueNAS SCALE"
+  elif [ -f "/etc/version" ] && grep -qi truenas /etc/version 2>/dev/null; then
+    IS_TRUENAS=true
+    info "Detected TrueNAS SCALE"
+  fi
 }
 
 # Get latest release tag
@@ -131,7 +141,38 @@ setup_path() {
 
 # Set up systemd service (Linux) or launchd (macOS) for autostart
 setup_autostart() {
-  if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
+  if [ "$IS_TRUENAS" = true ]; then
+    info "TrueNAS detected — skipping systemd user service (not supported)."
+
+    # Create a startup script instead
+    STARTUP_SCRIPT="${INSTALL_DIR}/start-jarvis.sh"
+    cat > "$STARTUP_SCRIPT" << SCRIPT
+#!/bin/sh
+# Jarvis Admin startup script for TrueNAS SCALE
+export PORT=7711
+export STATIC_DIR="${INSTALL_DIR}/public"
+${DOCKER_SOCKET:+export DOCKER_SOCKET="${DOCKER_SOCKET}"}
+exec "${INSTALL_DIR}/${BINARY_NAME}"
+SCRIPT
+    chmod +x "$STARTUP_SCRIPT"
+
+    # Start now
+    mkdir -p "$HOME/.jarvis/logs"
+    STATIC_DIR="${INSTALL_DIR}/public" PORT=7711 ${DOCKER_SOCKET:+DOCKER_SOCKET="${DOCKER_SOCKET}"} \
+      nohup "${INSTALL_DIR}/${BINARY_NAME}" > "$HOME/.jarvis/logs/admin.log" 2>&1 &
+    success "Started (PID: $!)"
+
+    printf "\n"
+    printf "${BOLD}TrueNAS Setup Instructions:${NC}\n"
+    printf "  1. Open TrueNAS web UI -> System -> Advanced -> Init/Shutdown Scripts\n"
+    printf "  2. Add a Post Init script:\n"
+    printf "     Command: ${STARTUP_SCRIPT}\n"
+    printf "     Type: Script\n"
+    printf "     When: Post Init\n"
+    printf "  3. This ensures Jarvis Admin starts automatically after reboot.\n"
+    printf "\n"
+
+  elif [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
     info "Setting up systemd service..."
 
     SERVICE_FILE="$HOME/.config/systemd/user/${SERVICE_NAME}.service"
@@ -149,6 +190,7 @@ Restart=on-failure
 RestartSec=5
 Environment=PORT=7711
 Environment=STATIC_DIR=${INSTALL_DIR}/public
+${DOCKER_SOCKET:+Environment=DOCKER_SOCKET=${DOCKER_SOCKET}}
 
 [Install]
 WantedBy=default.target
@@ -227,10 +269,38 @@ print_success() {
   printf "\n"
 }
 
+# Parse arguments
+DOCKER_SOCKET=""
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --docker-socket)
+        if [ -z "$2" ] || [ "${2#-}" != "$2" ]; then
+          error "--docker-socket requires a path argument"
+        fi
+        DOCKER_SOCKET="$2"
+        export DOCKER_SOCKET
+        info "Docker socket: ${DOCKER_SOCKET}"
+        shift 2
+        ;;
+      --help|-h)
+        printf "Usage: install.sh [OPTIONS]\n"
+        printf "  --docker-socket PATH   Set custom Docker socket path\n"
+        printf "  --help                 Show this help\n"
+        exit 0
+        ;;
+      *)
+        error "Unknown argument: $1"
+        ;;
+    esac
+  done
+}
+
 # Main
 main() {
   printf "\n${BOLD}Jarvis Admin Installer${NC}\n\n"
 
+  parse_args "$@"
   check_prereqs
   detect_platform
   get_latest_version
@@ -241,4 +311,4 @@ main() {
   print_success
 }
 
-main
+main "$@"

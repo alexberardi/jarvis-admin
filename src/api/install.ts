@@ -7,10 +7,17 @@ import type {
   RegisterResult,
   HealthStatus,
   ServiceRegistry,
+  PreflightResult,
 } from '@/types/wizard'
 
 export async function getInstallStatus(): Promise<InstallStatus> {
   const { data } = await apiClient.get<InstallStatus>('/api/install/status')
+  return data
+}
+
+export async function runPreflight(enabledServices?: string[]): Promise<PreflightResult> {
+  const params = enabledServices?.length ? { services: enabledServices.join(',') } : {}
+  const { data } = await apiClient.get<PreflightResult>('/api/install/preflight', { params })
   return data
 }
 
