@@ -68,5 +68,6 @@ export function reconstructWizardState(
     remoteWhisperUrl: existingEnv.JARVIS_WHISPER_URL ?? '',
     whisperModel: 'base.en',
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
+    deploymentTarget: 'standard',
   }
 }
