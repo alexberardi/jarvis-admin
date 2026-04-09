@@ -14,6 +14,7 @@ const initialState: WizardState = {
   whisperModel: 'base.en',
   llmInterface: 'Qwen25MediumUntrained',
   deploymentMode: 'local',
+  deploymentTarget: 'standard',
   remoteLlmUrl: '',
   remoteWhisperUrl: '',
   platform: 'linux',
@@ -73,6 +74,8 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, llmInterface: action.interfaceId }
     case 'SET_DEPLOYMENT_MODE':
       return { ...state, deploymentMode: action.mode }
+    case 'SET_DEPLOYMENT_TARGET':
+      return { ...state, deploymentTarget: action.target }
     case 'SET_REMOTE_LLM_URL':
       return { ...state, remoteLlmUrl: action.url }
     case 'SET_REMOTE_WHISPER_URL':
