@@ -30,6 +30,38 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
    * Check installation state with container awareness.
    */
   app.get('/status', async (_request, reply) => {
+    // Compose-export mode: services are managed externally (TrueNAS, Portainer, etc.)
+    // Just check if auth is reachable and whether account setup is needed.
+    if (process.env.JARVIS_DEPLOY_MODE === 'compose-export') {
+      // Try to reach auth to determine if account creation is needed
+      const authUrl = process.env.JARVIS_AUTH_BASE_URL ?? 'http://jarvis-auth:8000'
+      let authReachable = false
+      try {
+        const res = await fetch(`${authUrl}/health`, { signal: AbortSignal.timeout(3000) })
+        authReachable = res.ok
+      } catch {
+        // Auth not reachable yet
+      }
+
+      if (!authReachable) {
+        // Services still starting
+        const status: InstallState = {
+          configured: false,
+          state: 'deployed-needs-account',
+          deployMode: 'compose-export',
+          reason: 'services_starting',
+        }
+        return reply.send(status)
+      }
+
+      const status: InstallState = {
+        configured: false,
+        state: 'deployed-needs-account',
+        deployMode: 'compose-export',
+      }
+      return reply.send(status)
+    }
+
     const composePath = getComposePath()
     const composeFile = join(composePath, 'docker-compose.yml')
     const envFile = join(composePath, '.env')
