@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, Brain } from 'lucide-react'
+import { RefreshCw, Brain, Server } from 'lucide-react'
 import { toast } from 'sonner'
 import { useContainers, useRestartContainer } from '@/hooks/useContainers'
 import { useLlmStatus } from '@/hooks/useLlmSetup'
+import { getInstallStatus } from '@/api/install'
 import ServiceHealthCard from '@/components/dashboard/ServiceHealthCard'
 import UpdateBanner from '@/components/dashboard/UpdateBanner'
 import { cn } from '@/lib/utils'
@@ -12,12 +13,21 @@ const LLM_SETUP_DISMISSED_KEY = 'jarvis-admin:llm-setup-dismissed'
 
 export default function DashboardPage() {
   const navigate = useNavigate()
+  const [isComposeExport, setIsComposeExport] = useState(false)
   const { data, isLoading, isError, error, refetch, isFetching } = useContainers()
   const restartMutation = useRestartContainer()
   const llmStatus = useLlmStatus()
   const [dismissed, setDismissed] = useState(
     () => !!localStorage.getItem(LLM_SETUP_DISMISSED_KEY),
   )
+
+  useEffect(() => {
+    getInstallStatus().then((status) => {
+      if (status.deployMode === 'compose-export') {
+        setIsComposeExport(true)
+      }
+    }).catch(() => {})
+  }, [])
 
   const showLlmBanner =
     !!llmStatus.data && !llmStatus.data.configured && !dismissed
@@ -27,6 +37,61 @@ export default function DashboardPage() {
       onSuccess: () => toast.success('Container restart initiated'),
       onError: (err) => toast.error(`Restart failed: ${err.message}`),
     })
+  }
+
+  // Compose-export mode: no Docker socket, can't manage containers
+  if (isComposeExport) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-4">
+        <h1 className="text-xl font-bold text-[var(--color-text)]">Dashboard</h1>
+
+        <UpdateBanner />
+
+        {showLlmBanner && (
+          <div className="flex items-center justify-between rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-4">
+            <div className="flex items-center gap-3">
+              <Brain size={20} className="text-[var(--color-primary)]" />
+              <div>
+                <p className="text-sm font-medium text-[var(--color-text)]">
+                  LLM not configured
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  Set up a language model to enable voice command processing
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  localStorage.setItem(LLM_SETUP_DISMISSED_KEY, 'true')
+                  setDismissed(true)
+                }}
+                className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => navigate('/llm-setup')}
+                className="rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs text-white hover:opacity-90"
+              >
+                Set up LLM
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center">
+          <Server size={32} className="mx-auto mb-3 text-[var(--color-text-muted)]" />
+          <p className="text-sm font-medium text-[var(--color-text)]">
+            Running in Docker Compose mode
+          </p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Container management is handled by your Docker environment (TrueNAS, Portainer, etc.).
+            Use your platform's tools to view container status, logs, and restarts.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   if (isLoading) {
