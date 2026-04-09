@@ -227,8 +227,10 @@ jobs:
           # CLI entry
           cp bin/jarvis-admin.mjs npm-pkg/bin/
 
-          # Package metadata
+          # Package metadata — set version from git tag
           cp npm-package.json npm-pkg/package.json
+          VERSION="${GITHUB_REF_NAME#v}"
+          cd npm-pkg && npm version "$VERSION" --no-git-tag-version && cd ..
           cp README.md npm-pkg/ 2>/dev/null || true
 
       - name: Install server production deps
