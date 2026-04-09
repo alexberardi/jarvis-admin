@@ -19,6 +19,7 @@ export interface WizardState {
   whisperModel: string
   llmInterface: string
   deploymentMode: 'local' | 'remote-llm'
+  deploymentTarget: 'standard' | 'compose-export'
   remoteLlmUrl: string
   remoteWhisperUrl: string
   platform: 'darwin' | 'linux'
@@ -41,6 +42,7 @@ export type WizardAction =
   | { type: 'SET_WHISPER_MODEL'; model: string }
   | { type: 'SET_LLM_INTERFACE'; interfaceId: string }
   | { type: 'SET_DEPLOYMENT_MODE'; mode: 'local' | 'remote-llm' }
+  | { type: 'SET_DEPLOYMENT_TARGET'; target: 'standard' | 'compose-export' }
   | { type: 'SET_REMOTE_LLM_URL'; url: string }
   | { type: 'SET_REMOTE_WHISPER_URL'; url: string }
   | { type: 'SET_PLATFORM'; platform: 'darwin' | 'linux' }
@@ -52,9 +54,10 @@ export interface InstallStatus {
   configured: boolean
   composePath?: string
   reason?: string
-  state?: 'fresh' | 'generated' | 'partial' | 'running' | 'complete'
+  state?: 'fresh' | 'generated' | 'partial' | 'running' | 'complete' | 'deployed-needs-account'
   running?: string[]
   stopped?: string[]
+  deployMode?: 'standard' | 'compose-export'
 }
 
 export interface PreflightCheck {

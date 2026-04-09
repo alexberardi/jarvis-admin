@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { WizardProvider, useWizard } from '@/context/WizardContext'
 import { useNavigate } from 'react-router-dom'
@@ -19,8 +20,17 @@ const STEPS = [
   { label: 'LLM', component: LlmStep },
 ]
 
-function WizardContent() {
+const ACCOUNT_STEP = 5
+
+function WizardContent({ skipToAccount }: { skipToAccount?: boolean }) {
   const { state, dispatch } = useWizard()
+
+  // In compose-export mode, skip directly to Account step on mount
+  useEffect(() => {
+    if (skipToAccount) {
+      dispatch({ type: 'SET_STEP', step: ACCOUNT_STEP })
+    }
+  }, [skipToAccount, dispatch])
   const navigate = useNavigate()
   const StepComponent = STEPS[state.currentStep].component
   const isFirst = state.currentStep === 0
@@ -128,10 +138,10 @@ function WizardContent() {
   )
 }
 
-export default function SetupWizard() {
+export default function SetupWizard({ skipToAccount }: { skipToAccount?: boolean }) {
   return (
     <WizardProvider>
-      <WizardContent />
+      <WizardContent skipToAccount={skipToAccount} />
     </WizardProvider>
   )
 }

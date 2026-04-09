@@ -23,11 +23,18 @@ const queryClient = new QueryClient()
 function AppRoutes() {
   const [checking, setChecking] = useState(true)
   const [needsInstall, setNeedsInstall] = useState(false)
+  const [deployedNeedsAccount, setDeployedNeedsAccount] = useState(false)
 
   useEffect(() => {
     getInstallStatus()
       .then((status) => {
-        setNeedsInstall(!status.configured)
+        if (status.state === 'deployed-needs-account') {
+          // Compose-export mode: skip to account creation
+          setDeployedNeedsAccount(true)
+          setNeedsInstall(true)
+        } else {
+          setNeedsInstall(!status.configured)
+        }
       })
       .catch(() => {
         // If we can't reach the backend, don't force install wizard
@@ -46,7 +53,7 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/setup" element={<SetupWizard />} />
+      <Route path="/setup" element={<SetupWizard skipToAccount={deployedNeedsAccount} />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/llm-setup" element={<LlmSetupWizard />} />
       <Route element={<AppShell />}>

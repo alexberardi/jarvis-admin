@@ -25,6 +25,7 @@ export interface WizardState {
 
   // New: deployment mode
   deploymentMode: 'local' | 'remote-llm'
+  deploymentTarget: 'standard' | 'compose-export'
   remoteLlmUrl: string
   remoteWhisperUrl: string
   platform: 'darwin' | 'linux'
@@ -79,7 +80,8 @@ export interface InstallState {
   configured: boolean
   composePath?: string
   reason?: string
-  state?: 'fresh' | 'generated' | 'partial' | 'running' | 'complete'
+  state?: 'fresh' | 'generated' | 'partial' | 'running' | 'complete' | 'deployed-needs-account'
   running?: string[]
   stopped?: string[]
+  deployMode?: 'standard' | 'compose-export'
 }
