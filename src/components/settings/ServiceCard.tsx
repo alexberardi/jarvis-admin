@@ -19,7 +19,7 @@ export default function ServiceCard({ result, defaultExpanded = false }: Service
       map.set(s.category, [...existing, s])
     }
     return map
-  }, [result.settings])
+  }, [result])
 
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]">

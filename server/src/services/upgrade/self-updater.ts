@@ -1,4 +1,4 @@
-import { createWriteStream, existsSync, renameSync, chmodSync, writeFileSync, mkdirSync } from 'node:fs'
+import { createWriteStream, existsSync, renameSync, chmodSync, writeFileSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, platform, arch } from 'node:os'
 import { execSync, spawn } from 'node:child_process'
@@ -141,7 +141,7 @@ export function getUpgradeMarker(): { version: string; phase: string; startedAt:
   const path = getMarkerPath()
   if (!existsSync(path)) return null
   try {
-    return JSON.parse(require('node:fs').readFileSync(path, 'utf-8'))
+    return JSON.parse(readFileSync(path, 'utf-8'))
   } catch {
     return null
   }
@@ -151,6 +151,6 @@ export function getUpgradeMarker(): { version: string; phase: string; startedAt:
 export function clearUpgradeMarker(): void {
   const path = getMarkerPath()
   if (existsSync(path)) {
-    require('node:fs').unlinkSync(path)
+    unlinkSync(path)
   }
 }

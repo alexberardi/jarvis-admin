@@ -85,8 +85,8 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Compose file exists — check what containers are running
-    let running: string[] = []
-    let stopped: string[] = []
+    const running: string[] = []
+    const stopped: string[] = []
     try {
       const output = execSync(
         `docker compose -f "${composeFile}" ps --format json`,
