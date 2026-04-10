@@ -66,9 +66,23 @@ export default function WelcomeStep() {
               {checking ? 'Checking Docker...' : dockerOk ? 'Docker is running' : 'Docker not found'}
             </p>
             {!checking && !dockerOk && (
-              <p className="mt-0.5 text-xs text-red-400">
-                Docker is required. Install Docker Desktop and try again.
-              </p>
+              <div className="mt-1 space-y-1">
+                <p className="text-xs text-red-400">
+                  Docker is required to run Jarvis services.
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  Install{' '}
+                  <a
+                    href="https://www.docker.com/products/docker-desktop/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--color-primary)] underline hover:no-underline"
+                  >
+                    Docker Desktop
+                  </a>
+                  {' '}for your platform, start it, then click Retry.
+                </p>
+              </div>
             )}
           </div>
           {dockerFailed && !checking && (

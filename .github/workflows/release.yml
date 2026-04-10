@@ -82,7 +82,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path bundle/server/dist, bundle/server/src/data, bundle/public
+          New-Item -ItemType Directory -Force -Path bundle/server/dist, bundle/server/src/data
 
           Copy-Item -Recurse server/dist/* bundle/server/dist/
           Copy-Item server/package.json bundle/server/
@@ -92,7 +92,7 @@ jobs:
           Pop-Location
 
           Copy-Item server/src/data/service-registry.json bundle/server/src/data/
-          Copy-Item -Recurse dist/* bundle/public/
+          Copy-Item -Recurse dist bundle/public
 
       - name: Create standalone binary
         if: runner.os != 'Windows'
