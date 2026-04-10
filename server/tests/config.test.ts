@@ -41,10 +41,10 @@ describe('loadConfig', () => {
   it('reads env vars', () => {
     const config = loadConfig({
       PORT: '8080',
-      AUTH_URL: 'http://auth:7701',
-      CONFIG_SERVICE_URL: 'http://config:7700',
-      LLM_PROXY_URL: 'http://llm:7704',
-      COMMAND_CENTER_URL: 'http://cc:7703',
+      JARVIS_AUTH_BASE_URL: 'http://auth:7701',
+      JARVIS_CONFIG_URL: 'http://config:7700',
+      JARVIS_LLM_PROXY_URL: 'http://llm:7704',
+      JARVIS_COMMAND_CENTER_URL: 'http://cc:7703',
       COMMAND_CENTER_ADMIN_KEY: 'admin-key',
       DOCKER_SOCKET: '/custom/docker.sock',
       REGISTRY_PATH: '/path/to/registry.json',
@@ -72,8 +72,8 @@ describe('loadConfig', () => {
     )
 
     const config = loadConfig({
-      AUTH_URL: 'http://env-auth:7701',
-      CONFIG_SERVICE_URL: 'http://env-config:7700',
+      JARVIS_AUTH_BASE_URL: 'http://env-auth:7701',
+      JARVIS_CONFIG_URL: 'http://env-config:7700',
     })
 
     expect(config.authUrl).toBe('http://persisted-auth:7701')
@@ -84,7 +84,7 @@ describe('loadConfig', () => {
     mockExistsSync.mockReturnValue(true)
     mockReadFileSync.mockReturnValue('not valid json{{{')
 
-    const config = loadConfig({ AUTH_URL: 'http://fallback:7701' })
+    const config = loadConfig({ JARVIS_AUTH_BASE_URL: 'http://fallback:7701' })
 
     // Falls back to env var since persisted is corrupted
     expect(config.authUrl).toBe('http://fallback:7701')

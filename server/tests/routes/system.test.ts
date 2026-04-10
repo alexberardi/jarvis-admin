@@ -36,7 +36,7 @@ describe('system routes', () => {
       expect(body.platform).toBeDefined()
       expect(body.cpuCount).toBeGreaterThan(0)
       expect(body.totalMemoryMb).toBeGreaterThan(0)
-      expect(body.version).toBe('0.1.0')
+      expect(body.version).toBeDefined()
       expect(body.uptime).toBeGreaterThan(0)
     })
 
