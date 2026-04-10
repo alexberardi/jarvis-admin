@@ -28,6 +28,9 @@ jobs:
           - os: ubuntu-latest
             target: linux-arm64
             artifact: jarvis-admin-linux-arm64
+          - os: windows-latest
+            target: windows-x64
+            artifact: jarvis-admin-windows-x64.exe
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -56,6 +59,7 @@ jobs:
         working-directory: server
 
       - name: Prepare bundle directory
+        if: runner.os != 'Windows'
         run: |
           mkdir -p bundle/server/dist
           mkdir -p bundle/server/src/data
@@ -74,7 +78,24 @@ jobs:
           # Frontend build
           cp -r dist/* bundle/public/
 
+      - name: Prepare bundle directory (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bundle/server/dist, bundle/server/src/data, bundle/public
+
+          Copy-Item -Recurse server/dist/* bundle/server/dist/
+          Copy-Item server/package.json bundle/server/
+
+          Push-Location bundle/server
+          npm ci --omit=dev
+          Pop-Location
+
+          Copy-Item server/src/data/service-registry.json bundle/server/src/data/
+          Copy-Item -Recurse dist/* bundle/public/
+
       - name: Create standalone binary
+        if: runner.os != 'Windows'
         run: |
           cd bundle
           VERSION="${GITHUB_REF_NAME#v}"
@@ -101,12 +122,45 @@ jobs:
             --target=bun-${{ matrix.target == 'darwin-arm64' && 'darwin-arm64' || matrix.target == 'linux-x64' && 'linux-x64' || 'linux-arm64' }} \
             --outfile ${{ matrix.artifact }}
 
+      - name: Create standalone binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Set-Location bundle
+          $Version = "${{ github.ref_name }}".TrimStart('v')
+
+          @"
+          import { join, resolve } from 'node:path'
+          import { existsSync } from 'node:fs'
+
+          process.env.JARVIS_VERSION = '$Version'
+
+          const binaryDir = join(process.execPath, '..')
+          const publicDir = join(binaryDir, 'public')
+          if (existsSync(publicDir)) {
+            process.env.STATIC_DIR = resolve(publicDir)
+          }
+
+          await import('./server/dist/index.js')
+          "@ | Set-Content entry.ts
+
+          bun build entry.ts --compile --target=bun-windows-x64 --outfile ${{ matrix.artifact }}
+
       - name: Verify binary (native only)
-        if: matrix.target != 'linux-arm64'
+        if: matrix.target == 'darwin-arm64' || matrix.target == 'linux-x64'
         run: |
           chmod +x bundle/${{ matrix.artifact }}
           timeout 5 bundle/${{ matrix.artifact }} || true
           echo "Binary created successfully"
+
+      - name: Verify binary (Windows)
+        if: matrix.target == 'windows-x64'
+        shell: pwsh
+        run: |
+          $proc = Start-Process -FilePath "bundle/${{ matrix.artifact }}" -PassThru
+          Start-Sleep -Seconds 5
+          if (!$proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+          Write-Host "Binary created successfully"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v7
@@ -176,11 +230,18 @@ jobs:
             | macOS (Apple Silicon) | `jarvis-admin-darwin-arm64` |
             | Linux (x86_64) | `jarvis-admin-linux-x64` |
             | Linux (ARM64 / Pi 5) | `jarvis-admin-linux-arm64` |
+            | Windows (x86_64) | `jarvis-admin-windows-x64.exe` |
 
-            After downloading, make executable and run:
+            **macOS / Linux:**
             ```bash
             chmod +x jarvis-admin-*
             ./jarvis-admin-*
+            # Open http://localhost:7711
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            .\jarvis-admin-windows-x64.exe
             # Open http://localhost:7711
             ```
 

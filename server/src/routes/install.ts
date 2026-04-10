@@ -149,7 +149,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { services?: string } }>('/preflight', async (request, reply) => {
     const checks: PreflightCheck[] = []
     const composePath = getComposePath()
-    const dockerSocket = app.config?.dockerSocket ?? '/var/run/docker.sock'
+    const dockerSocket = app.config?.dockerSocket ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock')
 
     // Parse enabled services from query param
     const enabledServiceIds = (request.query as { services?: string }).services?.split(',').filter(Boolean) ?? []
@@ -249,13 +249,21 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
     // 5. Docker socket
     try {
-      accessSync(dockerSocket, fsConstants.R_OK | fsConstants.W_OK)
-      checks.push({ name: 'Docker Socket', status: 'pass', message: `Docker socket accessible at ${dockerSocket}` })
+      if (platform() === 'win32') {
+        // Windows named pipes can't be checked with accessSync — verify via docker ping
+        execSync('docker info', { encoding: 'utf-8', timeout: 5000, stdio: 'pipe' })
+        checks.push({ name: 'Docker Socket', status: 'pass', message: `Docker Desktop accessible via named pipe` })
+      } else {
+        accessSync(dockerSocket, fsConstants.R_OK | fsConstants.W_OK)
+        checks.push({ name: 'Docker Socket', status: 'pass', message: `Docker socket accessible at ${dockerSocket}` })
+      }
     } catch (err) {
       checks.push({
         name: 'Docker Socket',
         status: 'fail',
-        message: `Docker socket not accessible at ${dockerSocket}`,
+        message: platform() === 'win32'
+          ? 'Docker Desktop not running or not accessible'
+          : `Docker socket not accessible at ${dockerSocket}`,
         details: err instanceof Error ? err.message : String(err),
       })
     }
