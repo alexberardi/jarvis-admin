@@ -55,7 +55,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     llmProxyUrl: persisted.llmProxyUrl ?? env.JARVIS_LLM_PROXY_URL ?? '',
     commandCenterUrl: persisted.commandCenterUrl ?? env.JARVIS_COMMAND_CENTER_URL ?? '',
     commandCenterAdminKey: env.COMMAND_CENTER_ADMIN_KEY ?? '',
-    dockerSocket: env.DOCKER_SOCKET ?? '/var/run/docker.sock',
+    dockerSocket: env.DOCKER_SOCKET ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
     registryPath: env.REGISTRY_PATH ?? null,
     staticDir: env.STATIC_DIR ?? null,
   }
