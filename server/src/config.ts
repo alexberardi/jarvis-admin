@@ -50,10 +50,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   return {
     port: parseInt(env.PORT ?? '7711', 10),
     // Priority: persisted (from setup wizard) > env var > empty (triggers setup wizard)
-    authUrl: persisted.authUrl ?? env.JARVIS_AUTH_BASE_URL ?? '',
-    configServiceUrl: persisted.configServiceUrl ?? env.JARVIS_CONFIG_URL ?? '',
-    llmProxyUrl: persisted.llmProxyUrl ?? env.JARVIS_LLM_PROXY_URL ?? '',
-    commandCenterUrl: persisted.commandCenterUrl ?? env.JARVIS_COMMAND_CENTER_URL ?? '',
+    authUrl: persisted.authUrl ?? env.JARVIS_AUTH_BASE_URL ?? env.AUTH_URL ?? '',
+    configServiceUrl: persisted.configServiceUrl ?? env.JARVIS_CONFIG_URL ?? env.CONFIG_SERVICE_URL ?? '',
+    llmProxyUrl: persisted.llmProxyUrl ?? env.JARVIS_LLM_PROXY_URL ?? env.LLM_PROXY_URL ?? '',
+    commandCenterUrl: persisted.commandCenterUrl ?? env.JARVIS_COMMAND_CENTER_URL ?? env.COMMAND_CENTER_URL ?? '',
     commandCenterAdminKey: env.COMMAND_CENTER_ADMIN_KEY ?? '',
     dockerSocket: env.DOCKER_SOCKET ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
     registryPath: env.REGISTRY_PATH ?? null,

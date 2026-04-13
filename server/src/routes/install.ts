@@ -67,6 +67,21 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     const envFile = join(composePath, '.env')
 
     if (!existsSync(composeFile) || !existsSync(envFile)) {
+      // No local compose files — but if service URLs are configured and reachable,
+      // the stack is managed externally (e.g., ./jarvis CLI, Docker admin container).
+      const { authUrl, configServiceUrl } = app.config
+      if (authUrl && configServiceUrl) {
+        try {
+          const res = await fetch(`${authUrl.replace(/\/$/, '')}/health`, { signal: AbortSignal.timeout(3000) })
+          if (res.ok) {
+            const status: InstallState = { configured: true, state: 'complete' }
+            return reply.send(status)
+          }
+        } catch {
+          // Auth not reachable — fall through to fresh install check
+        }
+      }
+
       // Check Docker availability
       let dockerAvailable = false
       try {
