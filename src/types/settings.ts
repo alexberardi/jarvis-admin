@@ -8,6 +8,7 @@ export interface SettingResponse {
   is_secret: boolean
   env_fallback: string | null
   from_db: boolean
+  options: string[] | null
 }
 
 export interface ServiceSettingsResult {

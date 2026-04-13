@@ -17,6 +17,9 @@ export default function SettingEditor({ setting, onSave, onCancel, isSaving }: S
   })
   const [boolValue, setBoolValue] = useState(() => Boolean(setting.value))
   const [validationError, setValidationError] = useState<string | null>(null)
+  const hasOptions = Boolean(setting.options?.length)
+  const isCustomValue = hasOptions && !setting.options!.includes(rawValue)
+  const [showCustomInput, setShowCustomInput] = useState(isCustomValue)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -65,7 +68,40 @@ export default function SettingEditor({ setting, onSave, onCancel, isSaving }: S
 
   return (
     <form onSubmit={handleSubmit} className="flex items-center gap-2">
-      {setting.value_type === 'bool' ? (
+      {hasOptions ? (
+        <div className="flex items-center gap-2">
+          <select
+            value={showCustomInput ? '__other__' : rawValue}
+            onChange={(e) => {
+              if (e.target.value === '__other__') {
+                setShowCustomInput(true)
+                setRawValue('')
+              } else {
+                setShowCustomInput(false)
+                setRawValue(e.target.value)
+              }
+            }}
+            className={cn(inputClass, 'max-w-xs')}
+          >
+            {setting.options!.map((opt) => (
+              <option key={String(opt)} value={String(opt)}>
+                {String(opt)}
+              </option>
+            ))}
+            <option value="__other__">Other...</option>
+          </select>
+          {showCustomInput && (
+            <input
+              type="text"
+              value={rawValue}
+              onChange={(e) => setRawValue(e.target.value)}
+              placeholder="Custom value"
+              className={cn(inputClass, 'max-w-xs')}
+              autoFocus
+            />
+          )}
+        </div>
+      ) : setting.value_type === 'bool' ? (
         <button
           type="button"
           onClick={() => setBoolValue((prev) => !prev)}

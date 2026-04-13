@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 interface SettingRowProps {
   setting: SettingResponse
   serviceName: string
+  onRestartService?: () => void
 }
 
 function formatValue(setting: SettingResponse): string {
@@ -26,7 +27,7 @@ const typeBadgeColors: Record<string, string> = {
   json: 'bg-purple-500/10 text-purple-500',
 }
 
-export default function SettingRow({ setting, serviceName }: SettingRowProps) {
+export default function SettingRow({ setting, serviceName, onRestartService }: SettingRowProps) {
   const [editing, setEditing] = useState(false)
   const mutation = useUpdateSetting()
 
@@ -37,7 +38,12 @@ export default function SettingRow({ setting, serviceName }: SettingRowProps) {
         onSuccess: (res) => {
           setEditing(false)
           if (res.requires_reload) {
-            toast.warning(`Setting updated. ${serviceName} requires a restart to apply.`)
+            toast.warning(`Setting updated. ${serviceName} requires a restart to apply.`, onRestartService ? {
+              action: {
+                label: 'Restart',
+                onClick: onRestartService,
+              },
+            } : undefined)
           } else {
             toast.success('Setting updated')
           }
