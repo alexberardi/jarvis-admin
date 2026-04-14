@@ -64,9 +64,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             JARVIS_VERSION=${{ steps.meta.outputs.version }}
-          # Skip cache on tag pushes — GHA cache can serve stale layers
-          # (e.g., pip-installed git dependencies like jarvis-settings-client)
-          cache-from: ${{ !startsWith(github.ref, 'refs/tags/') && 'type=gha' || '' }}
+          cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Output image tags
