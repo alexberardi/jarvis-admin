@@ -70,6 +70,7 @@ jobs:
 
           # Server dependencies
           cp server/package.json bundle/server/
+          cp server/package-lock.json bundle/server/
           cd bundle/server && npm ci --omit=dev && cd ../..
 
           # Service registry data (imported by install routes)
@@ -86,6 +87,7 @@ jobs:
 
           Copy-Item -Recurse server/dist/* bundle/server/dist/
           Copy-Item server/package.json bundle/server/
+          Copy-Item server/package-lock.json bundle/server/
 
           Push-Location bundle/server
           npm ci --omit=dev
