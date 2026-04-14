@@ -12,6 +12,7 @@ export interface StreamState {
   done: boolean
   exitCode: number | null
   error: string | null
+  redirect: string | null
 }
 
 /**
@@ -27,6 +28,7 @@ export function useInstallStream() {
     done: false,
     exitCode: null,
     error: null,
+    redirect: null,
   })
   const eventSourceRef = useRef<EventSource | null>(null)
 
@@ -40,6 +42,7 @@ export function useInstallStream() {
       done: false,
       exitCode: null,
       error: null,
+      redirect: null,
     })
 
     return new Promise<number>((resolve, reject) => {
@@ -61,6 +64,7 @@ export function useInstallStream() {
               running: false,
               done: true,
               exitCode: data.code as number,
+              redirect: (data.redirect as string) ?? null,
             }))
             es.close()
             if (data.code === 0) {
