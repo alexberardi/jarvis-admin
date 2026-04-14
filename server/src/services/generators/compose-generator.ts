@@ -334,6 +334,11 @@ function generateServiceBlock(
   if (isGpu) {
     vols.push('      - ${MODELS_DIR:-./.models}:/app/.models')
   }
+  if (service.volumes) {
+    for (const vol of service.volumes) {
+      vols.push(`      - ${vol}`)
+    }
+  }
   if (vols.length > 0) {
     lines.push('    volumes:')
     lines.push(...vols)
