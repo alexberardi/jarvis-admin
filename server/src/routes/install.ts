@@ -577,7 +577,23 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         emit({ phase: 'serviceHealth', serviceHealth: result.serviceHealth })
       }
 
-      emit({ done: true, code: result.success ? 0 : 1, error: result.error, serviceHealth: result.serviceHealth })
+      // Build redirect URL to the containerized admin dashboard
+      let redirect: string | undefined
+      if (result.success) {
+        const adminPort = envVars.ADMIN_PORT ?? '7710'
+        const requestHost = request.hostname.split(':')[0] ?? 'localhost'
+        redirect = `http://${requestHost}:${adminPort}`
+      }
+
+      emit({ done: true, code: result.success ? 0 : 1, error: result.error, serviceHealth: result.serviceHealth, redirect })
+
+      // Self-terminate after a short delay — the containerized admin takes over
+      if (result.success && redirect) {
+        setTimeout(() => {
+          console.log(`[jarvis-admin] Installer complete. Admin dashboard running at ${redirect}. Shutting down installer.`)
+          process.exit(0)
+        }, 5000)
+      }
     } catch (err) {
       emit({ done: true, code: 1, error: err instanceof Error ? err.message : String(err) })
     }

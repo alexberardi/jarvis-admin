@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { CheckCircle2, XCircle, Loader2, Play, RotateCcw, AlertTriangle, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
@@ -20,6 +20,27 @@ export default function InstallStep() {
   const [serviceHealth, setServiceHealth] = useState<Record<string, ServiceHealthResult>>({})
   const [containerLogs, setContainerLogs] = useState<Record<string, string>>({})
   const [failedPhase, setFailedPhase] = useState<Phase | null>(null)
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
+
+  // Auto-redirect to the containerized admin dashboard after install
+  useEffect(() => {
+    const redirectUrl = startStream.redirect
+    if (phase !== 'done' || !redirectUrl) return
+
+    setRedirectCountdown(5)
+    const interval = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev === null || prev <= 1) {
+          clearInterval(interval)
+          window.location.href = redirectUrl
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [phase, startStream.redirect])
 
   const runPreflightCheck = useCallback(async (): Promise<boolean> => {
     setPhase('preflight')
@@ -193,7 +214,9 @@ export default function InstallStep() {
           {phase === 'idle'
             ? 'Ready to install. This will pull Docker images and start all services.'
             : phase === 'done'
-              ? 'Installation complete! All services are running.'
+              ? startStream.redirect
+                ? `Installation complete! Redirecting to your admin dashboard in ${redirectCountdown ?? '...'}s...`
+                : 'Installation complete! All services are running.'
               : phase === 'error'
                 ? 'Installation encountered an error.'
                 : 'Installing...'}
