@@ -48,6 +48,8 @@ export interface ServiceDefinition {
   containerPort?: number
   /** Override image for GHCR (if different from `image` field) */
   ghcrImage?: string
+  /** Volume mounts for this service (e.g., Docker socket) */
+  volumes?: string[]
 }
 
 export interface InfrastructureDefinition {

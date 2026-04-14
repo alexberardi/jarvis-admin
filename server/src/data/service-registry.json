@@ -195,7 +195,8 @@
       "dependsOn": ["jarvis-auth", "jarvis-config-service"],
       "envVars": [
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
-      ]
+      ],
+      "volumes": ["/var/run/docker.sock:/var/run/docker.sock"]
     }
   ],
   "infrastructure": [
