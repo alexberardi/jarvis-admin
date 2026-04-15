@@ -3,11 +3,11 @@ import { CheckCircle2, XCircle, Loader2, Play, RotateCcw, AlertTriangle, FileTex
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { useInstallStream } from '@/hooks/useInstallStream'
-import { generateInstall, getInstallHealth, runPreflight } from '@/api/install'
+import { generateInstall, runPreflight } from '@/api/install'
 import TerminalOutput from './TerminalOutput'
-import type { HealthStatus, PreflightResult, ServiceHealthResult } from '@/types/wizard'
+import type { PreflightResult, ServiceHealthResult } from '@/types/wizard'
 
-type Phase = 'idle' | 'preflight' | 'generating' | 'pulling' | 'starting' | 'registering' | 'verifying' | 'done' | 'error'
+type Phase = 'idle' | 'preflight' | 'generating' | 'pulling' | 'starting' | 'registering' | 'done' | 'error'
 
 export default function InstallStep() {
   const { state, dispatch } = useWizard()
@@ -15,7 +15,6 @@ export default function InstallStep() {
   const startStream = useInstallStream()
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
-  const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null)
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null)
   const [serviceHealth, setServiceHealth] = useState<Record<string, ServiceHealthResult>>({})
   const [containerLogs, setContainerLogs] = useState<Record<string, string>>({})
@@ -109,12 +108,6 @@ export default function InstallStep() {
         }
       })
 
-      // Phase 4: Verify health
-      setPhase('verifying')
-      await new Promise((r) => setTimeout(r, 5000))
-      const health = await getInstallHealth()
-      setHealthStatus(health)
-
       setPhase('done')
       dispatch({ type: 'SET_INSTALL_COMPLETE' })
     } catch (err) {
@@ -160,11 +153,6 @@ export default function InstallStep() {
           }
         })
 
-        setPhase('verifying')
-        await new Promise((r) => setTimeout(r, 5000))
-        const health = await getInstallHealth()
-        setHealthStatus(health)
-
         setPhase('done')
         dispatch({ type: 'SET_INSTALL_COMPLETE' })
       } catch (err) {
@@ -200,7 +188,6 @@ export default function InstallStep() {
     { key: 'generating', label: 'Generate configuration' },
     { key: 'pulling', label: 'Pull Docker images' },
     { key: 'starting', label: 'Start services' },
-    { key: 'verifying', label: 'Verify health' },
   ]
 
   const phaseOrder = phases.map((p) => p.key)
@@ -290,7 +277,7 @@ export default function InstallStep() {
       </div>
 
       {/* Per-service health during starting phase */}
-      {(phase === 'starting' || phase === 'verifying' || phase === 'done' || phase === 'error') &&
+      {(phase === 'starting' || phase === 'done' || phase === 'error') &&
         Object.keys(serviceHealth).length > 0 && (
           <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
             <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] px-3 py-2">
@@ -348,27 +335,6 @@ export default function InstallStep() {
           running={startStream.running}
           title="docker compose up -d"
         />
-      )}
-
-      {/* Health status (final verification) */}
-      {healthStatus && (
-        <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
-          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] px-3 py-2">
-            <span className="text-xs font-medium text-[var(--color-text-muted)]">Service Health</span>
-          </div>
-          <div className="divide-y divide-[var(--color-border)]">
-            {Object.entries(healthStatus).map(([id, status]) => (
-              <div key={id} className="flex items-center justify-between px-3 py-2">
-                <span className="text-sm text-[var(--color-text)]">{id}</span>
-                {status.healthy ? (
-                  <CheckCircle2 size={14} className="text-green-500" />
-                ) : (
-                  <XCircle size={14} className="text-red-500" />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
       )}
 
       {/* Error */}
