@@ -1,8 +1,15 @@
-import { useState, useCallback } from 'react'
-import { RefreshCw, Copy, Check, AlertTriangle, Info } from 'lucide-react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { RefreshCw, Copy, Check, AlertTriangle, Info, Plus, X, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { useServiceRegistry, useRegisterServices, useRotateKey } from '@/hooks/useServices'
+import {
+  useServiceRegistry,
+  useRegisterServices,
+  useRotateKey,
+  useAddService,
+  useDeleteService,
+  useServiceSuggestions,
+} from '@/hooks/useServices'
 import { probeServiceHealth } from '@/api/services'
 import ServiceRegistrationRow from '@/components/services/ServiceRegistrationRow'
 import type { HealthStatus } from '@/components/services/ServiceRegistrationRow'
@@ -10,6 +17,7 @@ import type {
   ServiceRegisterItem,
   ServiceRegisterResult,
   KeyRotateResponse,
+  ServiceSuggestion,
 } from '@/types/services'
 
 interface RowState {
@@ -25,17 +33,76 @@ interface HealthState {
   latency?: number
 }
 
+const EMPTY_ADD_FORM = {
+  name: '',
+  host: 'localhost',
+  port: '',
+  scheme: 'http',
+  health_path: '/health',
+  description: '',
+}
+
 export default function ServicesPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useServiceRegistry()
   const mutation = useRegisterServices()
   const rotateMutation = useRotateKey()
+  const addMutation = useAddService()
+  const deleteMutation = useDeleteService()
+  const { data: suggestionsData } = useServiceSuggestions()
 
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({})
   const [results, setResults] = useState<ServiceRegisterResult[] | null>(null)
   const [rotateResult, setRotateResult] = useState<KeyRotateResponse | null>(null)
   const [rotatingService, setRotatingService] = useState<string | null>(null)
+  const [deletingService, setDeletingService] = useState<string | null>(null)
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [healthStates, setHealthStates] = useState<Record<string, HealthState>>({})
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [addForm, setAddForm] = useState(EMPTY_ADD_FORM)
+  const [comboOpen, setComboOpen] = useState(false)
+  const comboRef = useRef<HTMLDivElement>(null)
+
+  // Filter suggestions: exclude services already in the registry
+  const registeredNames = useMemo(
+    () => new Set(data?.services.map((s) => s.name) ?? []),
+    [data],
+  )
+
+  const filteredSuggestions = useMemo(() => {
+    const all = suggestionsData?.suggestions ?? []
+    const unregistered = all.filter((s) => !registeredNames.has(s.id))
+    if (!addForm.name.trim()) return unregistered
+    const q = addForm.name.toLowerCase()
+    return unregistered.filter(
+      (s) =>
+        s.id.toLowerCase().includes(q) ||
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q),
+    )
+  }, [suggestionsData, registeredNames, addForm.name])
+
+  const selectSuggestion = useCallback((s: ServiceSuggestion) => {
+    setAddForm({
+      name: s.id,
+      description: s.description,
+      host: 'localhost',
+      port: String(s.port),
+      scheme: 'http',
+      health_path: s.healthCheck,
+    })
+    setComboOpen(false)
+  }, [])
+
+  // Close combobox on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (comboRef.current && !comboRef.current.contains(e.target as Node)) {
+        setComboOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   // Derive the effective state for each row (local override or defaults from server)
   const getRowState = useCallback(
@@ -144,6 +211,61 @@ export default function ServicesPage() {
     [rotateMutation],
   )
 
+  const handleDeleteService = useCallback(
+    (serviceName: string) => {
+      setDeletingService(serviceName)
+      deleteMutation.mutate(serviceName, {
+        onSuccess: () => {
+          setDeletingService(null)
+          toast.success(`Removed ${serviceName}`)
+        },
+        onError: (err) => {
+          setDeletingService(null)
+          toast.error(`Failed to remove: ${err.message}`)
+        },
+      })
+    },
+    [deleteMutation],
+  )
+
+  const handleAddService = useCallback(() => {
+    const portNum = parseInt(addForm.port, 10)
+    if (!addForm.name.trim()) {
+      toast.error('Service name is required')
+      return
+    }
+    if (!portNum || portNum < 1 || portNum > 65535) {
+      toast.error('Port must be between 1 and 65535')
+      return
+    }
+
+    addMutation.mutate(
+      {
+        name: addForm.name.trim(),
+        host: addForm.host.trim() || 'localhost',
+        port: portNum,
+        scheme: addForm.scheme,
+        health_path: addForm.health_path.trim() || '/health',
+        description: addForm.description.trim(),
+      },
+      {
+        onSuccess: (resp) => {
+          const r = resp.results[0]
+          if (r?.config_ok) {
+            toast.success(`Added ${addForm.name.trim()}`)
+            setAddForm(EMPTY_ADD_FORM)
+            setShowAddForm(false)
+          } else {
+            toast.error(`Failed to add: ${r?.error ?? 'Unknown error'}`)
+          }
+        },
+        onError: (err) => {
+          toast.error(`Failed to add service: ${err.message}`)
+        },
+      },
+    )
+  }, [addForm, addMutation])
+
   const handleCopyKey = useCallback((key: string) => {
     navigator.clipboard.writeText(key).then(() => {
       setCopiedKey(key)
@@ -190,18 +312,167 @@ export default function ServicesPage() {
             {data?.services.length ?? 0}
           </span>
         </div>
-        <button
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className={cn(
-            'rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-alt)]',
-            isFetching && 'animate-spin',
-          )}
-          title="Refresh"
-        >
-          <RefreshCw size={14} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddForm((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium',
+              showAddForm
+                ? 'bg-[var(--color-surface-alt)] text-[var(--color-text)]'
+                : 'bg-[var(--color-primary)] text-white hover:opacity-90',
+            )}
+          >
+            {showAddForm ? <X size={14} /> : <Plus size={14} />}
+            {showAddForm ? 'Cancel' : 'Add Service'}
+          </button>
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className={cn(
+              'rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-alt)]',
+              isFetching && 'animate-spin',
+            )}
+            title="Refresh"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
       </div>
+
+      {/* Add Service form */}
+      {showAddForm && (
+        <div className="rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-4">
+          <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Add Service</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {/* Combobox: service name with suggestions */}
+            <div ref={comboRef} className="relative">
+              <label className="mb-1 block text-xs text-[var(--color-text-muted)]">Service</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={addForm.name}
+                  onChange={(e) => {
+                    setAddForm((f) => ({ ...f, name: e.target.value }))
+                    setComboOpen(true)
+                  }}
+                  onFocus={() => setComboOpen(true)}
+                  placeholder="Select or type a service name..."
+                  className={cn(
+                    'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-1.5 pr-8',
+                    'text-sm text-[var(--color-text)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
+                  )}
+                />
+                <button
+                  type="button"
+                  onClick={() => setComboOpen((v) => !v)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </div>
+              {comboOpen && filteredSuggestions.length > 0 && (
+                <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] shadow-lg">
+                  {filteredSuggestions.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => selectSuggestion(s)}
+                      className="flex w-full flex-col px-3 py-2 text-left hover:bg-[var(--color-surface-alt)]"
+                    >
+                      <span className="text-sm font-medium text-[var(--color-text)]">
+                        {s.name}
+                        <span className="ml-2 font-normal text-[var(--color-text-muted)]">:{s.port}</span>
+                      </span>
+                      <span className="text-xs text-[var(--color-text-muted)]">{s.description}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--color-text-muted)]">Description</label>
+              <input
+                type="text"
+                value={addForm.description}
+                onChange={(e) => setAddForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="e.g. Camera streaming via WebRTC"
+                className={cn(
+                  'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-1.5',
+                  'text-sm text-[var(--color-text)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
+                )}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--color-text-muted)]">Host</label>
+              <input
+                type="text"
+                value={addForm.host}
+                onChange={(e) => setAddForm((f) => ({ ...f, host: e.target.value }))}
+                placeholder="localhost"
+                className={cn(
+                  'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-1.5',
+                  'text-sm text-[var(--color-text)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
+                )}
+              />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label className="mb-1 block text-xs text-[var(--color-text-muted)]">Port</label>
+                <input
+                  type="number"
+                  value={addForm.port}
+                  onChange={(e) => setAddForm((f) => ({ ...f, port: e.target.value }))}
+                  placeholder="e.g. 1984"
+                  className={cn(
+                    'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-1.5',
+                    'text-sm text-[var(--color-text)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
+                  )}
+                />
+              </div>
+              <div className="w-20">
+                <label className="mb-1 block text-xs text-[var(--color-text-muted)]">Scheme</label>
+                <select
+                  value={addForm.scheme}
+                  onChange={(e) => setAddForm((f) => ({ ...f, scheme: e.target.value }))}
+                  className={cn(
+                    'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2 py-1.5',
+                    'text-sm text-[var(--color-text)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
+                  )}
+                >
+                  <option value="http">http</option>
+                  <option value="https">https</option>
+                  <option value="mqtt">mqtt</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[var(--color-text-muted)]">Health Path</label>
+              <input
+                type="text"
+                value={addForm.health_path}
+                onChange={(e) => setAddForm((f) => ({ ...f, health_path: e.target.value }))}
+                placeholder="/health"
+                className={cn(
+                  'w-full rounded border border-[var(--color-border)] bg-[var(--color-background)] px-2.5 py-1.5',
+                  'text-sm text-[var(--color-text)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]',
+                )}
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              onClick={handleAddService}
+              disabled={addMutation.isPending || !addForm.name.trim() || !addForm.port}
+              className={cn(
+                'rounded-lg bg-[var(--color-primary)] px-4 py-1.5 text-sm font-medium text-white',
+                'hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50',
+              )}
+            >
+              {addMutation.isPending ? 'Adding...' : 'Add Service'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Service list */}
       <div className="space-y-2">
@@ -239,8 +510,10 @@ export default function ServicesPage() {
                 }
               }}
               onRotateKey={() => handleRotateKey(entry.name)}
+              onDelete={() => handleDeleteService(entry.name)}
               disabled={mutation.isPending}
               rotating={rotatingService === entry.name}
+              deleting={deletingService === entry.name}
               healthStatus={health.status}
               healthError={health.error}
               healthLatency={health.latency}

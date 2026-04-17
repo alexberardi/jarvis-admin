@@ -1,4 +1,4 @@
-import { Check, X, RotateCw, Loader2, Circle } from 'lucide-react'
+import { Check, X, RotateCw, Loader2, Circle, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { KnownServiceEntry } from '@/types/services'
 
@@ -17,8 +17,10 @@ interface ServiceRegistrationRowProps {
   onHostBlur: () => void
   onPortBlur: () => void
   onRotateKey: () => void
+  onDelete?: () => void
   disabled: boolean
   rotating: boolean
+  deleting?: boolean
   healthStatus: HealthStatus
   healthError?: string
   healthLatency?: number
@@ -89,8 +91,10 @@ export default function ServiceRegistrationRow({
   onHostBlur,
   onPortBlur,
   onRotateKey,
+  onDelete,
   disabled,
   rotating,
+  deleting,
   healthStatus,
   healthError,
   healthLatency,
@@ -112,13 +116,36 @@ export default function ServiceRegistrationRow({
       />
 
       <div className="min-w-[180px] flex-1">
-        <div className="text-sm font-medium text-[var(--color-text)]">{entry.name}</div>
+        <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text)]">
+          {entry.name}
+          {entry.custom && (
+            <span className="rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+              custom
+            </span>
+          )}
+        </div>
         <div className="text-xs text-[var(--color-text-muted)]">{entry.description}</div>
       </div>
 
       <div className="flex items-center gap-2">
         <StatusBadge ok={entry.config_registered} label="Config" />
         <StatusBadge ok={entry.auth_registered} label="Auth" />
+        {entry.custom && onDelete && (
+          <button
+            onClick={onDelete}
+            disabled={disabled || deleting}
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+              'bg-red-500/10 text-red-600 dark:text-red-400',
+              'hover:bg-red-500/20',
+              'disabled:opacity-50',
+            )}
+            title="Remove custom service"
+          >
+            <Trash2 size={12} className={deleting ? 'animate-spin' : ''} />
+            Remove
+          </button>
+        )}
         {entry.auth_registered && (
           <button
             onClick={onRotateKey}
