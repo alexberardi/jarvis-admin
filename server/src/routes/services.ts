@@ -59,4 +59,37 @@ export async function servicesRoutes(app: FastifyInstance): Promise<void> {
 
     reply.code(result.status).send(result.data)
   })
+
+  app.get('/suggestions', async (_request, reply) => {
+    const registry = app.registry
+    if (!registry) {
+      reply.send({ suggestions: [] })
+      return
+    }
+
+    const allServices = registry.getRegistry().services
+    const suggestions = allServices.map((s) => ({
+      id: s.id,
+      name: s.name,
+      description: s.description,
+      port: s.port,
+      healthCheck: s.healthCheck,
+    }))
+
+    reply.send({ suggestions })
+  })
+
+  app.delete<{ Params: { name: string } }>('/:name', async (request, reply) => {
+    const configUrl = app.config.configServiceUrl
+    const { name } = request.params
+
+    const result = await proxyRequest({
+      method: 'DELETE',
+      url: `${configUrl}/v1/services/${encodeURIComponent(name)}`,
+      headers: { Authorization: request.headers.authorization! },
+      timeout: 10_000,
+    })
+
+    reply.code(result.status).send(result.data)
+  })
 }

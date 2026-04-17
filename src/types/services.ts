@@ -8,6 +8,7 @@ export interface KnownServiceEntry {
   current_host: string | null
   current_port: number | null
   current_scheme: string | null
+  custom: boolean
 }
 
 export interface ServiceRegistryResponse {
@@ -63,4 +64,25 @@ export interface KeyRotateResponse {
   service_name: string
   app_key: string
   env_written: boolean | null
+}
+
+export interface AddServiceRequest {
+  name: string
+  host: string
+  port: number
+  scheme: string
+  health_path: string
+  description: string
+}
+
+export interface ServiceSuggestion {
+  id: string
+  name: string
+  description: string
+  port: number
+  healthCheck: string
+}
+
+export interface ServiceSuggestionsResponse {
+  suggestions: ServiceSuggestion[]
 }
