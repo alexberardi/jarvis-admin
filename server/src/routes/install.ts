@@ -473,6 +473,11 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     writeFileSync(join(composePath, 'init-db.sh'), initDb)
     chmodSync(join(composePath, 'init-db.sh'), 0o755)
 
+    // go2rtc config — empty streams, CC registers them dynamically
+    if (enabledServices.some((s) => s.id === 'go2rtc')) {
+      writeFileSync(join(composePath, 'go2rtc.yaml'), 'api:\n  listen: ":1984"\n\nstreams: {}\n')
+    }
+
     return reply.send({
       ok: true,
       composePath,
