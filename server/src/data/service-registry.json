@@ -252,6 +252,16 @@
         { "name": "GF_SECURITY_ADMIN_PASSWORD", "description": "Grafana admin password", "required": true, "default": "jarvis" }
       ],
       "volumes": ["jarvis-grafana-data:/var/lib/grafana"]
+    },
+    {
+      "id": "go2rtc",
+      "name": "go2rtc",
+      "description": "Camera streaming gateway — converts Nest WebRTC to HLS for live camera views",
+      "image": "alexxit/go2rtc",
+      "port": 1984,
+      "optional": true,
+      "envVars": [],
+      "volumes": []
     }
   ]
 }
