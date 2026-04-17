@@ -256,6 +256,17 @@ function generateServiceBlock(
     }
   }
 
+  // go2rtc: standalone streaming gateway, no Jarvis auth/config needed
+  if (service.id === 'go2rtc') {
+    // No app-to-app auth, no extra environment — skip to volumes/network
+    lines.push('    volumes:')
+    lines.push('      - ./go2rtc.yaml:/config/go2rtc.yaml')
+    lines.push('    networks:')
+    lines.push('      - jarvis')
+    lines.push('    restart: unless-stopped')
+    return lines
+  }
+
   // App-to-app auth placeholders (filled after registration)
   lines.push('      JARVIS_APP_ID: ${JARVIS_APP_ID_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
   lines.push('      JARVIS_APP_KEY: ${JARVIS_APP_KEY_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')

@@ -197,6 +197,17 @@
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
       ],
       "volumes": ["/var/run/docker.sock:/var/run/docker.sock"]
+    },
+    {
+      "id": "go2rtc",
+      "name": "Camera Streaming",
+      "description": "Live camera/doorbell streaming via go2rtc (Nest cameras)",
+      "category": "optional",
+      "port": 1984,
+      "image": "alexxit/go2rtc",
+      "healthCheck": "/api",
+      "dependsOn": [],
+      "envVars": []
     }
   ],
   "infrastructure": [
@@ -252,16 +263,6 @@
         { "name": "GF_SECURITY_ADMIN_PASSWORD", "description": "Grafana admin password", "required": true, "default": "jarvis" }
       ],
       "volumes": ["jarvis-grafana-data:/var/lib/grafana"]
-    },
-    {
-      "id": "go2rtc",
-      "name": "go2rtc",
-      "description": "Camera streaming gateway — converts Nest WebRTC to HLS for live camera views",
-      "image": "alexxit/go2rtc",
-      "port": 1984,
-      "optional": true,
-      "envVars": [],
-      "volumes": []
     }
   ]
 }
