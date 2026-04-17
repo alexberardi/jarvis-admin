@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, accessSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, platform, arch, totalmem } from 'node:os'
-import { spawn, execSync } from 'node:child_process'
+import { exec, spawn, execSync } from 'node:child_process'
 import net from 'node:net'
 import type { FastifyInstance } from 'fastify'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
@@ -14,6 +14,19 @@ import { savePersistedConfig } from '../config.js'
 import type { WizardState, HardwareInfo, InstallState, PreflightCheck, PreflightResult } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
 import registryData from '../data/service-registry.json' with { type: 'json' }
+
+function disableAutostart(): void {
+  const cmd = platform() === 'darwin'
+    ? `launchctl unload "${join(homedir(), 'Library/LaunchAgents/com.jarvis.admin.plist')}" 2>/dev/null`
+    : platform() === 'linux'
+      ? 'systemctl --user disable jarvis-admin 2>/dev/null'
+      : ''
+  if (!cmd) return
+  exec(cmd, (err) => {
+    if (err) console.warn(`[jarvis-admin] Could not disable autostart: ${err.message}`)
+    else console.log(`[jarvis-admin] Disabled autostart (${platform()})`)
+  })
+}
 
 function getComposePath(): string {
   return join(homedir(), '.jarvis', 'compose')
@@ -587,8 +600,10 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
       emit({ done: true, code: result.success ? 0 : 1, error: result.error, serviceHealth: result.serviceHealth, redirect })
 
-      // Self-terminate after a short delay — the containerized admin takes over
+      // Mark install complete, disable boot autostart, and self-terminate
       if (result.success && redirect) {
+        savePersistedConfig({ installed: true })
+        disableAutostart()
         setTimeout(() => {
           console.log(`[jarvis-admin] Installer complete. Admin dashboard running at ${redirect}. Shutting down installer.`)
           process.exit(0)

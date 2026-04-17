@@ -21,6 +21,11 @@ interface PersistedConfig {
   llmProxyUrl?: string
   commandCenterUrl?: string
   installedVersion?: string
+  installed?: boolean
+}
+
+export function isInstalled(): boolean {
+  return loadPersistedConfig().installed === true
 }
 
 const CONFIG_DIR = join(homedir(), '.jarvis')
