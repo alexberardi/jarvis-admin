@@ -2,8 +2,9 @@ import { exec, execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import Fastify from 'fastify'
 import { buildApp } from './app.js'
-import { loadConfig } from './config.js'
+import { loadConfig, isInstalled } from './config.js'
 import { VERSION } from './version.js'
 import { createDockerService } from './services/docker.js'
 import { createComposeService } from './services/compose.js'
@@ -78,8 +79,26 @@ async function ensureFrontendAssets(): Promise<string | null> {
   }
 }
 
+async function startRedirectServer(port: number): Promise<void> {
+  const adminPort = process.env.ADMIN_PORT ?? '7710'
+  const app = Fastify({ logger: false })
+
+  app.get('*', (request, reply) => {
+    const host = (request.hostname ?? 'localhost').split(':')[0]
+    reply.redirect(`http://${host}:${adminPort}`)
+  })
+
+  await app.listen({ port, host: '0.0.0.0' })
+  console.log(`[jarvis-admin] Already installed. Redirecting :${port} → :${adminPort}. Set JARVIS_FORCE_INSTALL=1 to re-run setup.`)
+}
+
 async function main(): Promise<void> {
   const config = loadConfig()
+
+  if (isInstalled() && !process.env.JARVIS_FORCE_INSTALL) {
+    await startRedirectServer(config.port)
+    return
+  }
 
   // Auto-provision frontend assets if no STATIC_DIR is configured
   if (!config.staticDir) {

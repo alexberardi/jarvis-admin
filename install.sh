@@ -260,12 +260,13 @@ PLIST
 # Print success message
 print_success() {
   printf "\n"
-  printf "${GREEN}${BOLD}Jarvis Admin is running!${NC}\n"
+  printf "${GREEN}${BOLD}Jarvis Admin installer is running!${NC}\n"
   printf "\n"
-  printf "  Open ${BLUE}http://localhost:7711${NC} in your browser to get started.\n"
+  printf "  1. Open ${BLUE}http://localhost:7711${NC} to run the first-time setup wizard.\n"
+  printf "  2. After setup completes, your admin dashboard will be at ${BLUE}http://localhost:7710${NC}.\n"
   printf "\n"
-  printf "  The admin service starts automatically on boot.\n"
-  printf "  Manage it with: ${BOLD}systemctl --user status jarvis-admin${NC}\n"
+  printf "  Re-run setup:     ${BOLD}JARVIS_FORCE_INSTALL=1 jarvis-admin${NC}\n"
+  printf "  Check containers: ${BOLD}docker compose ls${NC}\n"
   printf "\n"
 }
 
