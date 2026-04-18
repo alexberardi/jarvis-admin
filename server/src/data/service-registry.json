@@ -106,15 +106,18 @@
     {
       "id": "jarvis-tts",
       "name": "Text-to-Speech",
-      "description": "Text-to-speech synthesis via Piper for voice responses",
+      "description": "Text-to-speech synthesis with selectable provider (Piper default, Kokoro for natural prosody)",
       "category": "recommended",
       "port": 7707,
       "image": "ghcr.io/alexberardi/jarvis-tts:latest",
       "healthCheck": "/health",
       "dependsOn": ["jarvis-auth", "jarvis-config-service"],
       "envVars": [
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
-      ]
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
+        { "name": "TTS_PROVIDER", "description": "Active TTS provider (piper, kokoro)", "required": false, "default": "kokoro" },
+        { "name": "HF_HOME", "description": "HuggingFace cache dir for Kokoro voice weights", "required": false, "default": "/app/models/hf_cache" }
+      ],
+      "volumes": ["jarvis-tts-hf-cache:/app/models/hf_cache"]
     },
     {
       "id": "jarvis-llm-proxy-api",
