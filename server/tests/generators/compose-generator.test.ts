@@ -147,4 +147,24 @@ describe('compose-generator', () => {
       expect(output).toContain('init-db.sh')
     })
   })
+
+  describe('service-level named volumes', () => {
+    it('declares jarvis-tts HF cache volume at top level', () => {
+      const state = makeState({ enabledModules: ['jarvis-tts'] })
+      const output = generateCompose(state, registry)
+      expect(output).toContain('- jarvis-tts-hf-cache:/app/models/hf_cache')
+      // The named volume must also be declared in the top-level volumes section
+      const volumesBlock = output.slice(output.lastIndexOf('volumes:'))
+      expect(volumesBlock).toContain('jarvis-tts-hf-cache:')
+    })
+
+    it('does not declare bind-mount paths at top level', () => {
+      // jarvis-mcp mounts /var/run/docker.sock — that's a bind mount and should
+      // not appear as a top-level volume declaration.
+      const state = makeState({ enabledModules: ['jarvis-mcp'] })
+      const output = generateCompose(state, registry)
+      const volumesBlock = output.slice(output.lastIndexOf('volumes:'))
+      expect(volumesBlock).not.toContain('/var/run/docker.sock:')
+    })
+  })
 })

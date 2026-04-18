@@ -97,13 +97,24 @@ export function generateCompose(state: WizardState, registry: ServiceRegistry): 
   lines.push('  jarvis:')
   lines.push('    driver: bridge')
 
-  // Volumes
+  // Volumes (top-level): collect named volumes from infra AND services.
+  // A volume entry like `name:/path/in/container` is named; bind mounts
+  // (e.g. `/var/run/docker.sock:...` or `./path:...`) are not declared here.
   lines.push('')
   lines.push('volumes:')
   const volumes = new Set<string>()
+  const addIfNamed = (vol: string) => {
+    const source = vol.split(':')[0]!
+    if (source && !source.startsWith('/') && !source.startsWith('.')) {
+      volumes.add(source)
+    }
+  }
   for (const inf of infra) {
-    for (const vol of inf.volumes) {
-      volumes.add(vol.split(':')[0]!)
+    for (const vol of inf.volumes) addIfNamed(vol)
+  }
+  for (const svc of composeServices) {
+    if (svc.volumes) {
+      for (const vol of svc.volumes) addIfNamed(vol)
     }
   }
   for (const vol of volumes) {
