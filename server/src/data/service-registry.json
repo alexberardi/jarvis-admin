@@ -262,6 +262,7 @@
       "description": "Monitoring dashboard — visualize logs and service health metrics",
       "image": "grafana/grafana:latest",
       "port": 3001,
+      "containerPort": 3000,
       "envVars": [
         { "name": "GF_SECURITY_ADMIN_PASSWORD", "description": "Grafana admin password", "required": true, "default": "jarvis" }
       ],

@@ -199,7 +199,28 @@ function generateServiceBlock(
   const lines: string[] = []
   const portVar = serviceIdToPortVar(service.id)
   const hostPort = state.portOverrides[service.id] ?? service.port
-  const image = service.ghcrImage ?? service.image
+  let image = service.ghcrImage ?? service.image
+
+  // GPU services: select the Docker image variant matching the detected GPU
+  if (service.gpu && state.hardware?.gpuType) {
+    const variantSuffix: Record<string, string> = {
+      nvidia: '-cuda',
+      amd: '-vulkan',
+      'amd-rocm': '-rocm',
+      none: '-cpu',
+    }
+    const suffix = variantSuffix[state.hardware.gpuType]
+    if (suffix) {
+      // Append variant to tag: ghcr.io/.../image:dev → ghcr.io/.../image:dev-vulkan
+      // If no tag, append :latest-variant
+      if (image.includes(':')) {
+        image = image + suffix
+      } else {
+        image = image + ':latest' + suffix
+      }
+    }
+    // apple = runs natively on macOS, not in Docker — no variant needed
+  }
 
   lines.push(`  ${service.id}:`)
   lines.push(`    image: ${image}`)
@@ -334,9 +355,10 @@ function generateServiceBlock(
     lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
   }
 
-  // GPU services: NVIDIA deploy config, ipc, shm_size, model volume
+  // GPU services: deploy config varies by detected GPU type
   const isGpu = service.gpu === true
-  if (isGpu) {
+  const gpuType = state.hardware?.gpuType ?? 'none'
+  if (isGpu && gpuType === 'nvidia') {
     lines.push('    ipc: host')
     lines.push('    shm_size: "8gb"')
     lines.push('    deploy:')
@@ -346,6 +368,19 @@ function generateServiceBlock(
     lines.push('            - driver: nvidia')
     lines.push('              count: all')
     lines.push('              capabilities: [gpu]')
+  } else if (isGpu && (gpuType === 'amd' || gpuType === 'amd-rocm')) {
+    // AMD: pass through DRI render node + KFD (ROCm kernel fusion driver)
+    lines.push('    devices:')
+    lines.push('      - /dev/dri:/dev/dri')
+    lines.push('      - /dev/kfd:/dev/kfd')
+    lines.push('    ipc: host')
+    lines.push('    shm_size: "8gb"')
+    lines.push('    group_add:')
+    lines.push('      - video')
+    lines.push('      - render')
+  } else if (isGpu) {
+    // CPU-only or Apple (runs natively on macOS, no GPU passthrough needed)
+    lines.push('    ipc: host')
   }
 
   // Volumes

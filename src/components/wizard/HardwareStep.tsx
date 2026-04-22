@@ -3,36 +3,52 @@ import { Cpu, HardDrive, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { getHardwareInfo } from '@/api/install'
-import type { HardwareInfo } from '@/types/wizard'
+import type { GpuType, HardwareInfo } from '@/types/wizard'
 
-const GPU_OPTIONS = [
-  { label: 'None / CPU only', gpu: null, vramMb: null, backends: ['gguf'], defaultBackend: 'gguf' },
+const GPU_OPTIONS: ReadonlyArray<{
+  label: string
+  gpu: string | null
+  gpuType: GpuType
+  vramMb: number | null
+  backends: string[]
+  defaultBackend: string
+}> = [
+  { label: 'None / CPU only', gpu: null, gpuType: 'none', vramMb: null, backends: ['gguf'], defaultBackend: 'gguf' },
   // NVIDIA
-  { label: 'NVIDIA RTX 4090 (24 GB)', gpu: 'NVIDIA RTX 4090', vramMb: 24576, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  { label: 'NVIDIA RTX 4080 (16 GB)', gpu: 'NVIDIA RTX 4080', vramMb: 16384, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  { label: 'NVIDIA RTX 4070 Ti (12 GB)', gpu: 'NVIDIA RTX 4070 Ti', vramMb: 12288, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  { label: 'NVIDIA RTX 3090 (24 GB)', gpu: 'NVIDIA RTX 3090', vramMb: 24576, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  { label: 'NVIDIA RTX 3080 (10 GB)', gpu: 'NVIDIA RTX 3080', vramMb: 10240, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  { label: 'NVIDIA RTX 3070 (8 GB)', gpu: 'NVIDIA RTX 3070', vramMb: 8192, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  { label: 'NVIDIA A100 (80 GB)', gpu: 'NVIDIA A100', vramMb: 81920, backends: ['gguf', 'vllm'], defaultBackend: 'vllm' },
-  { label: 'NVIDIA A100 (40 GB)', gpu: 'NVIDIA A100', vramMb: 40960, backends: ['gguf', 'vllm'], defaultBackend: 'vllm' },
-  { label: 'NVIDIA Tesla T4 (16 GB)', gpu: 'NVIDIA Tesla T4', vramMb: 16384, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
-  // AMD
-  { label: 'AMD RX 7900 XTX (24 GB)', gpu: 'AMD RX 7900 XTX', vramMb: 24576, backends: ['gguf'], defaultBackend: 'gguf' },
-  { label: 'AMD RX 7900 XT (20 GB)', gpu: 'AMD RX 7900 XT', vramMb: 20480, backends: ['gguf'], defaultBackend: 'gguf' },
-  { label: 'AMD RX 7800 XT (16 GB)', gpu: 'AMD RX 7800 XT', vramMb: 16384, backends: ['gguf'], defaultBackend: 'gguf' },
-  // Apple Silicon
-  { label: 'Apple M4 Max (128 GB unified)', gpu: 'Apple M4 Max', vramMb: 131072, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M4 Max (64 GB unified)', gpu: 'Apple M4 Max', vramMb: 65536, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M4 Pro (48 GB unified)', gpu: 'Apple M4 Pro', vramMb: 49152, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M4 Pro (24 GB unified)', gpu: 'Apple M4 Pro', vramMb: 24576, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M2 Max (32 GB unified)', gpu: 'Apple M2 Max', vramMb: 32768, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M2 Pro (16 GB unified)', gpu: 'Apple M2 Pro', vramMb: 16384, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M1 (16 GB unified)', gpu: 'Apple M1', vramMb: 16384, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
-  { label: 'Apple M1 (8 GB unified)', gpu: 'Apple M1', vramMb: 8192, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA RTX 4090 (24 GB)', gpu: 'NVIDIA RTX 4090', gpuType: 'nvidia', vramMb: 24576, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA RTX 4080 (16 GB)', gpu: 'NVIDIA RTX 4080', gpuType: 'nvidia', vramMb: 16384, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA RTX 4070 Ti (12 GB)', gpu: 'NVIDIA RTX 4070 Ti', gpuType: 'nvidia', vramMb: 12288, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA RTX 3090 (24 GB)', gpu: 'NVIDIA RTX 3090', gpuType: 'nvidia', vramMb: 24576, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA RTX 3080 (10 GB)', gpu: 'NVIDIA RTX 3080', gpuType: 'nvidia', vramMb: 10240, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA RTX 3070 (8 GB)', gpu: 'NVIDIA RTX 3070', gpuType: 'nvidia', vramMb: 8192, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  { label: 'NVIDIA A100 (80 GB)', gpu: 'NVIDIA A100', gpuType: 'nvidia', vramMb: 81920, backends: ['gguf', 'vllm'], defaultBackend: 'vllm' },
+  { label: 'NVIDIA A100 (40 GB)', gpu: 'NVIDIA A100', gpuType: 'nvidia', vramMb: 40960, backends: ['gguf', 'vllm'], defaultBackend: 'vllm' },
+  { label: 'NVIDIA Tesla T4 (16 GB)', gpu: 'NVIDIA Tesla T4', gpuType: 'nvidia', vramMb: 16384, backends: ['gguf', 'vllm'], defaultBackend: 'gguf' },
+  // AMD — Vulkan (recommended for single GPU, better token generation)
+  { label: 'AMD RX 9070 XT — Vulkan (16 GB)', gpu: 'AMD RX 9070 XT', gpuType: 'amd', vramMb: 16384, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 9070 — Vulkan (12 GB)', gpu: 'AMD RX 9070', gpuType: 'amd', vramMb: 12288, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7900 XTX — Vulkan (24 GB)', gpu: 'AMD RX 7900 XTX', gpuType: 'amd', vramMb: 24576, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7900 XT — Vulkan (20 GB)', gpu: 'AMD RX 7900 XT', gpuType: 'amd', vramMb: 20480, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7800 XT — Vulkan (16 GB)', gpu: 'AMD RX 7800 XT', gpuType: 'amd', vramMb: 16384, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7600 — Vulkan (8 GB)', gpu: 'AMD RX 7600', gpuType: 'amd', vramMb: 8192, backends: ['gguf'], defaultBackend: 'gguf' },
+  // AMD — ROCm (better prompt processing and multi-GPU)
+  { label: 'AMD RX 9070 XT — ROCm (16 GB)', gpu: 'AMD RX 9070 XT', gpuType: 'amd-rocm', vramMb: 16384, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 9070 — ROCm (12 GB)', gpu: 'AMD RX 9070', gpuType: 'amd-rocm', vramMb: 12288, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7900 XTX — ROCm (24 GB)', gpu: 'AMD RX 7900 XTX', gpuType: 'amd-rocm', vramMb: 24576, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7900 XT — ROCm (20 GB)', gpu: 'AMD RX 7900 XT', gpuType: 'amd-rocm', vramMb: 20480, backends: ['gguf'], defaultBackend: 'gguf' },
+  { label: 'AMD RX 7800 XT — ROCm (16 GB)', gpu: 'AMD RX 7800 XT', gpuType: 'amd-rocm', vramMb: 16384, backends: ['gguf'], defaultBackend: 'gguf' },
+  // Apple Silicon (runs natively, not in Docker)
+  { label: 'Apple M4 Max (128 GB unified)', gpu: 'Apple M4 Max', gpuType: 'apple', vramMb: 131072, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M4 Max (64 GB unified)', gpu: 'Apple M4 Max', gpuType: 'apple', vramMb: 65536, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M4 Pro (48 GB unified)', gpu: 'Apple M4 Pro', gpuType: 'apple', vramMb: 49152, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M4 Pro (24 GB unified)', gpu: 'Apple M4 Pro', gpuType: 'apple', vramMb: 24576, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M2 Max (32 GB unified)', gpu: 'Apple M2 Max', gpuType: 'apple', vramMb: 32768, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M2 Pro (16 GB unified)', gpu: 'Apple M2 Pro', gpuType: 'apple', vramMb: 16384, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M1 (16 GB unified)', gpu: 'Apple M1', gpuType: 'apple', vramMb: 16384, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
+  { label: 'Apple M1 (8 GB unified)', gpu: 'Apple M1', gpuType: 'apple', vramMb: 8192, backends: ['gguf', 'mlx'], defaultBackend: 'gguf' },
   // Custom
-  { label: 'Other (enter VRAM manually)', gpu: 'Other', vramMb: null, backends: ['gguf'], defaultBackend: 'gguf' },
-] as const
+  { label: 'Other (enter VRAM manually)', gpu: 'Other', gpuType: 'none', vramMb: null, backends: ['gguf'], defaultBackend: 'gguf' },
+]
 
 export default function HardwareStep() {
   const { state, dispatch } = useWizard()
@@ -69,7 +85,8 @@ export default function HardwareStep() {
       ...state.hardware,
       gpuName: opt.gpu,
       gpuVramMb: vramMb || null,
-      recommendedBackends: opt.backends as unknown as string[],
+      gpuType: opt.gpuType,
+      recommendedBackends: [...opt.backends],
       recommendedBackend: opt.defaultBackend,
     }
     dispatch({ type: 'SET_HARDWARE', hardware: updated })
