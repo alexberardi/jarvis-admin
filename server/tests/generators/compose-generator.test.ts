@@ -115,6 +115,16 @@ describe('compose-generator', () => {
       const state = makeState({
         platform: 'linux',
         enabledModules: ['jarvis-llm-proxy-api', 'jarvis-tts'],
+        hardware: {
+          platform: 'linux',
+          arch: 'x86_64',
+          totalMemoryGb: 32,
+          gpuName: 'NVIDIA RTX 3090',
+          gpuVramMb: 24576,
+          gpuType: 'nvidia',
+          recommendedBackends: ['gguf', 'vllm'],
+          recommendedBackend: 'gguf',
+        },
       })
       const output = generateCompose(state, registry)
       expect(output).toContain('driver: nvidia')
@@ -122,6 +132,28 @@ describe('compose-generator', () => {
       expect(output).toContain('ipc: host')
       expect(output).toContain('shm_size: "8gb"')
       expect(output).toContain('.models')
+    })
+
+    it('adds vulkan device passthrough for AMD GPU', () => {
+      const state = makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-llm-proxy-api'],
+        hardware: {
+          platform: 'linux',
+          arch: 'x86_64',
+          totalMemoryGb: 32,
+          gpuName: 'AMD RX 9070 XT',
+          gpuVramMb: 16384,
+          gpuType: 'amd',
+          recommendedBackends: ['gguf'],
+          recommendedBackend: 'gguf',
+        },
+      })
+      const output = generateCompose(state, registry)
+      expect(output).toContain('/dev/dri:/dev/dri')
+      expect(output).toContain('/dev/kfd:/dev/kfd')
+      expect(output).toContain('ipc: host')
+      expect(output).not.toContain('driver: nvidia')
     })
   })
 
