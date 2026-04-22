@@ -1,9 +1,12 @@
+export type GpuType = 'nvidia' | 'amd' | 'amd-rocm' | 'apple' | 'none'
+
 export interface HardwareInfo {
   platform: 'darwin' | 'linux'
   arch: string
   totalMemoryGb: number
   gpuName: string | null
   gpuVramMb: number | null
+  gpuType: GpuType
   recommendedBackends: string[]
   recommendedBackend: string
 }

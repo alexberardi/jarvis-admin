@@ -343,6 +343,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
       let gpuName: string | null = null
       let gpuVramMb: number | null = null
+      let gpuType: import('../types/wizard.js').GpuType = 'none'
       const recommendedBackends: string[] = []
       let recommendedBackend = 'gguf'
 
@@ -358,6 +359,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
           if (gpu) {
             gpuName = gpu.sppci_model ?? 'Apple Silicon GPU'
             gpuVramMb = totalMemoryGb * 1024 // Unified memory
+            gpuType = 'apple'
           }
         } catch {
           // Fallback
@@ -391,13 +393,45 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
               ? gpuNames[0]
               : `${gpuNames.length}x ${gpuNames[0]}`
             gpuVramMb = totalVram
+            gpuType = 'nvidia'
           }
         } catch {
           // No NVIDIA GPU
         }
 
-        if (gpuName) {
+        // Linux: check for AMD GPU (if no NVIDIA found)
+        if (gpuType === 'none') {
+          try {
+            const output = execSync('lspci 2>/dev/null | grep -i "vga\\|3d\\|display"', {
+              encoding: 'utf-8',
+              timeout: 10_000,
+            })
+            const amdMatch = output.match(/AMD.*?\[(.+?)\]/i)
+              || output.match(/Advanced Micro Devices.*?(\S+)\s*$/im)
+            if (amdMatch) {
+              gpuName = amdMatch[1]?.trim() || 'AMD GPU'
+              gpuType = 'amd'
+              // Try to get VRAM via /sys (not always available)
+              try {
+                const vramBytes = execSync(
+                  'cat /sys/class/drm/card*/device/mem_info_vram_total 2>/dev/null | head -1',
+                  { encoding: 'utf-8', timeout: 5_000 },
+                ).trim()
+                if (vramBytes) {
+                  gpuVramMb = Math.round(parseInt(vramBytes, 10) / (1024 * 1024))
+                }
+              } catch { /* VRAM detection optional */ }
+            }
+          } catch {
+            // No AMD GPU
+          }
+        }
+
+        if (gpuType === 'nvidia') {
           recommendedBackends.push('gguf', 'vllm')
+          recommendedBackend = 'gguf'
+        } else if (gpuType === 'amd') {
+          recommendedBackends.push('gguf')
           recommendedBackend = 'gguf'
         } else {
           recommendedBackends.push('gguf')
@@ -412,7 +446,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
       // ARM without GPU = suggest remote-llm
       const isArm = archName === 'arm64' || archName === 'aarch64'
-      if (isArm && plat === 'linux' && !gpuName) {
+      if (isArm && plat === 'linux' && gpuType === 'none') {
         recommendedBackend = 'remote'
       }
 
@@ -422,6 +456,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         totalMemoryGb,
         gpuName,
         gpuVramMb,
+        gpuType,
         recommendedBackends,
         recommendedBackend,
       }
@@ -436,6 +471,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         totalMemoryGb: Math.round(totalmem() / (1024 * 1024 * 1024)),
         gpuName: null,
         gpuVramMb: null,
+        gpuType: 'none',
         recommendedBackends: ['remote'],
         recommendedBackend: 'remote',
       }
