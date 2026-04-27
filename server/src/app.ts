@@ -72,6 +72,20 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
 
   const app = Fastify({ logger: false })
 
+  // Treat an empty application/json body as {} instead of failing with
+  // "Body cannot be empty when content-type is set to 'application/json'".
+  // Many fetch() callers set Content-Type: application/json but omit the body
+  // on argument-less POSTs (e.g. /api/update/apply, /api/install/reconcile).
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    const raw = (body as string).trim()
+    if (raw.length === 0) return done(null, {})
+    try {
+      done(null, JSON.parse(raw))
+    } catch (err) {
+      done(err as Error, undefined)
+    }
+  })
+
   await app.register(cors, { origin: true })
 
   // Request logging for debugging

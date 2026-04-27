@@ -51,10 +51,7 @@ export default function UpdatePage() {
       const token = localStorage.getItem('access_token')
       const res = await fetch('/api/update/apply', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (!res.ok || !res.body) {
