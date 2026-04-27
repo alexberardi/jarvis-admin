@@ -130,9 +130,13 @@ export function generateCompose(state: WizardState, registry: ServiceRegistry): 
   lines.push('')
   lines.push('volumes:')
   const volumes = new Set<string>()
+  // A Docker named volume identifier is alphanumeric with limited punctuation.
+  // Anything containing /, ., $, or starting with one of those is a host path
+  // (bind mount) and must NOT appear in the top-level volumes: section.
+  const NAMED_VOLUME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/
   const addIfNamed = (vol: string) => {
     const source = vol.split(':')[0]!
-    if (source && !source.startsWith('/') && !source.startsWith('.')) {
+    if (source && NAMED_VOLUME_RE.test(source)) {
       volumes.add(source)
     }
   }
