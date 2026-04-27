@@ -359,6 +359,27 @@ describe('compose-generator', () => {
       expect(volumesBlock).not.toContain('/var/run/docker.sock:')
     })
 
+    it('llm-proxy keeps NVIDIA GPU config even when hardware is null (reconcile case)', () => {
+      // Regression for v0.1.33: state-reconstructor returned hardware: null,
+      // pushGpuConfig short-circuited, the regenerated compose stripped
+      // ipc:host + shm_size + the nvidia deploy block from llm-proxy, the
+      // recreated container booted without GPU access, and vLLM crashed.
+      const state = makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-llm-proxy-api'],
+        hardware: null,
+      })
+      const output = generateCompose(state, registry)
+      const start = output.search(/\n {2}jarvis-llm-proxy-api:\n/)
+      const block = output.slice(start + 1)
+      const blockEnd = block.slice(1).search(/\n {2}[a-z][a-z0-9-]*:\n/)
+      const llmProxy = blockEnd > 0 ? block.slice(0, blockEnd + 1) : block
+      expect(llmProxy).toContain('ipc: host')
+      expect(llmProxy).toContain('shm_size: "8gb"')
+      expect(llmProxy).toContain('driver: nvidia')
+      expect(llmProxy).toContain('capabilities: [gpu]')
+    })
+
     it('does not declare ${VAR}-prefixed host paths at top level', () => {
       // jarvis-admin mounts ${HOME}/.jarvis/compose:/host/compose — that's a
       // host path with an env-var prefix; previously the named-volume filter
