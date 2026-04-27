@@ -209,9 +209,13 @@
       "healthCheck": "/health",
       "dependsOn": ["jarvis-auth", "jarvis-config-service"],
       "envVars": [
-        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" }
+        { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
+        { "name": "JARVIS_COMPOSE_PATH", "description": "Where the host's docker-compose.yml + .env live (mounted into the container)", "required": false, "default": "/host/compose" }
       ],
-      "volumes": ["/var/run/docker.sock:/var/run/docker.sock"]
+      "volumes": [
+        "/var/run/docker.sock:/var/run/docker.sock",
+        "${HOME}/.jarvis/compose:/host/compose"
+      ]
     },
     {
       "id": "go2rtc",
