@@ -24,10 +24,13 @@ export function setLogoutFunction(fn: () => void): void {
   logoutFn = fn
 }
 
-// Ensure Authorization header is set from localStorage (survives page refresh)
+// Ensure Authorization header is set from localStorage (survives page refresh).
+// AuthContext stores under the namespaced key; legacy "access_token" is only
+// set by the setup wizard's account step.
 apiClient.interceptors.request.use((config) => {
   if (!config.headers['Authorization']) {
-    const token = localStorage.getItem('access_token')
+    const token =
+      localStorage.getItem('jarvis-admin:access_token') ?? localStorage.getItem('access_token')
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`
     }
