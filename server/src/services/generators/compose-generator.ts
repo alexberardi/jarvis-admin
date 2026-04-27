@@ -42,9 +42,24 @@ export function getComposeServices(
 ): ServiceDefinition[] {
   const all = getAllEnabledServices(state, registry)
   if (state.platform === 'darwin') {
-    return all.filter((s) => !s.gpu)
+    // GPU-required services run natively via Metal/MLX. GPU-optional services
+    // (cpuFallback) ship a CPU image and are still useful inside Docker on macOS.
+    return all.filter((s) => !s.gpu || s.cpuFallback)
   }
   return all
+}
+
+/**
+ * GPU types we publish image variants for on `cpuFallback` services.
+ * Other GPU types (amd Vulkan, none) fall back to the plain CPU image.
+ */
+const CPU_FALLBACK_GPU_VARIANTS = new Set<string>(['nvidia', 'amd-rocm'])
+
+/** Whether a service should use a GPU image variant + GPU runtime config for the host. */
+function shouldUseGpuVariant(service: ServiceDefinition, gpuType: string | undefined): boolean {
+  if (!service.gpu || !gpuType) return false
+  if (service.cpuFallback && !CPU_FALLBACK_GPU_VARIANTS.has(gpuType)) return false
+  return true
 }
 
 /** Worker container IDs emitted alongside the given services in the compose file. */
@@ -205,14 +220,14 @@ function generateInfraBlock(
 
 function getServiceImage(service: ServiceDefinition, state: WizardState): string {
   let image = service.ghcrImage ?? service.image
-  if (service.gpu && state.hardware?.gpuType) {
+  if (shouldUseGpuVariant(service, state.hardware?.gpuType)) {
     const variantSuffix: Record<string, string> = {
       nvidia: '-cuda',
       amd: '-vulkan',
       'amd-rocm': '-rocm',
       none: '-cpu',
     }
-    const suffix = variantSuffix[state.hardware.gpuType]
+    const suffix = variantSuffix[state.hardware!.gpuType]
     if (suffix) {
       image = image.includes(':') ? image + suffix : image + ':latest' + suffix
     }
@@ -225,7 +240,7 @@ function pushGpuConfig(
   service: ServiceDefinition,
   state: WizardState,
 ): void {
-  if (!service.gpu) return
+  if (!shouldUseGpuVariant(service, state.hardware?.gpuType)) return
   const gpuType = state.hardware?.gpuType ?? 'none'
   if (gpuType === 'nvidia') {
     lines.push('    ipc: host')
@@ -395,14 +410,16 @@ function generateServiceBlock(
   }
 
   pushGpuConfig(lines, service, state)
-  const isGpu = service.gpu === true
 
   // Volumes
   const vols: string[] = []
   if (nonDefaultWhisper) {
     vols.push('      - ./models:/models:ro')
   }
-  if (isGpu) {
+  // modelVolume: only LLM-style services that load weights from disk need this
+  // bind. Generic GPU services (like whisper, which bakes its model into the image)
+  // shouldn't get a stray .models directory mounted.
+  if (service.modelVolume) {
     vols.push('      - ${MODELS_DIR:-./.models}:/app/.models')
   }
   if (service.volumes) {
@@ -535,7 +552,7 @@ function generateWorkerBlock(
   pushGpuConfig(lines, parent, state)
 
   const vols: string[] = []
-  if (parent.gpu) {
+  if (parent.modelVolume) {
     vols.push('      - ${MODELS_DIR:-./.models}:/app/.models')
   }
   if (parent.volumes) {

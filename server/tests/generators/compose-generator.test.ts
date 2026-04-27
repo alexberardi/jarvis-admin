@@ -157,6 +157,84 @@ describe('compose-generator', () => {
     })
   })
 
+  describe('cpuFallback (whisper) GPU variant selection', () => {
+    function whisperState(gpuType: 'nvidia' | 'amd' | 'amd-rocm' | 'none' | null, platform: 'linux' | 'darwin' = 'linux') {
+      return makeState({
+        platform,
+        enabledModules: ['jarvis-whisper-api'],
+        hardware: gpuType
+          ? {
+              platform,
+              arch: 'x86_64',
+              totalMemoryGb: 32,
+              gpuName: 'test',
+              gpuVramMb: 8192,
+              gpuType,
+              recommendedBackends: ['gguf'],
+              recommendedBackend: 'gguf',
+            }
+          : null,
+      })
+    }
+
+    it('uses -cuda variant on NVIDIA hosts', () => {
+      const output = generateCompose(whisperState('nvidia'), registry)
+      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest-cuda')
+      expect(output).toContain('driver: nvidia')
+    })
+
+    it('uses -rocm variant on AMD ROCm hosts', () => {
+      const output = generateCompose(whisperState('amd-rocm'), registry)
+      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest-rocm')
+      expect(output).toContain('/dev/dri:/dev/dri')
+    })
+
+    it('falls back to plain CPU image on AMD Vulkan hosts (no -vulkan tag published)', () => {
+      const output = generateCompose(whisperState('amd'), registry)
+      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest')
+      expect(output).not.toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest-vulkan')
+      // Whisper section should not contain a GPU-runtime block on this host
+      const block = output.slice(output.indexOf('jarvis-whisper-api:'))
+      const blockEnd = block.search(/\n {2}[a-z][a-z0-9-]*:\n/)
+      const whisperOnly = blockEnd > 0 ? block.slice(0, blockEnd) : block
+      expect(whisperOnly).not.toContain('driver: nvidia')
+      expect(whisperOnly).not.toContain('/dev/kfd')
+    })
+
+    it('still emits whisper on macOS (cpuFallback overrides darwin GPU exclusion)', () => {
+      const services = getComposeServices(whisperState(null, 'darwin'), registry)
+      const ids = services.map((s) => s.id)
+      expect(ids).toContain('jarvis-whisper-api')
+    })
+
+    it('does NOT mount the models volume on whisper (model is baked into image)', () => {
+      const output = generateCompose(whisperState('nvidia'), registry)
+      const block = output.slice(output.indexOf('jarvis-whisper-api:'))
+      const blockEnd = block.search(/\n {2}[a-z][a-z0-9-]*:\n/)
+      const whisperOnly = blockEnd > 0 ? block.slice(0, blockEnd) : block
+      expect(whisperOnly).not.toContain('${MODELS_DIR:-./.models}:/app/.models')
+    })
+
+    it('still mounts models volume on llm-proxy (modelVolume: true)', () => {
+      const state = makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-llm-proxy-api'],
+        hardware: {
+          platform: 'linux',
+          arch: 'x86_64',
+          totalMemoryGb: 32,
+          gpuName: 'NVIDIA RTX 3090',
+          gpuVramMb: 24576,
+          gpuType: 'nvidia',
+          recommendedBackends: ['gguf'],
+          recommendedBackend: 'gguf',
+        },
+      })
+      const output = generateCompose(state, registry)
+      expect(output).toContain('${MODELS_DIR:-./.models}:/app/.models')
+    })
+  })
+
   describe('remote-llm mode', () => {
     it('adds remote LLM URL to command-center env', () => {
       const state = makeState({
