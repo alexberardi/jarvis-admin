@@ -358,5 +358,16 @@ describe('compose-generator', () => {
       const volumesBlock = output.slice(output.lastIndexOf('volumes:'))
       expect(volumesBlock).not.toContain('/var/run/docker.sock:')
     })
+
+    it('does not declare ${VAR}-prefixed host paths at top level', () => {
+      // jarvis-admin mounts ${HOME}/.jarvis/compose:/host/compose — that's a
+      // host path with an env-var prefix; previously the named-volume filter
+      // only rejected leading / and ., letting this leak into the top-level
+      // volumes: section and triggering "additional properties not allowed".
+      const state = makeState({ enabledModules: ['jarvis-admin'] })
+      const output = generateCompose(state, registry)
+      const volumesBlock = output.slice(output.lastIndexOf('volumes:'))
+      expect(volumesBlock).not.toContain('${HOME}')
+    })
   })
 })
