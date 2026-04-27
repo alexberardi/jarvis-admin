@@ -91,6 +91,8 @@
       "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
       "database": "jarvis_whisper",
       "dbDriverPrefix": "postgresql+psycopg2://",
+      "gpu": true,
+      "cpuFallback": true,
       "modelOptions": [
         { "id": "base.en", "name": "Base English", "size": "~140MB", "default": true, "builtin": true },
         { "id": "small.en", "name": "Small English", "size": "~460MB" },

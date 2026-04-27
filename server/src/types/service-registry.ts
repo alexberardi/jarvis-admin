@@ -53,6 +53,16 @@ export interface ServiceDefinition {
   llmInterfaceOptions?: LlmInterfaceOption[]
   /** true = requires GPU; excluded from compose on macOS (runs natively via Metal/MLX) */
   gpu?: boolean
+  /**
+   * For `gpu: true` services that ship a CPU image alongside GPU variants
+   * (e.g. whisper publishes :latest, :latest-cuda, :latest-rocm). When set,
+   * the service is NOT excluded on macOS, the variant suffix is only applied
+   * for GPU types we actually publish (nvidia/amd-rocm), and the GPU runtime
+   * config is omitted on hosts without a matching variant.
+   */
+  cpuFallback?: boolean
+  /** true = mount ${MODELS_DIR:-./.models}:/app/.models (LLM-style services). */
+  modelVolume?: boolean
   /** Port the service listens on inside the container (if different from `port`) */
   containerPort?: number
   /** Override image for GHCR (if different from `image` field) */
