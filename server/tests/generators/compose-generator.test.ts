@@ -221,7 +221,7 @@ describe('compose-generator', () => {
       const output = generateCompose(nvidiaState(), registry)
       const workerBlock = output.slice(output.indexOf('llm-proxy-worker:'))
       // Worker section ends at the next top-level service or the networks/volumes block
-      const workerEnd = workerBlock.search(/\n  [a-z][a-z0-9-]*:\n/)
+      const workerEnd = workerBlock.search(/\n {2}[a-z][a-z0-9-]*:\n/)
       const workerOnly = workerEnd > 0 ? workerBlock.slice(0, workerEnd) : workerBlock
       expect(workerOnly).toContain('driver: nvidia')
       expect(workerOnly).toContain('capabilities: [gpu]')
@@ -231,7 +231,7 @@ describe('compose-generator', () => {
     it('worker has no ports and no healthcheck', () => {
       const output = generateCompose(nvidiaState(), registry)
       const workerBlock = output.slice(output.indexOf('llm-proxy-worker:'))
-      const workerEnd = workerBlock.search(/\n  [a-z][a-z0-9-]*:\n/)
+      const workerEnd = workerBlock.search(/\n {2}[a-z][a-z0-9-]*:\n/)
       const workerOnly = workerEnd > 0 ? workerBlock.slice(0, workerEnd) : workerBlock
       expect(workerOnly).not.toContain('ports:')
       expect(workerOnly).not.toContain('healthcheck:')
