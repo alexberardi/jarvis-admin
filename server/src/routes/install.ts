@@ -5,6 +5,7 @@ import { exec, spawn, execSync } from 'node:child_process'
 import net from 'node:net'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
+import { getComposePath } from '../services/compose-path.js'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
 import { generateEnv } from '../services/generators/env-generator.js'
 import { generateInitDbScript } from '../services/generators/init-db-generator.js'
@@ -27,10 +28,6 @@ function disableAutostart(): void {
     if (err) console.warn(`[jarvis-admin] Could not disable autostart: ${err.message}`)
     else console.log(`[jarvis-admin] Disabled autostart (${platform()})`)
   })
-}
-
-function getComposePath(): string {
-  return join(homedir(), '.jarvis', 'compose')
 }
 
 function loadRegistry(): ServiceRegistry {

@@ -1,18 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import { spawn } from 'node:child_process'
 import type { FastifyInstance } from 'fastify'
 import type { ServiceDefinition } from '../../types/service-registry.js'
 import { pollServiceHealth } from '../orchestrator.js'
 import { parseRegistry } from '../generators/service-registry.js'
+import { getComposePath } from '../compose-path.js'
 import registryData from '../../data/service-registry.json' with { type: 'json' }
 
 type Emit = (data: Record<string, unknown>) => void
-
-function getComposePath(): string {
-  return join(homedir(), '.jarvis', 'compose')
-}
 
 function loadEnvFromFile(composePath: string): Record<string, string> {
   const envFile = join(composePath, '.env')

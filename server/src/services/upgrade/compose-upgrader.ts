@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import type { ServiceRegistry } from '../../types/service-registry.js'
 import { generateCompose, getAllEnabledServices } from '../generators/compose-generator.js'
@@ -10,11 +9,8 @@ import { parseRegistry } from '../generators/service-registry.js'
 import { reconstructWizardState } from './state-reconstructor.js'
 import { mergeEnv } from './env-merger.js'
 import { VERSION } from '../../version.js'
+import { getComposePath } from '../compose-path.js'
 import registryData from '../../data/service-registry.json' with { type: 'json' }
-
-function getComposePath(): string {
-  return join(homedir(), '.jarvis', 'compose')
-}
 
 function loadEnvFile(composePath: string): Record<string, string> {
   const envFile = join(composePath, '.env')
