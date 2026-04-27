@@ -48,7 +48,11 @@ export default function UpdatePage() {
     setError(null)
 
     try {
-      const token = localStorage.getItem('access_token')
+      // AuthContext stores under the namespaced key; legacy "access_token" is
+      // only set by the setup wizard's account step. Try the namespaced one
+      // first so a fresh login through the login page works.
+      const token =
+        localStorage.getItem('jarvis-admin:access_token') ?? localStorage.getItem('access_token')
       const res = await fetch('/api/update/apply', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
