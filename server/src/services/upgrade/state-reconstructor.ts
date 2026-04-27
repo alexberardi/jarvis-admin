@@ -1,8 +1,9 @@
-import { platform } from 'node:os'
-import type { WizardState } from '../../types/wizard.js'
+import { arch, platform, totalmem } from 'node:os'
+import type { HardwareInfo, WizardState } from '../../types/wizard.js'
 import type { ServiceRegistry } from '../../types/service-registry.js'
 import { serviceIdToPortVar } from '../generators/port-utils.js'
 import { SECRET_KEYS } from '../generators/secret-generator.js'
+import { detectGpuType } from '../hardware-detect.js'
 
 /**
  * Reconstruct a WizardState from an existing .env file so we can
@@ -53,11 +54,31 @@ export function reconstructWizardState(
   const hasRemoteLlm = !!existingEnv.JARVIS_LLM_PROXY_URL
   const deploymentMode = hasRemoteLlm ? 'remote-llm' as const : 'local' as const
 
+  // Detect relay
+  const relayEnabled = !!existingEnv.JARVIS_RELAY_URL
+
+  // Re-detect hardware at reconcile time. The .env doesn't store the user's
+  // original wizard hardware selection, so without this, state.hardware stays
+  // null, getServiceImage skips variant suffixes, and pushGpuConfig strips
+  // GPU runtime config from gpu: true services on regenerate.
+  const plat = platform() as 'darwin' | 'linux'
+  const gpuType = detectGpuType()
+  const hardware: HardwareInfo = {
+    platform: plat,
+    arch: arch(),
+    totalMemoryGb: Math.round(totalmem() / (1024 * 1024 * 1024)),
+    gpuName: null,
+    gpuVramMb: null,
+    gpuType,
+    recommendedBackends: [],
+    recommendedBackend: 'gguf',
+  }
+
   return {
     currentStep: 0,
     totalSteps: 0,
-    platform: platform() as 'darwin' | 'linux',
-    hardware: null,
+    platform: plat,
+    hardware,
     enabledModules,
     portOverrides,
     infraPortOverrides,
@@ -69,5 +90,6 @@ export function reconstructWizardState(
     whisperModel: 'base.en',
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
+    relayEnabled,
   }
 }

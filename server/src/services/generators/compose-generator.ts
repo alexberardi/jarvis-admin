@@ -244,8 +244,19 @@ function pushGpuConfig(
   service: ServiceDefinition,
   state: WizardState,
 ): void {
-  if (!shouldUseGpuVariant(service, state.hardware?.gpuType)) return
-  const gpuType = state.hardware?.gpuType ?? 'none'
+  if (!service.gpu) return
+  const detected = state.hardware?.gpuType
+  // cpuFallback services skip GPU runtime config when the host either has no
+  // GPU or has a GPU type we don't ship a variant for — they degrade to the
+  // CPU image gracefully.
+  if (service.cpuFallback) {
+    if (!detected || !CPU_FALLBACK_GPU_VARIANTS.has(detected)) return
+  }
+  // GPU-required services (no cpuFallback) MUST get GPU passthrough or the
+  // container won't boot. If detection failed (state-reconstructor couldn't
+  // probe the host), fall back to nvidia — the most common case and matches
+  // legacy installs whose original wizard hardware selection wasn't persisted.
+  const gpuType = detected ?? 'nvidia'
   if (gpuType === 'nvidia') {
     lines.push('    ipc: host')
     lines.push('    shm_size: "8gb"')
