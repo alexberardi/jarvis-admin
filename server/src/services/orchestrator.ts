@@ -367,11 +367,13 @@ export async function tieredStartup(
     }
   }
 
-  // Step 5: Start remaining services (skip tier 0-1 and already-healthy services)
+  // Step 5: Start remaining services (skip tier 0-1 and already-healthy services).
+  // Workers are always included — they're new containers that may not exist yet
+  // even when the parent service is healthy (e.g. registry added a worker).
   const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth', ...skipSet])
-  const remaining = services
-    .filter((s) => !alreadyRunning.has(s.id))
-    .map((s) => s.id)
+  const remainingServices = services.filter((s) => !alreadyRunning.has(s.id)).map((s) => s.id)
+  const workerIds = services.flatMap((s) => (s.workers ?? []).map((w) => w.id))
+  const remaining = [...remainingServices, ...workerIds]
 
   if (remaining.length > 0) {
     emit({ phase: 'services', message: `Starting ${remaining.length} remaining services...` })

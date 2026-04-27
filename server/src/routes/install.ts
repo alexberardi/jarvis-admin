@@ -4,6 +4,7 @@ import { homedir, platform, arch, totalmem } from 'node:os'
 import { exec, spawn, execSync } from 'node:child_process'
 import net from 'node:net'
 import type { FastifyInstance } from 'fastify'
+import { requireSuperuser } from '../middleware/auth.js'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
 import { generateEnv } from '../services/generators/env-generator.js'
 import { generateInitDbScript } from '../services/generators/init-db-generator.js'
@@ -802,6 +803,75 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   app.get('/defaults', async (_request, reply) => {
     const modules = getDefaultEnabledModules(registry)
     return reply.send({ enabledModules: modules })
+  })
+
+  /**
+   * SSE: reconcile existing install with the latest service registry.
+   *
+   * Regenerates docker-compose.yml/.env/init-db.sh from the current install state
+   * (reconstructed from the existing .env), then runs `docker compose up -d` to
+   * create any new containers (e.g. workers added in a registry update) without
+   * forcing a recreate of unchanged services.
+   */
+  app.post('/reconcile', { preHandler: requireSuperuser }, async (request, reply) => {
+    const composePath = getComposePath()
+    const composeFile = join(composePath, 'docker-compose.yml')
+
+    if (!existsSync(composeFile)) {
+      return reply.code(400).send({ error: 'No existing install found. Run /generate first.' })
+    }
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+
+    const emit = (data: Record<string, unknown>) => {
+      try {
+        reply.raw.write(`data: ${JSON.stringify(data)}\n\n`)
+      } catch {
+        // Client disconnected
+      }
+    }
+
+    try {
+      const { upgradeCompose } = await import('../services/upgrade/compose-upgrader.js')
+
+      emit({ phase: 'regenerate', message: 'Regenerating compose from latest registry...' })
+      await upgradeCompose(app)
+      emit({ phase: 'regenerate', message: 'Files regenerated.' })
+
+      emit({ phase: 'apply', message: 'Applying changes to running stack...' })
+      const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d'], {
+        cwd: composePath,
+        env: { ...process.env, ...loadEnvFile(composePath) },
+      })
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        emit({ stream: 'stdout', text: chunk.toString() })
+      })
+      child.stderr.on('data', (chunk: Buffer) => {
+        emit({ stream: 'stderr', text: chunk.toString() })
+      })
+
+      request.raw.on('close', () => {
+        child.kill()
+      })
+
+      await new Promise<void>((resolve) => {
+        child.on('close', (code) => {
+          emit({ phase: code === 0 ? 'done' : 'error', message: code === 0 ? 'Reconcile complete.' : `docker compose up exited with code ${code}`, done: true, code })
+          resolve()
+        })
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      emit({ phase: 'error', message: `Reconcile failed: ${message}`, done: true, code: 1 })
+    }
+
+    reply.raw.end()
   })
 }
 

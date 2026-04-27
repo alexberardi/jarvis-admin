@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, Brain, Server } from 'lucide-react'
+import { RefreshCw, Brain, Server, GitMerge } from 'lucide-react'
 import { toast } from 'sonner'
 import { useContainers, useRestartContainer } from '@/hooks/useContainers'
 import { useLlmStatus } from '@/hooks/useLlmSetup'
@@ -180,6 +180,26 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      <div className="flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <div className="flex items-center gap-3">
+          <GitMerge size={20} className="text-[var(--color-text-muted)]" />
+          <div>
+            <p className="text-sm font-medium text-[var(--color-text)]">
+              Sync compose to latest registry
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Regenerate docker-compose.yml and apply changes — adds new background workers and services without recreating unchanged containers
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate('/reconcile')}
+          className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+        >
+          Sync now
+        </button>
+      </div>
 
       {containers.length === 0 && (
         <div className="py-12 text-center">

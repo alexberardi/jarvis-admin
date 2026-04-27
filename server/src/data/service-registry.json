@@ -138,7 +138,17 @@
       ],
       "ipc": "host",
       "shmSize": "8gb",
-      "modelVolume": true
+      "modelVolume": true,
+      "workers": [
+        {
+          "id": "llm-proxy-worker",
+          "command": "python scripts/queue_worker.py",
+          "envOverrides": {
+            "LLM_PROXY_PROCESS_ROLE": "worker",
+            "MODEL_SERVICE_URL": "http://jarvis-llm-proxy-api:7705"
+          }
+        }
+      ]
     },
     {
       "id": "jarvis-notifications",

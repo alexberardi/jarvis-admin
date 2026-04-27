@@ -59,11 +59,16 @@ export async function restartServices(_app: FastifyInstance, emit: Emit): Promis
   const env = { ...process.env, ...loadEnvFromFile(composePath) }
   const registry = parseRegistry(registryData)
 
-  // Get all service names except tier 0-1 (config-service, auth — already running)
+  // Get all service names except tier 0-1 (config-service, auth — already running).
+  // Workers are always included — registry may have added new ones since install.
   const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth'])
-  const remaining = registry.services
+  const remainingServices = registry.services
     .filter((s: ServiceDefinition) => !alreadyRunning.has(s.id))
     .map((s: ServiceDefinition) => s.id)
+  const workerIds = registry.services.flatMap((s: ServiceDefinition) =>
+    (s.workers ?? []).map((w) => w.id),
+  )
+  const remaining = [...remainingServices, ...workerIds]
 
   emit({ phase: 'restart', message: `Restarting ${remaining.length} services...` })
 

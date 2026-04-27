@@ -4,6 +4,7 @@ import type {
   ServiceRegistry,
   ServiceDefinition,
   InfrastructureDefinition,
+  WorkerDefinition,
 } from '../../types/service-registry.js'
 import {
   getCoreServices,
@@ -46,6 +47,11 @@ export function getComposeServices(
   return all
 }
 
+/** Worker container IDs emitted alongside the given services in the compose file. */
+export function getComposeWorkerIds(services: ServiceDefinition[]): string[] {
+  return services.flatMap((s) => (s.workers ?? []).map((w) => w.id))
+}
+
 /**
  * Returns all required infrastructure for the enabled services,
  * plus grafana (if loki is present) and redis (always).
@@ -85,10 +91,16 @@ export function generateCompose(state: WizardState, registry: ServiceRegistry): 
     lines.push(...generateInfraBlock(inf, state))
   }
 
-  // Application services
+  // Application services (and any sibling workers)
   for (const service of composeServices) {
     lines.push('')
     lines.push(...generateServiceBlock(service, state, registry))
+    if (service.workers) {
+      for (const worker of service.workers) {
+        lines.push('')
+        lines.push(...generateWorkerBlock(worker, service, state, registry))
+      }
+    }
   }
 
   // Networks
@@ -191,17 +203,8 @@ function generateInfraBlock(
   return lines
 }
 
-function generateServiceBlock(
-  service: ServiceDefinition,
-  state: WizardState,
-  registry: ServiceRegistry,
-): string[] {
-  const lines: string[] = []
-  const portVar = serviceIdToPortVar(service.id)
-  const hostPort = state.portOverrides[service.id] ?? service.port
+function getServiceImage(service: ServiceDefinition, state: WizardState): string {
   let image = service.ghcrImage ?? service.image
-
-  // GPU services: select the Docker image variant matching the detected GPU
   if (service.gpu && state.hardware?.gpuType) {
     const variantSuffix: Record<string, string> = {
       nvidia: '-cuda',
@@ -211,16 +214,52 @@ function generateServiceBlock(
     }
     const suffix = variantSuffix[state.hardware.gpuType]
     if (suffix) {
-      // Append variant to tag: ghcr.io/.../image:dev → ghcr.io/.../image:dev-vulkan
-      // If no tag, append :latest-variant
-      if (image.includes(':')) {
-        image = image + suffix
-      } else {
-        image = image + ':latest' + suffix
-      }
+      image = image.includes(':') ? image + suffix : image + ':latest' + suffix
     }
-    // apple = runs natively on macOS, not in Docker — no variant needed
   }
+  return image
+}
+
+function pushGpuConfig(
+  lines: string[],
+  service: ServiceDefinition,
+  state: WizardState,
+): void {
+  if (!service.gpu) return
+  const gpuType = state.hardware?.gpuType ?? 'none'
+  if (gpuType === 'nvidia') {
+    lines.push('    ipc: host')
+    lines.push('    shm_size: "8gb"')
+    lines.push('    deploy:')
+    lines.push('      resources:')
+    lines.push('        reservations:')
+    lines.push('          devices:')
+    lines.push('            - driver: nvidia')
+    lines.push('              count: all')
+    lines.push('              capabilities: [gpu]')
+  } else if (gpuType === 'amd' || gpuType === 'amd-rocm') {
+    lines.push('    devices:')
+    lines.push('      - /dev/dri:/dev/dri')
+    lines.push('      - /dev/kfd:/dev/kfd')
+    lines.push('    ipc: host')
+    lines.push('    shm_size: "8gb"')
+    lines.push('    group_add:')
+    lines.push('      - video')
+    lines.push('      - render')
+  } else {
+    lines.push('    ipc: host')
+  }
+}
+
+function generateServiceBlock(
+  service: ServiceDefinition,
+  state: WizardState,
+  registry: ServiceRegistry,
+): string[] {
+  const lines: string[] = []
+  const portVar = serviceIdToPortVar(service.id)
+  const hostPort = state.portOverrides[service.id] ?? service.port
+  const image = getServiceImage(service, state)
 
   lines.push(`  ${service.id}:`)
   lines.push(`    image: ${image}`)
@@ -355,33 +394,8 @@ function generateServiceBlock(
     lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
   }
 
-  // GPU services: deploy config varies by detected GPU type
+  pushGpuConfig(lines, service, state)
   const isGpu = service.gpu === true
-  const gpuType = state.hardware?.gpuType ?? 'none'
-  if (isGpu && gpuType === 'nvidia') {
-    lines.push('    ipc: host')
-    lines.push('    shm_size: "8gb"')
-    lines.push('    deploy:')
-    lines.push('      resources:')
-    lines.push('        reservations:')
-    lines.push('          devices:')
-    lines.push('            - driver: nvidia')
-    lines.push('              count: all')
-    lines.push('              capabilities: [gpu]')
-  } else if (isGpu && (gpuType === 'amd' || gpuType === 'amd-rocm')) {
-    // AMD: pass through DRI render node + KFD (ROCm kernel fusion driver)
-    lines.push('    devices:')
-    lines.push('      - /dev/dri:/dev/dri')
-    lines.push('      - /dev/kfd:/dev/kfd')
-    lines.push('    ipc: host')
-    lines.push('    shm_size: "8gb"')
-    lines.push('    group_add:')
-    lines.push('      - video')
-    lines.push('      - render')
-  } else if (isGpu) {
-    // CPU-only or Apple (runs natively on macOS, no GPU passthrough needed)
-    lines.push('    ipc: host')
-  }
 
   // Volumes
   const vols: string[] = []
@@ -422,6 +436,120 @@ function generateServiceBlock(
   } else if (service.database) {
     lines.push('      start_period: 30s')
   }
+
+  lines.push('    networks:')
+  lines.push('      - jarvis')
+  lines.push('    restart: unless-stopped')
+
+  return lines
+}
+
+function generateWorkerBlock(
+  worker: WorkerDefinition,
+  parent: ServiceDefinition,
+  state: WizardState,
+  registry: ServiceRegistry,
+): string[] {
+  const lines: string[] = []
+  const image = getServiceImage(parent, state)
+  const overrides = worker.envOverrides ?? {}
+  const overrideKeys = new Set(Object.keys(overrides))
+
+  lines.push(`  ${worker.id}:`)
+  lines.push(`    image: ${image}`)
+  lines.push(`    container_name: ${worker.id}`)
+
+  lines.push('    environment:')
+
+  if (parent.database) {
+    const driver = parent.dbDriverPrefix ?? 'postgresql://'
+    const dbUrl = `${driver}\${DB_USER:-jarvis}:\${POSTGRES_PASSWORD}@postgres:5432/${parent.database}`
+    if (!overrideKeys.has('DATABASE_URL')) lines.push(`      DATABASE_URL: ${dbUrl}`)
+    if (!overrideKeys.has('MIGRATIONS_DATABASE_URL')) {
+      lines.push(`      MIGRATIONS_DATABASE_URL: ${dbUrl}`)
+    }
+  }
+
+  for (const env of parent.envVars) {
+    if (env.name === 'DATABASE_URL' || env.name === 'MIGRATIONS_DATABASE_URL') continue
+    if (overrideKeys.has(env.name)) continue
+    if (env.secretRef) {
+      lines.push(`      ${env.name}: \${${env.secretRef}}`)
+    } else if (env.default) {
+      lines.push(`      ${env.name}: ${env.default}`)
+    }
+  }
+
+  const appKeySuffix = parent.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase()
+  if (!overrideKeys.has('JARVIS_APP_ID')) {
+    lines.push(`      JARVIS_APP_ID: \${JARVIS_APP_ID_${appKeySuffix}:-}`)
+  }
+  if (!overrideKeys.has('JARVIS_APP_KEY')) {
+    lines.push(`      JARVIS_APP_KEY: \${JARVIS_APP_KEY_${appKeySuffix}:-}`)
+  }
+
+  const parentHasAuthUrl = parent.envVars.some((e) => e.name === 'JARVIS_AUTH_BASE_URL')
+  if (
+    parent.dependsOn.includes('jarvis-auth') &&
+    !parentHasAuthUrl &&
+    !overrideKeys.has('JARVIS_AUTH_BASE_URL')
+  ) {
+    lines.push('      JARVIS_AUTH_BASE_URL: http://host.docker.internal:${AUTH_PORT:-7701}')
+  }
+
+  // Mirror llm-proxy backend env so the worker can resolve models + queue.
+  // Override defaults (notably MODEL_SERVICE_URL) come from worker.envOverrides.
+  if (parent.id === 'jarvis-llm-proxy-api') {
+    const llmProxyEnv: Array<[string, string]> = [
+      ['MODEL_SERVICE_URL', 'http://localhost:7705'],
+      ['MODEL_SERVICE_PORT', '"7705"'],
+      ['VLLM_WORKER_MULTIPROC_METHOD', 'spawn'],
+      ['JARVIS_MODEL_BACKEND', '${JARVIS_MODEL_BACKEND:-GGUF}'],
+      ['JARVIS_MODEL_NAME', '${JARVIS_MODEL_NAME:-}'],
+      ['JARVIS_MODEL_CHAT_FORMAT', '${JARVIS_MODEL_CHAT_FORMAT:-chatml}'],
+      ['JARVIS_MODEL_CONTEXT_WINDOW', '${JARVIS_MODEL_CONTEXT_WINDOW:-32768}'],
+      ['HUGGINGFACE_HUB_TOKEN', '${HUGGINGFACE_HUB_TOKEN:-}'],
+      ['REDIS_URL', 'redis://:${REDIS_PASSWORD}@redis:6379/0'],
+    ]
+    for (const [key, val] of llmProxyEnv) {
+      if (!overrideKeys.has(key)) lines.push(`      ${key}: ${val}`)
+    }
+  }
+
+  for (const [key, val] of Object.entries(overrides)) {
+    lines.push(`      ${key}: ${val}`)
+  }
+
+  lines.push(`    command: ${worker.command}`)
+
+  lines.push('    depends_on:')
+  lines.push(`      ${parent.id}:`)
+  lines.push('        condition: service_healthy')
+  for (const dep of parent.dependsOn) {
+    const isInfra = registry.infrastructure.some((i) => i.id === dep)
+    if (!isInfra) continue
+    lines.push(`      ${dep}:`)
+    lines.push(`        condition: ${dep === 'postgres' ? 'service_healthy' : 'service_started'}`)
+  }
+
+  pushGpuConfig(lines, parent, state)
+
+  const vols: string[] = []
+  if (parent.gpu) {
+    vols.push('      - ${MODELS_DIR:-./.models}:/app/.models')
+  }
+  if (parent.volumes) {
+    for (const vol of parent.volumes) {
+      vols.push(`      - ${vol}`)
+    }
+  }
+  if (vols.length > 0) {
+    lines.push('    volumes:')
+    lines.push(...vols)
+  }
+
+  lines.push('    extra_hosts:')
+  lines.push('      - "host.docker.internal:host-gateway"')
 
   lines.push('    networks:')
   lines.push('      - jarvis')
