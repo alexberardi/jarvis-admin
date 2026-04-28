@@ -357,6 +357,16 @@ function generateServiceBlock(
     }
   }
 
+  // CC → go2rtc: inject URL when camera streaming is enabled
+  if (service.id === 'jarvis-command-center' && state.enabledModules.includes('go2rtc')) {
+    lines.push(`      GO2RTC_URL: http://go2rtc:${state.portOverrides['go2rtc'] ?? 1984}`)
+  }
+
+  // CC → relay: inject URL when relay is enabled
+  if (service.id === 'jarvis-command-center' && state.relayEnabled) {
+    lines.push('      JARVIS_RELAY_URL: ${JARVIS_RELAY_URL:-}')
+  }
+
   // go2rtc: standalone streaming gateway, no Jarvis auth/config needed
   if (service.id === 'go2rtc') {
     // No app-to-app auth, no extra environment — skip to volumes/network
