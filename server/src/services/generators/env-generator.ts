@@ -84,6 +84,13 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
     lines.push('')
   }
 
+  // Jarvis Relay
+  if (state.relayEnabled) {
+    lines.push('# --- Jarvis Relay ---')
+    lines.push('JARVIS_RELAY_URL=https://relay.jarvisautomation.io')
+    lines.push('')
+  }
+
   // App-to-app auth placeholders (filled after service registration)
   lines.push('# --- App-to-App Auth (populated after registration) ---')
   for (const svc of allEnabled) {

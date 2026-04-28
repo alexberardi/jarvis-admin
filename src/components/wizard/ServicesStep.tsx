@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Circle, Lock, Loader2 } from 'lucide-react'
+import { CheckCircle2, Circle, Lock, Loader2, Globe } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { getServiceRegistry, getInstallDefaults } from '@/api/install'
@@ -71,6 +71,39 @@ export default function ServicesStep() {
           onToggle={(id, enabled) => dispatch({ type: 'TOGGLE_MODULE', serviceId: id, enabled })}
         />
       )}
+
+      {/* Integrations */}
+      <div>
+        <div className="mb-2 flex items-baseline gap-2">
+          <h3 className="text-sm font-medium text-[var(--color-text)]">Integrations</h3>
+          <span className="text-xs text-[var(--color-text-muted)]">Cloud services</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'SET_RELAY_ENABLED', enabled: !state.relayEnabled })}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+            state.relayEnabled
+              ? 'border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5'
+              : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/30',
+          )}
+        >
+          {state.relayEnabled ? (
+            <CheckCircle2 size={16} className="shrink-0 text-[var(--color-primary)]" />
+          ) : (
+            <Circle size={16} className="shrink-0 text-[var(--color-text-muted)]" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-[var(--color-text)]">Jarvis Relay</span>
+              <Globe size={12} className="text-[var(--color-text-muted)]" />
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Routes OAuth callbacks through a cloud relay for external providers (Google, Spotify, etc.)
+            </p>
+          </div>
+        </button>
+      </div>
     </div>
   )
 }
