@@ -105,6 +105,26 @@ describe('env-generator', () => {
     })
   })
 
+  describe('MODELS_DIR (admin-in-docker)', () => {
+    it('writes absolute MODELS_DIR when state.hostComposePath is set', () => {
+      const state = makeState({ hostComposePath: '/home/jarvis/.jarvis/compose' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('MODELS_DIR=/home/jarvis/.jarvis/compose/.models')
+    })
+
+    it('strips trailing slash from hostComposePath', () => {
+      const state = makeState({ hostComposePath: '/var/lib/jarvis/' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('MODELS_DIR=/var/lib/jarvis/.models')
+    })
+
+    it('omits MODELS_DIR when hostComposePath is unset (native install)', () => {
+      const state = makeState({ hostComposePath: undefined })
+      const output = generateEnv(state, registry)
+      expect(output).not.toContain('MODELS_DIR=')
+    })
+  })
+
   describe('Jarvis Relay', () => {
     it('writes JARVIS_RELAY_URL with default when enabled and no custom URL', () => {
       const state = makeState({ relayEnabled: true, relayUrl: '' })

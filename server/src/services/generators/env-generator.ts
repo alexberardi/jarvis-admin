@@ -91,6 +91,17 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
     lines.push('')
   }
 
+  // Models directory (absolute HOST path, for admin-in-docker reconciles).
+  // Without this, the compose's `${MODELS_DIR:-./.models}` resolves relative
+  // to the admin container's working dir (/host/compose/.models), which the
+  // docker daemon then binds to a non-existent host path → empty /app/.models
+  // → llm-proxy's model_service crashes on startup.
+  if (state.hostComposePath) {
+    lines.push('# --- Models Directory (host absolute path) ---')
+    lines.push(`MODELS_DIR=${state.hostComposePath.replace(/\/$/, '')}/.models`)
+    lines.push('')
+  }
+
   // App-to-app auth placeholders (filled after service registration)
   lines.push('# --- App-to-App Auth (populated after registration) ---')
   for (const svc of allEnabled) {
