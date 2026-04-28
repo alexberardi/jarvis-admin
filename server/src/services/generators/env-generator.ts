@@ -87,7 +87,7 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   // Jarvis Relay
   if (state.relayEnabled) {
     lines.push('# --- Jarvis Relay ---')
-    lines.push('JARVIS_RELAY_URL=https://relay.jarvisautomation.io')
+    lines.push(`JARVIS_RELAY_URL=${state.relayUrl || 'https://relay.jarvisautomation.io'}`)
     lines.push('')
   }
 

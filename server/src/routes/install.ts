@@ -805,10 +805,41 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   /**
    * SSE: reconcile existing install with the latest service registry.
    *
+   * Returns the current optional services and integration toggles for the
+   * reconcile options screen. Pre-populates from the existing .env.
+   */
+  app.get('/reconcile/options', { preHandler: requireSuperuser }, async (_request, reply) => {
+    const composePath = getComposePath()
+    const env = loadEnvFile(composePath)
+    const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
+    const state = reconstructWizardState(env, registry)
+
+    // Build options: optional + recommended services with current enabled state
+    const options = registry.services
+      .filter((s) => s.category === 'optional' || s.category === 'recommended')
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        category: s.category,
+        enabled: s.category === 'core' || state.enabledModules.includes(s.id),
+      }))
+
+    return reply.send({
+      services: options,
+      relayEnabled: state.relayEnabled,
+      relayUrl: env.JARVIS_RELAY_URL || 'https://relay.jarvisautomation.io',
+    })
+  })
+
+  /**
    * Regenerates docker-compose.yml/.env/init-db.sh from the current install state
    * (reconstructed from the existing .env), then runs `docker compose up -d` to
    * create any new containers (e.g. workers added in a registry update) without
    * forcing a recreate of unchanged services.
+   *
+   * Accepts optional body: { enabledModules?: string[], relayEnabled?: boolean }
+   * to override the reconstructed state with user selections from the options screen.
    */
   app.post('/reconcile', { preHandler: requireSuperuser }, async (request, reply) => {
     const composePath = getComposePath()
@@ -838,8 +869,14 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
       const { getComposeServices, getComposeWorkerIds } = await import('../services/generators/compose-generator.js')
 
+      // Apply user overrides from the options screen (if provided)
+      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string } | null
+      const overrides = body?.enabledModules || body?.relayEnabled !== undefined
+        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl }
+        : undefined
+
       emit({ phase: 'regenerate', message: 'Regenerating compose from latest registry...' })
-      await upgradeCompose(app)
+      await upgradeCompose(app, overrides)
       emit({ phase: 'regenerate', message: 'Files regenerated.' })
 
       // Build the explicit service list for `docker compose up -d` and EXCLUDE

@@ -37,7 +37,16 @@ function loadEnvFile(composePath: string): Record<string, string> {
  * 5. Generate new env template, merge with existing values
  * 6. Regenerate init-db.sh for any new databases
  */
-export async function upgradeCompose(_app: FastifyInstance): Promise<void> {
+export interface UpgradeOverrides {
+  enabledModules?: string[]
+  relayEnabled?: boolean
+  relayUrl?: string
+}
+
+export async function upgradeCompose(
+  _app: FastifyInstance,
+  overrides?: UpgradeOverrides,
+): Promise<void> {
   const composePath = getComposePath()
   const registry: ServiceRegistry = parseRegistry(registryData)
 
@@ -56,8 +65,17 @@ export async function upgradeCompose(_app: FastifyInstance): Promise<void> {
   // Step 2: Load existing env
   const existingEnv = loadEnvFile(composePath)
 
-  // Step 3: Reconstruct state
+  // Step 3: Reconstruct state, apply overrides from reconcile options
   const state = reconstructWizardState(existingEnv, registry)
+  if (overrides?.enabledModules) {
+    state.enabledModules = overrides.enabledModules
+  }
+  if (overrides?.relayEnabled !== undefined) {
+    state.relayEnabled = overrides.relayEnabled
+  }
+  if (overrides?.relayUrl) {
+    state.relayUrl = overrides.relayUrl
+  }
 
   // Step 4: Generate new compose
   const newCompose = generateCompose(state, registry)
