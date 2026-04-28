@@ -38,7 +38,21 @@ export function detectGpuType(): GpuType {
       })
       return 'nvidia'
     } catch {
-      // Not NVIDIA; try AMD
+      // Not NVIDIA via nvidia-smi. We may be inside a docker container without
+      // nvidia-smi on PATH — fall back to asking the docker daemon (if its
+      // socket is mounted, which it is for jarvis-admin) whether it has the
+      // nvidia runtime registered. Presence of the runtime strongly implies
+      // the host has a CUDA-capable GPU and nvidia-container-toolkit installed.
+      try {
+        const runtimes = execSync('docker info --format "{{json .Runtimes}}" 2>/dev/null', {
+          encoding: 'utf-8',
+          timeout: 5_000,
+          stdio: 'pipe',
+        })
+        if (/"nvidia"/.test(runtimes)) return 'nvidia'
+      } catch {
+        // Docker socket not available either; try AMD.
+      }
     }
 
     // AMD: lspci reports VGA/Display class with "AMD" or "Advanced Micro Devices".
