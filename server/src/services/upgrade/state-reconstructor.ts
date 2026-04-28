@@ -56,6 +56,7 @@ export function reconstructWizardState(
 
   // Detect relay
   const relayEnabled = !!existingEnv.JARVIS_RELAY_URL
+  const relayUrl = existingEnv.JARVIS_RELAY_URL || ''
 
   // Re-detect hardware at reconcile time. The .env doesn't store the user's
   // original wizard hardware selection, so without this, state.hardware stays
@@ -91,5 +92,6 @@ export function reconstructWizardState(
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
     relayEnabled,
+    relayUrl,
   }
 }
