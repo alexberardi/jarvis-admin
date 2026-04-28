@@ -10,6 +10,7 @@ import { reconstructWizardState } from './state-reconstructor.js'
 import { mergeEnv } from './env-merger.js'
 import { VERSION } from '../../version.js'
 import { getComposePath } from '../compose-path.js'
+import { getHostComposePath } from '../host-paths.js'
 import registryData from '../../data/service-registry.json' with { type: 'json' }
 
 function loadEnvFile(composePath: string): Record<string, string> {
@@ -75,6 +76,16 @@ export async function upgradeCompose(
   }
   if (overrides?.relayUrl) {
     state.relayUrl = overrides.relayUrl
+  }
+
+  // When admin runs in docker, fetch the absolute host path of the compose
+  // dir we were mounted at. env-generator uses it to write MODELS_DIR so
+  // bind mounts in the regenerated compose resolve on the host (otherwise
+  // they resolve to /host/compose/.models — a path that exists in the admin
+  // container but not on the host, so the daemon binds an empty directory).
+  const hostPath = await getHostComposePath()
+  if (hostPath) {
+    state.hostComposePath = hostPath
   }
 
   // Step 4: Generate new compose

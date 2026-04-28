@@ -36,6 +36,13 @@ export interface WizardState {
   /** Jarvis Relay (OAuth callback proxy at https://relay.jarvisautomation.io). */
   relayEnabled: boolean
   relayUrl: string
+  /**
+   * Absolute HOST path to the compose directory, for admin-in-docker reconciles.
+   * When set, env-generator writes MODELS_DIR=<this>/.models so the generated
+   * compose's bind mount resolves to a real host directory rather than the
+   * admin container's view (which is invisible to the docker daemon).
+   */
+  hostComposePath?: string
 }
 
 export interface InstallStatus {
