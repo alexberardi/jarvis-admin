@@ -835,16 +835,31 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
     try {
       const { upgradeCompose } = await import('../services/upgrade/compose-upgrader.js')
+      const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
+      const { getComposeServices, getComposeWorkerIds } = await import('../services/generators/compose-generator.js')
 
       emit({ phase: 'regenerate', message: 'Regenerating compose from latest registry...' })
       await upgradeCompose(app)
       emit({ phase: 'regenerate', message: 'Files regenerated.' })
 
-      emit({ phase: 'apply', message: 'Applying changes to running stack...' })
-      const child = spawn('docker', ['compose', '-f', composeFile, 'up', '-d'], {
-        cwd: composePath,
-        env: { ...process.env, ...loadEnvFile(composePath) },
-      })
+      // Build the explicit service list for `docker compose up -d` and EXCLUDE
+      // jarvis-admin. Including admin causes admin (which is the parent of this
+      // very docker compose process) to recreate itself mid-sweep — the child
+      // process gets SIGKILLed when the old admin container dies and remaining
+      // services are left in Created state. User updates admin separately via
+      // `docker compose pull jarvis-admin && docker compose up -d --force-recreate jarvis-admin`.
+      const env = loadEnvFile(composePath)
+      const reconstructed = reconstructWizardState(env, registry)
+      const composeServices = getComposeServices(reconstructed, registry)
+      const serviceIds = composeServices.filter((s) => s.id !== 'jarvis-admin').map((s) => s.id)
+      const workerIds = getComposeWorkerIds(composeServices)
+
+      emit({ phase: 'apply', message: `Applying changes to ${serviceIds.length} services + ${workerIds.length} workers (admin excluded — update separately)...` })
+      const child = spawn(
+        'docker',
+        ['compose', '-f', composeFile, 'up', '-d', ...serviceIds, ...workerIds],
+        { cwd: composePath, env: { ...process.env, ...env } },
+      )
 
       child.stdout.on('data', (chunk: Buffer) => {
         emit({ stream: 'stdout', text: chunk.toString() })
@@ -859,7 +874,11 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
       await new Promise<void>((resolve) => {
         child.on('close', (code) => {
-          emit({ phase: code === 0 ? 'done' : 'error', message: code === 0 ? 'Reconcile complete.' : `docker compose up exited with code ${code}`, done: true, code })
+          if (code === 0) {
+            emit({ phase: 'done', message: 'Reconcile complete. To pick up admin changes: docker compose pull jarvis-admin && docker compose up -d --force-recreate jarvis-admin', done: true, code: 0 })
+          } else {
+            emit({ phase: 'error', message: `docker compose up exited with code ${code}`, done: true, code })
+          }
           resolve()
         })
       })
