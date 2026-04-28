@@ -26,6 +26,7 @@ function makePi5State(): WizardState {
     whisperModel: 'base.en',
     llmInterface: 'Qwen25MediumUntrained',
     deploymentMode: 'remote-llm',
+    deploymentTarget: 'standard',
     remoteLlmUrl: 'http://192.168.1.100:7704',
     remoteWhisperUrl: 'http://192.168.1.100:7706',
     platform: 'linux',
@@ -35,9 +36,12 @@ function makePi5State(): WizardState {
       totalMemoryGb: 8,
       gpuName: null,
       gpuVramMb: null,
+      gpuType: 'none',
       recommendedBackends: ['gguf'],
       recommendedBackend: 'remote',
     },
+    relayEnabled: false,
+    relayUrl: '',
   }
 }
 

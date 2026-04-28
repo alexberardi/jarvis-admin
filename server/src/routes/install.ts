@@ -828,7 +828,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({
       services: options,
       relayEnabled: state.relayEnabled,
-      relayUrl: env.JARVIS_RELAY_URL || 'https://relay.jarvisautomation.io',
+      relayUrl: state.relayUrl || 'https://relay.jarvisautomation.io',
     })
   })
 

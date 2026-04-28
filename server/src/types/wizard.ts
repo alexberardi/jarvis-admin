@@ -33,8 +33,9 @@ export interface WizardState {
   remoteWhisperUrl: string
   platform: 'darwin' | 'linux'
   hardware: HardwareInfo | null
-  relayEnabled?: boolean
-  relayUrl?: string
+  /** Jarvis Relay (OAuth callback proxy at https://relay.jarvisautomation.io). */
+  relayEnabled: boolean
+  relayUrl: string
 }
 
 export interface InstallStatus {

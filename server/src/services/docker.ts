@@ -44,10 +44,19 @@ function toContainerInfo(container: Docker.ContainerInfo): ContainerInfo {
   }
 }
 
+/**
+ * Containers we manage that don't follow the jarvis-* naming convention.
+ * Add new entries when the registry gains a third-party service whose upstream
+ * image hardcodes its container_name (e.g. go2rtc) — otherwise the Dashboard
+ * silently omits them.
+ */
+const NON_PREFIXED_MANAGED_CONTAINERS = new Set(['go2rtc'])
+
 function isJarvisContainer(container: Docker.ContainerInfo): boolean {
   if (container.Labels['com.jarvis.managed'] === 'true') return true
   const name = container.Names[0]?.replace(/^\//, '') ?? ''
-  return name.startsWith('jarvis-') || name.startsWith('jarvis_')
+  if (name.startsWith('jarvis-') || name.startsWith('jarvis_')) return true
+  return NON_PREFIXED_MANAGED_CONTAINERS.has(name)
 }
 
 export async function createDockerService(socketPath: string): Promise<DockerService | null> {
