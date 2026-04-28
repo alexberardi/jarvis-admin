@@ -33,7 +33,8 @@ export interface WizardState {
   remoteWhisperUrl: string
   platform: 'darwin' | 'linux'
   hardware: HardwareInfo | null
-  relayEnabled: boolean
+  /** In-flight Jarvis Relay integration. Optional until the full feature lands. */
+  relayEnabled?: boolean
 }
 
 export interface InstallStatus {
