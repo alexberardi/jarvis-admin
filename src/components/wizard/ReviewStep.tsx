@@ -97,6 +97,21 @@ export default function ReviewStep() {
         </div>
       </div>
 
+      {/* Jarvis Relay */}
+      {state.relayEnabled && (
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-4">
+          <p className="text-xs font-medium uppercase text-[var(--color-text-muted)]">
+            Jarvis Relay
+          </p>
+          <p className="mt-1 text-sm font-medium text-[var(--color-text)]">
+            Enabled
+          </p>
+          <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
+            https://relay.jarvisautomation.io
+          </p>
+        </div>
+      )}
+
       {/* Port Conflicts */}
       {conflicts.length > 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
