@@ -451,22 +451,23 @@ function generateServiceBlock(
   lines.push('    extra_hosts:')
   lines.push('      - "host.docker.internal:host-gateway"')
 
-  // Healthcheck
-  lines.push('    healthcheck:')
-  if (service.id === 'jarvis-command-center') {
-    // CC image doesn't include curl — use python urllib instead
+  // Healthcheck. Default to python urllib since most service images are
+  // python:slim-based and don't ship curl — using curl made auth/config-service/
+  // logs/notifications all report unhealthy despite the endpoint working.
+  // jarvis-web is Next.js (Node), no python — skip the healthcheck for it
+  // rather than emit one that always fails.
+  if (service.id !== 'jarvis-web') {
+    lines.push('    healthcheck:')
     lines.push(`      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${containerPort}${service.healthCheck}')"]`)
-  } else {
-    lines.push(`      test: ["CMD", "curl", "-f", "http://localhost:${containerPort}${service.healthCheck}"]`)
-  }
-  lines.push('      interval: 30s')
-  lines.push('      timeout: 10s')
-  lines.push('      retries: 3')
-  // LLM proxy needs extra time for model loading
-  if (service.id === 'jarvis-llm-proxy-api') {
-    lines.push('      start_period: 120s')
-  } else if (service.database) {
-    lines.push('      start_period: 30s')
+    lines.push('      interval: 30s')
+    lines.push('      timeout: 10s')
+    lines.push('      retries: 3')
+    // LLM proxy needs extra time for model loading
+    if (service.id === 'jarvis-llm-proxy-api') {
+      lines.push('      start_period: 120s')
+    } else if (service.database) {
+      lines.push('      start_period: 30s')
+    }
   }
 
   lines.push('    networks:')
