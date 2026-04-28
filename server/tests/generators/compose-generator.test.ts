@@ -25,10 +25,13 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     whisperModel: 'base.en',
     llmInterface: 'JarvisToolModel',
     deploymentMode: 'local',
+    deploymentTarget: 'standard',
     remoteLlmUrl: '',
     remoteWhisperUrl: '',
     platform: 'linux',
     hardware: null,
+    relayEnabled: false,
+    relayUrl: '',
     ...overrides,
   }
 }
@@ -245,6 +248,22 @@ describe('compose-generator', () => {
       const output = generateCompose(state, registry)
       expect(output).toContain('JARVIS_LLM_PROXY_URL: http://192.168.1.100:7704')
       expect(output).toContain('JARVIS_WHISPER_URL: http://192.168.1.100:7706')
+    })
+  })
+
+  describe('Jarvis Relay', () => {
+    it('emits JARVIS_RELAY_URL templated env on command-center when enabled', () => {
+      const state = makeState({ relayEnabled: true, relayUrl: 'https://relay.example.com' })
+      const output = generateCompose(state, registry)
+      // Admin uses .env substitution — the value goes into .env via env-generator;
+      // the compose just references the var. See env-generator.test.ts for the value test.
+      expect(output).toContain('JARVIS_RELAY_URL: ${JARVIS_RELAY_URL:-}')
+    })
+
+    it('omits JARVIS_RELAY_URL on command-center when disabled', () => {
+      const state = makeState({ relayEnabled: false })
+      const output = generateCompose(state, registry)
+      expect(output).not.toContain('JARVIS_RELAY_URL:')
     })
   })
 

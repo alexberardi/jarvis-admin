@@ -26,10 +26,13 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     whisperModel: 'base.en',
     llmInterface: 'JarvisToolModel',
     deploymentMode: 'local',
+    deploymentTarget: 'standard',
     remoteLlmUrl: '',
     remoteWhisperUrl: '',
     platform: 'linux',
     hardware: null,
+    relayEnabled: false,
+    relayUrl: '',
     ...overrides,
   }
 }
@@ -99,6 +102,26 @@ describe('env-generator', () => {
       const output = generateEnv(state, registry)
       expect(output).not.toContain('JARVIS_LLM_PROXY_URL=')
       expect(output).not.toContain('JARVIS_WHISPER_URL=')
+    })
+  })
+
+  describe('Jarvis Relay', () => {
+    it('writes JARVIS_RELAY_URL with default when enabled and no custom URL', () => {
+      const state = makeState({ relayEnabled: true, relayUrl: '' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_RELAY_URL=https://relay.jarvisautomation.io')
+    })
+
+    it('writes JARVIS_RELAY_URL with custom value when provided', () => {
+      const state = makeState({ relayEnabled: true, relayUrl: 'https://relay.example.com' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_RELAY_URL=https://relay.example.com')
+    })
+
+    it('omits JARVIS_RELAY_URL entirely when relayEnabled is false', () => {
+      const state = makeState({ relayEnabled: false, relayUrl: 'https://relay.example.com' })
+      const output = generateEnv(state, registry)
+      expect(output).not.toContain('JARVIS_RELAY_URL=')
     })
   })
 })

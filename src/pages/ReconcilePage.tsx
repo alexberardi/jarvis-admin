@@ -284,10 +284,12 @@ export default function ReconcilePage() {
             Sync now
           </button>
         )}
-        {phase === 'done' && (
+        {/* Back-to-dashboard available in options + done; disabled while reconcile is in flight. */}
+        {(phase === 'options' || phase === 'regenerate' || phase === 'apply' || phase === 'done') && (
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            disabled={phase === 'regenerate' || phase === 'apply'}
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
           >
             <CheckCircle2 size={16} />
             Back to dashboard
