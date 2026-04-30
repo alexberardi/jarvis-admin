@@ -24,6 +24,7 @@ export interface WizardState {
   secrets: Record<string, string>
   dbUser: string
   whisperModel: string
+  whisperModelPath: string
   llmInterface: string
 
   // New: deployment mode

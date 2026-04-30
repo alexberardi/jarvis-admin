@@ -89,6 +89,7 @@ export function reconstructWizardState(
     remoteLlmUrl: existingEnv.JARVIS_LLM_PROXY_URL ?? '',
     remoteWhisperUrl: existingEnv.JARVIS_WHISPER_URL ?? '',
     whisperModel: 'base.en',
+    whisperModelPath: existingEnv.WHISPER_MODEL ?? '/whisper-models/ggml-base.en.bin',
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
     relayEnabled,

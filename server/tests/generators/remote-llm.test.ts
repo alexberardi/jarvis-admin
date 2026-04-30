@@ -24,6 +24,7 @@ function makePi5State(): WizardState {
     secrets: {},
     dbUser: 'jarvis',
     whisperModel: 'base.en',
+    whisperModelPath: '/whisper-models/ggml-base.en.bin',
     llmInterface: 'Qwen25MediumUntrained',
     deploymentMode: 'remote-llm',
     deploymentTarget: 'standard',

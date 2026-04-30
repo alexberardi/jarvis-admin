@@ -42,6 +42,7 @@ export interface UpgradeOverrides {
   enabledModules?: string[]
   relayEnabled?: boolean
   relayUrl?: string
+  whisperModelPath?: string
 }
 
 export async function upgradeCompose(
@@ -76,6 +77,9 @@ export async function upgradeCompose(
   }
   if (overrides?.relayUrl) {
     state.relayUrl = overrides.relayUrl
+  }
+  if (overrides?.whisperModelPath) {
+    state.whisperModelPath = overrides.whisperModelPath
   }
 
   // When admin runs in docker, fetch the absolute host path of the compose

@@ -829,6 +829,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       services: options,
       relayEnabled: state.relayEnabled,
       relayUrl: state.relayUrl || 'https://relay.jarvisautomation.io',
+      whisperModelPath: state.whisperModelPath || '/whisper-models/ggml-base.en.bin',
     })
   })
 
@@ -870,9 +871,9 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const { getComposeServices, getComposeWorkerIds } = await import('../services/generators/compose-generator.js')
 
       // Apply user overrides from the options screen (if provided)
-      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string } | null
-      const overrides = body?.enabledModules || body?.relayEnabled !== undefined
-        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl }
+      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string } | null
+      const overrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperModelPath
+        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperModelPath: body?.whisperModelPath }
         : undefined
 
       emit({ phase: 'regenerate', message: 'Regenerating compose from latest registry...' })
