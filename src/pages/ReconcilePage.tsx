@@ -17,6 +17,7 @@ interface ReconcileOptions {
   services: ServiceOption[]
   relayEnabled: boolean
   relayUrl: string
+  whisperModelPath: string
 }
 
 interface LogLine {
@@ -43,6 +44,7 @@ export default function ReconcilePage() {
   const [serviceOptions, setServiceOptions] = useState<ServiceOption[]>([])
   const [relayEnabled, setRelayEnabled] = useState(false)
   const [relayUrl, setRelayUrl] = useState('https://relay.jarvisautomation.io')
+  const [whisperModelPath, setWhisperModelPath] = useState('/whisper-models/ggml-base.en.bin')
 
   const addLog = useCallback((line: LogLine) => {
     setLogs((prev) => [...prev, line])
@@ -66,6 +68,7 @@ export default function ReconcilePage() {
         setServiceOptions(data.services)
         setRelayEnabled(data.relayEnabled)
         setRelayUrl(data.relayUrl || 'https://relay.jarvisautomation.io')
+        setWhisperModelPath(data.whisperModelPath || '/whisper-models/ggml-base.en.bin')
         setPhase('options')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load options')
@@ -95,7 +98,7 @@ export default function ReconcilePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl }),
+        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath }),
       })
 
       if (!res.ok || !res.body) {
@@ -143,7 +146,7 @@ export default function ReconcilePage() {
     const order = Object.keys(PHASE_LABELS)
     const currentIdx = order.indexOf(phase)
     const phaseIdx = order.indexOf(p)
-    return phaseIdx < currentIdx
+    return phaseIdx < currentIdx || (phase === 'done' && p === 'done')
   })
 
   return (
@@ -220,6 +223,25 @@ export default function ReconcilePage() {
               </div>
             )}
           </div>
+
+          {serviceOptions.some((s) => s.id === 'jarvis-whisper-api' && s.enabled) && (
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+              <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Whisper</h2>
+              <div className="px-3">
+                <label className="text-xs font-medium text-[var(--color-text-muted)]">Model path</label>
+                <input
+                  type="text"
+                  value={whisperModelPath}
+                  onChange={(e) => setWhisperModelPath(e.target.value)}
+                  placeholder="/whisper-models/ggml-base.en.bin"
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm font-mono text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+                />
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Path inside the container. Place model files in <code className="rounded bg-[var(--color-bg)] px-1">./whisper-models/</code> next to your compose file.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
