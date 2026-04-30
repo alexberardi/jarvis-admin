@@ -23,6 +23,7 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     secrets: {},
     dbUser: 'jarvis',
     whisperModel: 'base.en',
+    whisperModelPath: '/whisper-models/ggml-base.en.bin',
     llmInterface: 'JarvisToolModel',
     deploymentMode: 'local',
     deploymentTarget: 'standard',

@@ -20,6 +20,7 @@ export interface WizardState {
   secrets: Record<string, string>
   dbUser: string
   whisperModel: string
+  whisperModelPath: string
   llmInterface: string
   deploymentMode: 'local' | 'remote-llm'
   deploymentTarget: 'standard' | 'compose-export'

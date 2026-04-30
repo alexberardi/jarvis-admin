@@ -335,11 +335,12 @@ function generateServiceBlock(
     }
   }
 
-  // Whisper model override for non-default models
+  // Whisper model path override
   const isWhisper = service.id === 'jarvis-whisper-api'
-  const nonDefaultWhisper = isWhisper && state.whisperModel !== 'base.en'
-  if (nonDefaultWhisper) {
-    lines.push(`      WHISPER_MODEL: /whisper-models/ggml-${state.whisperModel}.bin`)
+  const whisperPath = state.whisperModelPath || `/whisper-models/ggml-${state.whisperModel}.bin`
+  const defaultWhisperPath = '/whisper-models/ggml-base.en.bin'
+  if (isWhisper && whisperPath !== defaultWhisperPath) {
+    lines.push(`      WHISPER_MODEL: ${whisperPath}`)
   }
 
   // LLM interface seed for command-center
