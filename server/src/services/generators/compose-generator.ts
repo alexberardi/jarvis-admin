@@ -339,7 +339,7 @@ function generateServiceBlock(
   const isWhisper = service.id === 'jarvis-whisper-api'
   const nonDefaultWhisper = isWhisper && state.whisperModel !== 'base.en'
   if (nonDefaultWhisper) {
-    lines.push(`      WHISPER_MODEL: /models/ggml-${state.whisperModel}.bin`)
+    lines.push(`      WHISPER_MODEL: /whisper-models/ggml-${state.whisperModel}.bin`)
   }
 
   // LLM interface seed for command-center
@@ -438,8 +438,8 @@ function generateServiceBlock(
 
   // Volumes
   const vols: string[] = []
-  if (nonDefaultWhisper) {
-    vols.push('      - ./models:/models:ro')
+  if (isWhisper) {
+    vols.push('      - ./whisper-models:/whisper-models:ro')
   }
   // modelVolume: only LLM-style services that load weights from disk need this
   // bind. Generic GPU services (like whisper, which bakes its model into the image)

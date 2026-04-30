@@ -93,6 +93,7 @@
       "dbDriverPrefix": "postgresql+psycopg2://",
       "gpu": true,
       "cpuFallback": true,
+      "volumes": ["whisper-voice-profiles:/app/voice_profiles"],
       "modelOptions": [
         { "id": "base.en", "name": "Base English", "size": "~140MB", "default": true, "builtin": true },
         { "id": "small.en", "name": "Small English", "size": "~460MB" },
