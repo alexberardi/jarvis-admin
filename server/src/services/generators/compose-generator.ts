@@ -425,8 +425,8 @@ function generateServiceBlock(
     }
   }
 
-  // Command center: run Alembic migrations before starting the server
-  if (service.id === 'jarvis-command-center') {
+  // Services with Alembic migrations: run before starting the server
+  if (service.id === 'jarvis-command-center' || service.id === 'jarvis-whisper-api') {
     lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${containerPort}"]`)
   }
 
