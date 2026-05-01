@@ -442,6 +442,9 @@ export default function ServicesPage() {
                   <option value="http">http</option>
                   <option value="https">https</option>
                   <option value="mqtt">mqtt</option>
+                  <option value="mqtts">mqtts</option>
+                  <option value="ws">ws</option>
+                  <option value="wss">wss</option>
                 </select>
               </div>
             </div>
