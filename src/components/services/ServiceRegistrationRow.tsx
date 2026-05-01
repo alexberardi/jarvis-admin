@@ -168,7 +168,7 @@ export default function ServiceRegistrationRow({
         <button
           type="button"
           onClick={() => {
-            const order = ['http', 'https', 'mqtt']
+            const order = ['http', 'https', 'mqtt', 'mqtts', 'ws', 'wss']
             const next = order[(order.indexOf(scheme) + 1) % order.length]!
             onSchemeChange(next)
           }}
@@ -177,9 +177,11 @@ export default function ServiceRegistrationRow({
             'rounded border px-1.5 py-1 text-xs font-mono',
             scheme === 'https'
               ? 'border-green-500/40 bg-green-500/10 text-green-600 dark:text-green-400'
-              : scheme === 'mqtt'
+              : scheme === 'mqtt' || scheme === 'mqtts'
                 ? 'border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-400'
-                : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)]',
+                : scheme === 'ws' || scheme === 'wss'
+                  ? 'border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                  : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)]',
             'disabled:opacity-50',
           )}
           title="Toggle scheme"
