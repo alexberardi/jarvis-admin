@@ -165,13 +165,9 @@ export default function ServiceRegistrationRow({
       </div>
 
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            const order = ['http', 'https', 'mqtt', 'mqtts', 'ws', 'wss']
-            const next = order[(order.indexOf(scheme) + 1) % order.length]!
-            onSchemeChange(next)
-          }}
+        <select
+          value={scheme}
+          onChange={(e) => onSchemeChange(e.target.value)}
           disabled={disabled}
           className={cn(
             'rounded border px-1.5 py-1 text-xs font-mono',
@@ -184,10 +180,15 @@ export default function ServiceRegistrationRow({
                   : 'border-[var(--color-border)] bg-[var(--color-background)] text-[var(--color-text-muted)]',
             'disabled:opacity-50',
           )}
-          title="Toggle scheme"
+          title="Scheme"
         >
-          {scheme}
-        </button>
+          <option value="http">http</option>
+          <option value="https">https</option>
+          <option value="mqtt">mqtt</option>
+          <option value="mqtts">mqtts</option>
+          <option value="ws">ws</option>
+          <option value="wss">wss</option>
+        </select>
         <input
           type="text"
           value={host}
