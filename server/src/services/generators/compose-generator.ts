@@ -171,6 +171,10 @@ function generateInfraBlock(
   if (infra.port) {
     lines.push('    ports:')
     lines.push(`      - "\${${portVar}:-${hostPort}}:${infra.port}"`)
+    if (infra.id === 'mosquitto') {
+      // WebSocket listener for external nodes via Cloudflare Tunnel
+      lines.push('      - "${MOSQUITTO_WS_PORT:-9883}:9001"')
+    }
   }
 
   // Environment
@@ -191,9 +195,11 @@ function generateInfraBlock(
     lines.push('    command: redis-server --requirepass ${REDIS_PASSWORD}')
   }
 
-  // Mosquitto needs a config for anonymous access (no config file needed)
+  // Mosquitto needs a config for anonymous access (no config file needed).
+  // Two listeners: raw MQTT on 1884 (LAN nodes) and WebSockets on 9001
+  // (external nodes via Cloudflare Tunnel; CF terminates TLS).
   if (infra.id === 'mosquitto') {
-    lines.push('    command: ["sh", "-c", "echo -e \'listener 1884\\nallow_anonymous true\\npersistence true\\npersistence_location /mosquitto/data/\' > /tmp/mosquitto.conf && exec mosquitto -c /tmp/mosquitto.conf"]')
+    lines.push('    command: ["sh", "-c", "echo -e \'listener 1884\\nprotocol mqtt\\nlistener 9001\\nprotocol websockets\\nallow_anonymous true\\npersistence true\\npersistence_location /mosquitto/data/\' > /tmp/mosquitto.conf && exec mosquitto -c /tmp/mosquitto.conf"]')
   }
 
   // Postgres needs healthcheck and init-db mount
