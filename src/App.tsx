@@ -12,6 +12,7 @@ import ServicesPage from '@/pages/ServicesPage'
 import DashboardPage from '@/pages/DashboardPage'
 import NodesPage from '@/pages/NodesPage'
 import ModelsPage from '@/pages/ModelsPage'
+import QuickSetsPage from '@/pages/QuickSetsPage'
 import UpdatePage from '@/pages/UpdatePage'
 import ReconcilePage from '@/pages/ReconcilePage'
 import NotFoundPage from '@/pages/NotFoundPage'
@@ -62,6 +63,7 @@ function AppRoutes() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/models" element={<ModelsPage />} />
+        <Route path="/quick-sets" element={<QuickSetsPage />} />
         <Route path="/update" element={<UpdatePage />} />
         <Route path="/reconcile" element={<ReconcilePage />} />
         <Route path="/nodes" element={<NodesPage />} />
