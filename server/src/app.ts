@@ -16,6 +16,7 @@ import { quickSetsRoutes } from './routes/quick-sets.js'
 import { modelsRoutes } from './routes/models.js'
 import { updateRoutes } from './routes/update.js'
 import { installRoutes } from './routes/install.js'
+import { tracesRoutes } from './routes/traces.js'
 import { resolveServiceUrls } from './services/configService.js'
 import type { DockerService } from './services/docker.js'
 import type { ComposeService } from './services/compose.js'
@@ -119,6 +120,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(modelsRoutes, { prefix: '/api/models' })
   await app.register(updateRoutes, { prefix: '/api/update' })
   await app.register(installRoutes, { prefix: '/api/install' })
+  await app.register(tracesRoutes, { prefix: '/api/traces' })
 
   // Serve static frontend in production
   if (config.staticDir && existsSync(config.staticDir)) {

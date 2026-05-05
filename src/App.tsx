@@ -15,6 +15,8 @@ import ModelsPage from '@/pages/ModelsPage'
 import QuickSetsPage from '@/pages/QuickSetsPage'
 import UpdatePage from '@/pages/UpdatePage'
 import ReconcilePage from '@/pages/ReconcilePage'
+import TracesPage from '@/pages/TracesPage'
+import TraceDetailPage from '@/pages/TraceDetailPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 import SetupWizard from '@/pages/SetupWizard'
 import LlmSetupWizard from '@/pages/LlmSetupWizard'
@@ -64,6 +66,8 @@ function AppRoutes() {
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/quick-sets" element={<QuickSetsPage />} />
+        <Route path="/traces" element={<TracesPage />} />
+        <Route path="/traces/:id" element={<TraceDetailPage />} />
         <Route path="/update" element={<UpdatePage />} />
         <Route path="/reconcile" element={<ReconcilePage />} />
         <Route path="/nodes" element={<NodesPage />} />
