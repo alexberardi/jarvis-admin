@@ -411,4 +411,43 @@ describe('compose-generator', () => {
       expect(volumesBlock).not.toContain('${HOME}')
     })
   })
+
+  describe('command-center prompt-provider volume', () => {
+    it('emits the prompt-providers mount under jarvis-command-center', () => {
+      const state = makeState({ enabledModules: [] })
+      const output = generateCompose(state, registry)
+      expect(output).toContain(
+        '- command-center-prompt-providers:/app/core/prompt_providers_custom',
+      )
+      const ccStart = output.indexOf('  jarvis-command-center:\n')
+      expect(ccStart).toBeGreaterThanOrEqual(0)
+      const afterCc = output.slice(ccStart + '  jarvis-command-center:\n'.length)
+      const nextSvcMatch = afterCc.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+      const ccBlock = nextSvcMatch
+        ? afterCc.slice(0, nextSvcMatch.index)
+        : afterCc
+      expect(ccBlock).toContain(
+        'command-center-prompt-providers:/app/core/prompt_providers_custom',
+      )
+    })
+
+    it('declares command-center-prompt-providers in the top-level volumes block', () => {
+      const state = makeState({ enabledModules: [] })
+      const output = generateCompose(state, registry)
+      const volumesBlock = output.slice(output.lastIndexOf('volumes:'))
+      expect(volumesBlock).toContain('command-center-prompt-providers:')
+    })
+
+    it('keeps emitting existing service volumes (regression: whisper-voice-profiles, jarvis-tts-hf-cache)', () => {
+      const state = makeState({
+        enabledModules: ['jarvis-whisper-api', 'jarvis-tts'],
+      })
+      const output = generateCompose(state, registry)
+      expect(output).toContain('- whisper-voice-profiles:/app/voice_profiles')
+      expect(output).toContain('- jarvis-tts-hf-cache:/app/models/hf_cache')
+      const volumesBlock = output.slice(output.lastIndexOf('volumes:'))
+      expect(volumesBlock).toContain('whisper-voice-profiles:')
+      expect(volumesBlock).toContain('jarvis-tts-hf-cache:')
+    })
+  })
 })
