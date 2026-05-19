@@ -31,17 +31,18 @@ export default function QuickSetsPage() {
   const [newBackend, setNewBackend] = useState('GGUF')
   const [newContextWindow, setNewContextWindow] = useState<number | ''>(8192)
 
+  const presets = data?.presets
   const grouped = useMemo(() => {
-    if (!data?.presets) return new Map<string, QuickSetPreset[]>()
+    if (!presets) return new Map<string, QuickSetPreset[]>()
     const map = new Map<string, QuickSetPreset[]>()
-    for (const preset of data.presets) {
+    for (const preset of presets) {
       const family = preset.family || 'Custom'
       const list = map.get(family) ?? []
       list.push(preset)
       map.set(family, list)
     }
     return map
-  }, [data?.presets])
+  }, [presets])
 
   function handleSelect(preset: QuickSetPreset) {
     if (selectedId === preset.id) {
