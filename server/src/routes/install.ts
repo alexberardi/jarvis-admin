@@ -830,6 +830,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       relayEnabled: state.relayEnabled,
       relayUrl: state.relayUrl || 'https://relay.jarvisautomation.io',
       whisperModelPath: state.whisperModelPath || '/whisper-models/ggml-base.en.bin',
+      releaseTrack: state.releaseTrack ?? 'stable',
     })
   })
 
@@ -871,14 +872,40 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const { getComposeServices, getComposeWorkerIds } = await import('../services/generators/compose-generator.js')
 
       // Apply user overrides from the options screen (if provided)
-      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string } | null
-      const overrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperModelPath
-        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperModelPath: body?.whisperModelPath }
+      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string; releaseTrack?: 'stable' | 'dev' } | null
+      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperModelPath || body?.releaseTrack
+      const overrides = hasOverrides
+        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperModelPath: body?.whisperModelPath, releaseTrack: body?.releaseTrack }
         : undefined
+
+      // Detect if the release track is changing (requires pull + force-recreate)
+      const prevEnv = loadEnvFile(composePath)
+      const prevTrack = prevEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' : 'stable'
+      const newTrack = body?.releaseTrack ?? prevTrack
+      const trackChanged = newTrack !== prevTrack
 
       emit({ phase: 'regenerate', message: 'Regenerating compose from latest registry...' })
       await upgradeCompose(app, overrides)
       emit({ phase: 'regenerate', message: 'Files regenerated.' })
+
+      // Pull new images when switching release tracks
+      if (trackChanged) {
+        emit({ phase: 'pull', message: `Switching to ${newTrack} track — pulling images...` })
+        await new Promise<void>((resolve, reject) => {
+          const pullChild = spawn('docker', ['compose', '-f', composeFile, 'pull'], {
+            cwd: composePath,
+            env: { ...process.env, ...loadEnvFile(composePath) },
+          })
+          pullChild.stdout.on('data', (chunk: Buffer) => emit({ stream: 'stdout', text: chunk.toString() }))
+          pullChild.stderr.on('data', (chunk: Buffer) => emit({ stream: 'stderr', text: chunk.toString() }))
+          request.raw.on('close', () => pullChild.kill())
+          pullChild.on('close', (code) => {
+            if (code === 0) resolve()
+            else reject(new Error(`docker compose pull exited with code ${code}`))
+          })
+        })
+        emit({ phase: 'pull', message: 'Images pulled.' })
+      }
 
       // Build the explicit service list for `docker compose up -d` and EXCLUDE
       // jarvis-admin. Including admin causes admin (which is the parent of this
@@ -892,10 +919,14 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const serviceIds = composeServices.filter((s) => s.id !== 'jarvis-admin').map((s) => s.id)
       const workerIds = getComposeWorkerIds(composeServices)
 
+      const upArgs = ['compose', '-f', composeFile, 'up', '-d']
+      if (trackChanged) upArgs.push('--force-recreate')
+      upArgs.push(...serviceIds, ...workerIds)
+
       emit({ phase: 'apply', message: `Applying changes to ${serviceIds.length} services + ${workerIds.length} workers (admin excluded — update separately)...` })
       const child = spawn(
         'docker',
-        ['compose', '-f', composeFile, 'up', '-d', ...serviceIds, ...workerIds],
+        upArgs,
         { cwd: composePath, env: { ...process.env, ...env } },
       )
 

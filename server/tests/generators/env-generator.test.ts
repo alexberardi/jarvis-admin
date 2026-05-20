@@ -32,6 +32,7 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     remoteWhisperUrl: '',
     platform: 'linux',
     hardware: null,
+    releaseTrack: 'stable' as const,
     relayEnabled: false,
     relayUrl: '',
     ...overrides,
@@ -143,6 +144,26 @@ describe('env-generator', () => {
       const state = makeState({ relayEnabled: false, relayUrl: 'https://relay.example.com' })
       const output = generateEnv(state, registry)
       expect(output).not.toContain('JARVIS_RELAY_URL=')
+    })
+  })
+
+  describe('Release Track', () => {
+    it('includes JARVIS_IMAGE_TAG=latest for stable track', () => {
+      const state = makeState({ releaseTrack: 'stable' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_IMAGE_TAG=latest')
+    })
+
+    it('includes JARVIS_IMAGE_TAG=dev for dev track', () => {
+      const state = makeState({ releaseTrack: 'dev' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_IMAGE_TAG=dev')
+    })
+
+    it('includes release track section comment', () => {
+      const state = makeState()
+      const output = generateEnv(state, registry)
+      expect(output).toContain('# --- Release Track ---')
     })
   })
 })

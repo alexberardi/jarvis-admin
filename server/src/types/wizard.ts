@@ -37,6 +37,8 @@ export interface WizardState {
   /** Jarvis Relay (OAuth callback proxy at https://relay.jarvisautomation.io). */
   relayEnabled: boolean
   relayUrl: string
+  /** Docker image tag track: stable uses :latest, dev uses :dev. */
+  releaseTrack: 'stable' | 'dev'
   /**
    * Absolute HOST path to the compose directory, for admin-in-docker reconciles.
    * When set, env-generator writes MODELS_DIR=<this>/.models so the generated
