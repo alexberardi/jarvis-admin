@@ -67,6 +67,7 @@
       "dependsOn": ["postgres", "mosquitto", "jarvis-auth", "jarvis-config-service"],
       "database": "jarvis_command_center",
       "dbDriverPrefix": "postgresql://",
+      "volumes": ["command-center-prompt-providers:/app/core/prompt_providers_custom"],
       "llmInterfaceOptions": [
         { "id": "JarvisToolModel", "name": "Llama Tool Model", "description": "Full tool descriptions with all examples (default)", "default": true },
         { "id": "Qwen25MediumUntrained", "name": "Qwen 2.5 Medium", "description": "Optimized for Qwen 2.5 7B-14B models" },
