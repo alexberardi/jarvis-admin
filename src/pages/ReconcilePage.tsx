@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, Loader2, AlertTriangle, RefreshCw, GitMerge, Circle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type Phase = 'loading_options' | 'options' | 'regenerate' | 'apply' | 'done' | 'error'
+type Phase = 'loading_options' | 'options' | 'regenerate' | 'pull' | 'apply' | 'done' | 'error'
 
 interface ServiceOption {
   id: string
@@ -18,6 +18,7 @@ interface ReconcileOptions {
   relayEnabled: boolean
   relayUrl: string
   whisperModelPath: string
+  releaseTrack: 'stable' | 'dev'
 }
 
 interface LogLine {
@@ -27,6 +28,7 @@ interface LogLine {
 
 const PHASE_LABELS: Record<string, string> = {
   regenerate: 'Regenerating compose from registry',
+  pull: 'Pulling images for new release track',
   apply: 'Applying changes (docker compose up)',
   done: 'Complete',
 }
@@ -45,6 +47,7 @@ export default function ReconcilePage() {
   const [relayEnabled, setRelayEnabled] = useState(false)
   const [relayUrl, setRelayUrl] = useState('https://relay.jarvisautomation.io')
   const [whisperModelPath, setWhisperModelPath] = useState('/whisper-models/ggml-base.en.bin')
+  const [releaseTrack, setReleaseTrack] = useState<'stable' | 'dev'>('stable')
 
   const addLog = useCallback((line: LogLine) => {
     setLogs((prev) => [...prev, line])
@@ -69,6 +72,7 @@ export default function ReconcilePage() {
         setRelayEnabled(data.relayEnabled)
         setRelayUrl(data.relayUrl || 'https://relay.jarvisautomation.io')
         setWhisperModelPath(data.whisperModelPath || '/whisper-models/ggml-base.en.bin')
+        setReleaseTrack(data.releaseTrack ?? 'stable')
         setPhase('options')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load options')
@@ -98,7 +102,7 @@ export default function ReconcilePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath }),
+        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, releaseTrack }),
       })
 
       if (!res.ok || !res.body) {
@@ -190,6 +194,40 @@ export default function ReconcilePage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+            <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Release Track</h2>
+            <div className="flex items-center justify-between px-3 py-2">
+              <div>
+                <div className="text-sm font-medium text-[var(--color-text)]">
+                  {releaseTrack === 'dev' ? 'Dev' : 'Stable'}
+                </div>
+                <div className="text-xs text-[var(--color-text-muted)]">
+                  {releaseTrack === 'dev'
+                    ? 'Using latest main branch builds (may be unstable)'
+                    : 'Using tagged releases'}
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={releaseTrack === 'dev'}
+                onClick={() => setReleaseTrack(releaseTrack === 'dev' ? 'stable' : 'dev')}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                  releaseTrack === 'dev' ? 'bg-amber-500' : 'bg-[var(--color-surface-alt)]'
+                }`}
+              >
+                <span className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                  releaseTrack === 'dev' ? 'translate-x-5' : 'translate-x-0'
+                }`} />
+              </button>
+            </div>
+            {releaseTrack === 'dev' && (
+              <div className="mx-3 mt-1 rounded-lg border border-amber-300 bg-amber-500/10 px-3 py-2 text-xs text-amber-400">
+                Switching tracks will pull all images and force-recreate containers.
+              </div>
+            )}
           </div>
 
           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">

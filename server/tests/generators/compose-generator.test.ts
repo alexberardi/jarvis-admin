@@ -31,6 +31,7 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     remoteWhisperUrl: '',
     platform: 'linux',
     hardware: null,
+    releaseTrack: 'stable' as const,
     relayEnabled: false,
     relayUrl: '',
     ...overrides,
@@ -183,20 +184,20 @@ describe('compose-generator', () => {
 
     it('uses -cuda variant on NVIDIA hosts', () => {
       const output = generateCompose(whisperState('nvidia'), registry)
-      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest-cuda')
+      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-cuda')
       expect(output).toContain('driver: nvidia')
     })
 
     it('uses -rocm variant on AMD ROCm hosts', () => {
       const output = generateCompose(whisperState('amd-rocm'), registry)
-      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest-rocm')
+      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-rocm')
       expect(output).toContain('/dev/dri:/dev/dri')
     })
 
     it('falls back to plain CPU image on AMD Vulkan hosts (no -vulkan tag published)', () => {
       const output = generateCompose(whisperState('amd'), registry)
-      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest')
-      expect(output).not.toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:latest-vulkan')
+      expect(output).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}')
+      expect(output).not.toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-vulkan')
       // Whisper section should not contain a GPU-runtime block on this host
       const block = output.slice(output.indexOf('jarvis-whisper-api:'))
       const blockEnd = block.search(/\n {2}[a-z][a-z0-9-]*:\n/)

@@ -92,6 +92,7 @@ export function reconstructWizardState(
     whisperModelPath: existingEnv.WHISPER_MODEL ?? '/whisper-models/ggml-base.en.bin',
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
+    releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,
     relayEnabled,
     relayUrl,
   }

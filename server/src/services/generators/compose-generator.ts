@@ -55,6 +55,8 @@ export function getComposeServices(
  */
 const CPU_FALLBACK_GPU_VARIANTS = new Set<string>(['nvidia', 'amd-rocm'])
 
+const FIRST_PARTY_PREFIX = 'ghcr.io/alexberardi/'
+
 /** Whether a service should use a GPU image variant + GPU runtime config for the host. */
 function shouldUseGpuVariant(service: ServiceDefinition, gpuType: string | undefined): boolean {
   if (!service.gpu || !gpuType) return false
@@ -229,7 +231,15 @@ function generateInfraBlock(
 }
 
 function getServiceImage(service: ServiceDefinition, state: WizardState): string {
-  let image = service.ghcrImage ?? service.image
+  const raw = service.ghcrImage ?? service.image
+  const isFirstParty = raw.startsWith(FIRST_PARTY_PREFIX)
+  const baseImage = raw.includes(':') ? raw.slice(0, raw.lastIndexOf(':')) : raw
+
+  // Third-party images (e.g. go2rtc) keep their original tag
+  if (!isFirstParty) return raw
+
+  // Build tag with optional GPU suffix
+  let gpuSuffix = ''
   if (shouldUseGpuVariant(service, state.hardware?.gpuType)) {
     const variantSuffix: Record<string, string> = {
       nvidia: '-cuda',
@@ -237,12 +247,10 @@ function getServiceImage(service: ServiceDefinition, state: WizardState): string
       'amd-rocm': '-rocm',
       none: '-cpu',
     }
-    const suffix = variantSuffix[state.hardware!.gpuType]
-    if (suffix) {
-      image = image.includes(':') ? image + suffix : image + ':latest' + suffix
-    }
+    gpuSuffix = variantSuffix[state.hardware!.gpuType] ?? ''
   }
-  return image
+
+  return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${gpuSuffix}`
 }
 
 function pushGpuConfig(

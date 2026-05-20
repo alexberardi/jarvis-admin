@@ -102,6 +102,11 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
     lines.push('')
   }
 
+  // Release Track
+  lines.push('# --- Release Track ---')
+  lines.push(`JARVIS_IMAGE_TAG=${state.releaseTrack === 'dev' ? 'dev' : 'latest'}`)
+  lines.push('')
+
   // App-to-app auth placeholders (filled after service registration)
   lines.push('# --- App-to-App Auth (populated after registration) ---')
   for (const svc of allEnabled) {
