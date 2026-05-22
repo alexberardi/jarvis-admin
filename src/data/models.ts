@@ -82,7 +82,7 @@ export const LLM_MODELS: LlmModel[] = [
     hfRepoVllm: 'hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4',
     hfRepoGguf: 'lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF',
     ggufFilename: 'Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf',
-    chatFormat: 'llama3',
+    chatFormat: 'llama-3',
     contextWindow: 131072,
     sizeVllm: '5.4GB',
     sizeGguf: '5GB',
