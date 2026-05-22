@@ -55,18 +55,8 @@
       "name": "Llama 3.1 8B",
       "family": "Llama",
       "description": "Meta's Llama 3.1 8B instruct. Well-tested, wide community support.",
-      "chatFormat": "llama3",
+      "chatFormat": "llama-3",
       "promptProvider": "Llama31MediumUntrained",
-      "defaultBackend": "GGUF",
-      "defaultContextWindow": 8192
-    },
-    {
-      "id": "llama32-3b",
-      "name": "Llama 3.2 3B",
-      "family": "Llama",
-      "description": "Compact 3B model. Fast on constrained hardware, lower accuracy on complex commands.",
-      "chatFormat": "llama3",
-      "promptProvider": "Llama32_3B_Compressed",
       "defaultBackend": "GGUF",
       "defaultContextWindow": 8192
     },
