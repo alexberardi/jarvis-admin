@@ -61,6 +61,16 @@
       "defaultContextWindow": 8192
     },
     {
+      "id": "llama33-thinking-8b",
+      "name": "Llama 3.3 8B (Thinking)",
+      "family": "Llama",
+      "description": "Llama 3.3 8B fine-tuned on Claude Haiku 4.5 reasoning traces. Auto-thinks on complex prompts; same <function=...> tool format as Llama 3.1.",
+      "chatFormat": "llama-3",
+      "promptProvider": "Llama33ThinkingMediumUntrained",
+      "defaultBackend": "GGUF",
+      "defaultContextWindow": 16384
+    },
+    {
       "id": "gemma2-9b",
       "name": "Gemma 2 9B",
       "family": "Gemma",
