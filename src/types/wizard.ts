@@ -31,6 +31,11 @@ export interface WizardState {
   relayEnabled: boolean
   installRunning: boolean
   installComplete: boolean
+  /**
+   * Service IDs the user has opted to run natively (macOS only). Excluded from
+   * the generated docker-compose so they can use Metal / MLX / MPS via launchd.
+   */
+  nativeServices: string[]
 }
 
 export type WizardAction =
@@ -55,6 +60,8 @@ export type WizardAction =
   | { type: 'SET_RELAY_ENABLED'; enabled: boolean }
   | { type: 'SET_INSTALL_RUNNING'; running: boolean }
   | { type: 'SET_INSTALL_COMPLETE' }
+  | { type: 'SET_NATIVE_SERVICES'; services: string[] }
+  | { type: 'TOGGLE_NATIVE_SERVICE'; serviceId: string; enabled: boolean }
 
 export interface InstallStatus {
   configured: boolean
@@ -113,7 +120,8 @@ export interface ServiceDefinition {
   image: string
   healthCheck: string
   dependsOn: string[]
-  nativeOnly?: boolean
+  /** true = recommended to run natively on macOS for Metal/MLX/MPS access. */
+  nativeCapable?: boolean
   database?: string
   modelOptions?: Array<{
     id: string

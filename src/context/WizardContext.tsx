@@ -23,6 +23,7 @@ const initialState: WizardState = {
   relayEnabled: false,
   installRunning: false,
   installComplete: false,
+  nativeServices: [],
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -92,6 +93,20 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, installRunning: action.running }
     case 'SET_INSTALL_COMPLETE':
       return { ...state, installRunning: false, installComplete: true }
+    case 'SET_NATIVE_SERVICES':
+      return { ...state, nativeServices: action.services }
+    case 'TOGGLE_NATIVE_SERVICE': {
+      if (action.enabled) {
+        const services = state.nativeServices.includes(action.serviceId)
+          ? state.nativeServices
+          : [...state.nativeServices, action.serviceId]
+        return { ...state, nativeServices: services }
+      }
+      return {
+        ...state,
+        nativeServices: state.nativeServices.filter((s) => s !== action.serviceId),
+      }
+    }
     default:
       return state
   }

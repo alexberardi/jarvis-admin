@@ -46,6 +46,14 @@ export interface WizardState {
    * admin container's view (which is invisible to the docker daemon).
    */
   hostComposePath?: string
+
+  /**
+   * Service IDs the user has opted to run natively (macOS only). These are
+   * excluded from the generated docker-compose.yml — instead they run via
+   * launchd against a local checkout, so they can use Metal / MLX / MPS.
+   * Empty on Linux. Populated on Darwin by the wizard's "native services" step.
+   */
+  nativeServices: string[]
 }
 
 export interface InstallStatus {

@@ -34,6 +34,7 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     releaseTrack: 'stable' as const,
     relayEnabled: false,
     relayUrl: '',
+    nativeServices: [],
     ...overrides,
   }
 }
@@ -266,6 +267,46 @@ describe('compose-generator', () => {
       const state = makeState({ relayEnabled: false })
       const output = generateCompose(state, registry)
       expect(output).not.toContain('JARVIS_RELAY_URL:')
+    })
+  })
+
+  describe('native services on macOS', () => {
+    it('excludes opted-in native services from compose on darwin', () => {
+      const state = makeState({
+        platform: 'darwin',
+        enabledModules: ['jarvis-whisper-api', 'jarvis-tts', 'jarvis-llm-proxy-api', 'jarvis-notifications'],
+        nativeServices: ['jarvis-whisper-api', 'jarvis-tts', 'jarvis-llm-proxy-api'],
+      })
+      const ids = getComposeServices(state, registry).map((s) => s.id)
+      expect(ids).not.toContain('jarvis-whisper-api')
+      expect(ids).not.toContain('jarvis-tts')
+      expect(ids).not.toContain('jarvis-llm-proxy-api')
+      // Non-native enabled service still in compose
+      expect(ids).toContain('jarvis-notifications')
+    })
+
+    it('keeps services in compose on darwin when not opted in to native', () => {
+      const state = makeState({
+        platform: 'darwin',
+        enabledModules: ['jarvis-whisper-api', 'jarvis-tts'],
+        nativeServices: [],
+      })
+      const ids = getComposeServices(state, registry).map((s) => s.id)
+      // Whisper has cpuFallback so it stays in compose (CPU image) when not opted-in
+      expect(ids).toContain('jarvis-whisper-api')
+      expect(ids).toContain('jarvis-tts')
+    })
+
+    it('ignores nativeServices on linux (Mac-only feature)', () => {
+      const state = makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-whisper-api', 'jarvis-tts'],
+        // Even if the field is populated, linux uses docker for everything
+        nativeServices: ['jarvis-whisper-api', 'jarvis-tts'],
+      })
+      const ids = getComposeServices(state, registry).map((s) => s.id)
+      expect(ids).toContain('jarvis-whisper-api')
+      expect(ids).toContain('jarvis-tts')
     })
   })
 

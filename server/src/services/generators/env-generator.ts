@@ -107,6 +107,23 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   lines.push(`JARVIS_IMAGE_TAG=${state.releaseTrack === 'dev' ? 'dev' : 'latest'}`)
   lines.push('')
 
+  // Native services (macOS only). Comma-separated list of service IDs the user
+  // opted to run as LaunchAgents instead of in Docker. Read back by
+  // state-reconstructor so reconcile flows keep them out of compose.
+  if (state.nativeServices && state.nativeServices.length > 0) {
+    lines.push('# --- Native Services (macOS) ---')
+    lines.push(`JARVIS_NATIVE_SERVICES=${state.nativeServices.join(',')}`)
+    lines.push('')
+  }
+
+  // Host platform — admin runs in Docker, so process.platform inside the
+  // container is always 'linux'. The wizard knows the host platform from the
+  // first-boot native install; persist it so admin (in Docker) can read it
+  // back via HOST_OS and gate the native-services UI correctly.
+  lines.push('# --- Host platform ---')
+  lines.push(`HOST_OS=${state.platform}`)
+  lines.push('')
+
   // App-to-app auth placeholders (filled after service registration)
   lines.push('# --- App-to-App Auth (populated after registration) ---')
   for (const svc of allEnabled) {

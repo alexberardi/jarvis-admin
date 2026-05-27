@@ -94,6 +94,7 @@
       "dbDriverPrefix": "postgresql+psycopg2://",
       "gpu": true,
       "cpuFallback": true,
+      "nativeCapable": true,
       "volumes": ["whisper-voice-profiles:/app/voice_profiles"],
       "modelOptions": [
         { "id": "base.en", "name": "Base English", "size": "~140MB", "default": true, "builtin": true },
@@ -121,6 +122,7 @@
         { "name": "TTS_PROVIDER", "description": "Active TTS provider (piper, kokoro)", "required": false, "default": "kokoro" },
         { "name": "HF_HOME", "description": "HuggingFace cache dir for Kokoro voice weights", "required": false, "default": "/app/models/hf_cache" }
       ],
+      "nativeCapable": true,
       "volumes": ["jarvis-tts-hf-cache:/app/models/hf_cache"]
     },
     {
@@ -135,6 +137,7 @@
       "database": "jarvis_llm_proxy",
       "dbDriverPrefix": "postgresql+psycopg2://",
       "gpu": true,
+      "nativeCapable": true,
       "envVars": [
         { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
         { "name": "MIGRATIONS_DATABASE_URL", "description": "PostgreSQL URL for Alembic migrations", "required": true },

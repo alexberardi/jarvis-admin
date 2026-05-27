@@ -35,14 +35,12 @@ export default function ReviewStep() {
   }
   const conflicts = [...portMap.entries()].filter(([, names]) => names.length > 1)
 
-  // Resource estimates
+  // Resource estimates. A service is "native" only when the user opted into
+  // it in the native-services step — being nativeCapable just means it's
+  // eligible. On Linux, nativeServices is always empty.
   const dbCount = allEnabled.filter((s) => s.database).length
-  const nativeServices = allEnabled.filter(
-    (s) => s.nativeOnly && state.platform === 'darwin',
-  )
-  const dockerServices = allEnabled.filter(
-    (s) => !(s.nativeOnly && state.platform === 'darwin'),
-  )
+  const nativeServices = allEnabled.filter((s) => state.nativeServices.includes(s.id))
+  const dockerServices = allEnabled.filter((s) => !state.nativeServices.includes(s.id))
 
   return (
     <div className="space-y-6">
