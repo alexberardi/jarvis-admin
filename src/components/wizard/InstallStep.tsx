@@ -7,12 +7,13 @@ import { generateInstall, runPreflight } from '@/api/install'
 import TerminalOutput from './TerminalOutput'
 import type { PreflightResult, ServiceHealthResult } from '@/types/wizard'
 
-type Phase = 'idle' | 'preflight' | 'generating' | 'pulling' | 'starting' | 'registering' | 'done' | 'error'
+type Phase = 'idle' | 'preflight' | 'generating' | 'pulling' | 'starting' | 'registering' | 'native' | 'done' | 'error'
 
 export default function InstallStep() {
   const { state, dispatch } = useWizard()
   const pullStream = useInstallStream()
   const startStream = useInstallStream()
+  const nativeStream = useInstallStream()
   const [phase, setPhase] = useState<Phase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [preflightResult, setPreflightResult] = useState<PreflightResult | null>(null)
@@ -20,6 +21,8 @@ export default function InstallStep() {
   const [containerLogs, setContainerLogs] = useState<Record<string, string>>({})
   const [failedPhase, setFailedPhase] = useState<Phase | null>(null)
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null)
+  const [currentNativeId, setCurrentNativeId] = useState<string | null>(null)
+  const [nativeResults, setNativeResults] = useState<Record<string, { ok: boolean; error?: string }>>({})
 
   // Auto-redirect to the containerized admin dashboard after install
   useEffect(() => {
@@ -65,10 +68,33 @@ export default function InstallStep() {
     }
   }, [state.enabledModules])
 
+  /**
+   * Install LaunchAgents for every service the user opted into native mode.
+   * Sequential so the wizard's terminal output stays readable. Each install
+   * can take minutes on first run (pip build of pywhispercpp, MLX wheels).
+   */
+  async function runNativeInstalls() {
+    if (state.nativeServices.length === 0) return
+    setPhase('native')
+    for (const id of state.nativeServices) {
+      setCurrentNativeId(id)
+      try {
+        await nativeStream.run(`/api/native-services/${id}/install`)
+        setNativeResults((prev) => ({ ...prev, [id]: { ok: true } }))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        setNativeResults((prev) => ({ ...prev, [id]: { ok: false, error: message } }))
+        // Don't abort the whole install — let other natives try, surface failures at end
+      }
+    }
+    setCurrentNativeId(null)
+  }
+
   async function runInstall() {
     setError(null)
     setServiceHealth({})
     setFailedPhase(null)
+    setNativeResults({})
     dispatch({ type: 'SET_INSTALL_RUNNING', running: true })
 
     try {
@@ -107,6 +133,11 @@ export default function InstallStep() {
           setServiceHealth((prev) => ({ ...prev, ...healthMap }))
         }
       })
+
+      // Phase 4: install LaunchAgents (only on macOS with native opt-ins). The
+      // backend filtered these out of compose, so they don't run yet — install
+      // happens AFTER startup so the .env has app keys from registration.
+      await runNativeInstalls()
 
       setPhase('done')
       dispatch({ type: 'SET_INSTALL_COMPLETE' })
@@ -153,6 +184,8 @@ export default function InstallStep() {
           }
         })
 
+        await runNativeInstalls()
+
         setPhase('done')
         dispatch({ type: 'SET_INSTALL_COMPLETE' })
       } catch (err) {
@@ -188,6 +221,9 @@ export default function InstallStep() {
     { key: 'generating', label: 'Generate configuration' },
     { key: 'pulling', label: 'Pull Docker images' },
     { key: 'starting', label: 'Start services' },
+    ...(state.nativeServices.length > 0
+      ? [{ key: 'native' as Phase, label: `Install ${state.nativeServices.length} native service${state.nativeServices.length === 1 ? '' : 's'}` }]
+      : []),
   ]
 
   const phaseOrder = phases.map((p) => p.key)
@@ -334,6 +370,50 @@ export default function InstallStep() {
           lines={startStream.lines}
           running={startStream.running}
           title="docker compose up -d"
+        />
+      )}
+
+      {/* Per-service native install results */}
+      {(phase === 'native' || Object.keys(nativeResults).length > 0) && (
+        <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+          <div className="border-b border-[var(--color-border)] bg-[var(--color-surface-alt)] px-3 py-2">
+            <span className="text-xs font-medium text-[var(--color-text-muted)]">
+              Native Services (LaunchAgents)
+            </span>
+          </div>
+          <div className="divide-y divide-[var(--color-border)]">
+            {state.nativeServices.map((id) => {
+              const result = nativeResults[id]
+              const isCurrent = currentNativeId === id && phase === 'native'
+              return (
+                <div key={id} className="px-3 py-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-[var(--color-text)]">{id}</span>
+                    {result?.ok ? (
+                      <CheckCircle2 size={14} className="text-green-500" />
+                    ) : result ? (
+                      <XCircle size={14} className="text-red-500" />
+                    ) : isCurrent ? (
+                      <Loader2 size={14} className="animate-spin text-[var(--color-primary)]" />
+                    ) : (
+                      <div className="h-3 w-3 rounded-full border border-[var(--color-border)]" />
+                    )}
+                  </div>
+                  {result?.error && (
+                    <p className="mt-1 text-xs text-red-400">{result.error}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {(nativeStream.lines.length > 0 || nativeStream.running) && (
+        <TerminalOutput
+          lines={nativeStream.lines}
+          running={nativeStream.running}
+          title={currentNativeId ? `deploy-launchd.sh (${currentNativeId})` : 'deploy-launchd.sh'}
         />
       )}
 

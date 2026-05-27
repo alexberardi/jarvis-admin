@@ -13,6 +13,7 @@ import { generateAllSecrets } from '../services/generators/secret-generator.js'
 import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
 import { savePersistedConfig } from '../config.js'
+import { getHostPlatform } from '../services/host-platform.js'
 import type { WizardState, HardwareInfo, InstallState, PreflightCheck, PreflightResult } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
 import registryData from '../data/service-registry.json' with { type: 'json' }
@@ -335,7 +336,10 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
    */
   app.get('/hardware', async (_request, reply) => {
     try {
-      const plat = platform()
+      // Prefer host detection (env override + docker-info) over process.platform
+      // — admin can run in a Linux container on a Mac host, where process.platform
+      // is always 'linux'.
+      const plat = getHostPlatform()
       const archName = arch()
       const totalMemoryGb = Math.round(totalmem() / (1024 * 1024 * 1024))
 
@@ -464,7 +468,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       // Graceful fallback — never throw from hardware detection
       console.error('[install] Hardware detection failed:', err)
       const fallback: HardwareInfo = {
-        platform: platform() === 'darwin' ? 'darwin' : 'linux',
+        platform: getHostPlatform() === 'darwin' ? 'darwin' : 'linux',
         arch: arch(),
         totalMemoryGb: Math.round(totalmem() / (1024 * 1024 * 1024)),
         gpuName: null,
@@ -705,22 +709,6 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
 
     const status = await pollServiceHealth(services, portOverrides)
     return reply.send(status)
-  })
-
-  /**
-   * macOS only: install llm-proxy natively via pip.
-   */
-  app.post('/llm-native', async (_request, reply) => {
-    if (platform() !== 'darwin') {
-      return reply.code(400).send({ error: 'Native LLM install is only available on macOS' })
-    }
-
-    // This would create a venv and pip install jarvis-llm-proxy-api
-    // For now, return a stub indicating the feature exists
-    return reply.send({
-      ok: true,
-      message: 'Native LLM proxy setup requires jarvis-llm-proxy-api to be published to PyPI',
-    })
   })
 
   /**

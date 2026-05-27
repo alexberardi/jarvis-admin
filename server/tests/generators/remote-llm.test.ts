@@ -43,6 +43,8 @@ function makePi5State(): WizardState {
     },
     relayEnabled: false,
     relayUrl: '',
+    releaseTrack: 'stable',
+    nativeServices: [],
   }
 }
 

@@ -1,9 +1,10 @@
-import { arch, platform, totalmem } from 'node:os'
+import { arch, totalmem } from 'node:os'
 import type { HardwareInfo, WizardState } from '../../types/wizard.js'
 import type { ServiceRegistry } from '../../types/service-registry.js'
 import { serviceIdToPortVar } from '../generators/port-utils.js'
 import { SECRET_KEYS } from '../generators/secret-generator.js'
 import { detectGpuType } from '../hardware-detect.js'
+import { getHostPlatform } from '../host-platform.js'
 
 /**
  * Reconstruct a WizardState from an existing .env file so we can
@@ -54,6 +55,13 @@ export function reconstructWizardState(
   const hasRemoteLlm = !!existingEnv.JARVIS_LLM_PROXY_URL
   const deploymentMode = hasRemoteLlm ? 'remote-llm' as const : 'local' as const
 
+  // Native services (macOS only). Reconcile flows must keep these excluded
+  // from compose; the value is written by env-generator on first install.
+  const nativeServicesRaw = existingEnv.JARVIS_NATIVE_SERVICES ?? ''
+  const nativeServices = nativeServicesRaw
+    ? nativeServicesRaw.split(',').map((s) => s.trim()).filter(Boolean)
+    : []
+
   // Detect relay
   const relayEnabled = !!existingEnv.JARVIS_RELAY_URL
   const relayUrl = existingEnv.JARVIS_RELAY_URL || ''
@@ -62,7 +70,10 @@ export function reconstructWizardState(
   // original wizard hardware selection, so without this, state.hardware stays
   // null, getServiceImage skips variant suffixes, and pushGpuConfig strips
   // GPU runtime config from gpu: true services on regenerate.
-  const plat = platform() as 'darwin' | 'linux'
+  // Use host detection (env override + docker-info), not process.platform —
+  // admin runs in a Linux container even on Mac hosts.
+  const detected = getHostPlatform()
+  const plat: 'darwin' | 'linux' = detected === 'darwin' ? 'darwin' : 'linux'
   const gpuType = detectGpuType()
   const hardware: HardwareInfo = {
     platform: plat,
@@ -95,5 +106,6 @@ export function reconstructWizardState(
     releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,
     relayEnabled,
     relayUrl,
+    nativeServices,
   }
 }

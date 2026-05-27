@@ -35,6 +35,7 @@ function makeState(overrides: Partial<WizardState> = {}): WizardState {
     releaseTrack: 'stable' as const,
     relayEnabled: false,
     relayUrl: '',
+    nativeServices: [],
     ...overrides,
   }
 }
@@ -164,6 +165,38 @@ describe('env-generator', () => {
       const state = makeState()
       const output = generateEnv(state, registry)
       expect(output).toContain('# --- Release Track ---')
+    })
+  })
+
+  describe('Host platform', () => {
+    it('writes HOST_OS=darwin for Mac installs', () => {
+      const state = makeState({ platform: 'darwin' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('HOST_OS=darwin')
+    })
+
+    it('writes HOST_OS=linux for Linux installs', () => {
+      const state = makeState({ platform: 'linux' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('HOST_OS=linux')
+    })
+  })
+
+  describe('Native services (macOS)', () => {
+    it('writes JARVIS_NATIVE_SERVICES as a comma-separated list when populated', () => {
+      const state = makeState({
+        platform: 'darwin',
+        nativeServices: ['jarvis-llm-proxy-api', 'jarvis-whisper-api', 'jarvis-tts'],
+      })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_NATIVE_SERVICES=jarvis-llm-proxy-api,jarvis-whisper-api,jarvis-tts')
+    })
+
+    it('omits the section entirely when no native services are selected', () => {
+      const state = makeState({ nativeServices: [] })
+      const output = generateEnv(state, registry)
+      expect(output).not.toContain('JARVIS_NATIVE_SERVICES')
+      expect(output).not.toContain('# --- Native Services')
     })
   })
 })

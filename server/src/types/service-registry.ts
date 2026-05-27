@@ -54,6 +54,13 @@ export interface ServiceDefinition {
   /** true = requires GPU; excluded from compose on macOS (runs natively via Metal/MLX) */
   gpu?: boolean
   /**
+   * true = this service has a native macOS run path (LaunchAgent + run-prod-native.sh
+   * in its repo) and benefits noticeably from running outside Docker (Metal / MLX /
+   * MPS). The wizard's "native services" step on Darwin offers these to the user;
+   * compose generation excludes any the user opts in via WizardState.nativeServices.
+   */
+  nativeCapable?: boolean
+  /**
    * For `gpu: true` services that ship a CPU image alongside GPU variants
    * (e.g. whisper publishes :latest, :latest-cuda, :latest-rocm). When set,
    * the service is NOT excluded on macOS, the variant suffix is only applied

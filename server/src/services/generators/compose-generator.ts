@@ -34,17 +34,27 @@ export function getAllEnabledServices(
 
 /**
  * Returns services to include in docker-compose.
- * Excludes GPU services on macOS (they run natively via Metal/MLX).
+ *
+ * On macOS the filter has two layers:
+ *   1. GPU-required services without a `cpuFallback` image (e.g. legacy
+ *      llm-proxy) are always excluded — Docker on Mac can't reach the GPU,
+ *      so the container would be useless.
+ *   2. Any service the user explicitly opted into native mode (via the
+ *      wizard's native-services step → WizardState.nativeServices) is also
+ *      excluded; it'll be installed as a LaunchAgent instead.
  */
 export function getComposeServices(
   state: WizardState,
   registry: ServiceRegistry,
 ): ServiceDefinition[] {
   const all = getAllEnabledServices(state, registry)
+  const nativeIds = new Set(state.nativeServices ?? [])
   if (state.platform === 'darwin') {
-    // GPU-required services run natively via Metal/MLX. GPU-optional services
-    // (cpuFallback) ship a CPU image and are still useful inside Docker on macOS.
-    return all.filter((s) => !s.gpu || s.cpuFallback)
+    return all.filter((s) => {
+      if (nativeIds.has(s.id)) return false
+      if (s.gpu && !s.cpuFallback) return false
+      return true
+    })
   }
   return all
 }
@@ -380,6 +390,13 @@ function generateServiceBlock(
   // CC → relay: inject URL when relay is enabled
   if (service.id === 'jarvis-command-center' && state.relayEnabled) {
     lines.push('      JARVIS_RELAY_URL: ${JARVIS_RELAY_URL:-}')
+  }
+
+  // Admin → host platform: env-generator writes HOST_OS to .env at install
+  // time; admin reads it via getHostPlatform() to know whether to expose the
+  // native-services UI (Docker masks the real platform from process.platform).
+  if (service.id === 'jarvis-admin') {
+    lines.push('      HOST_OS: ${HOST_OS:-linux}')
   }
 
   // go2rtc: standalone streaming gateway, no Jarvis auth/config needed
