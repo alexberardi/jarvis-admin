@@ -12,7 +12,7 @@ WORKDIR /app/server
 COPY server/package.json server/package-lock.json ./
 RUN npm ci
 COPY server/ .
-RUN npx tsc
+RUN npm run build
 
 # Stage 3: Production runtime
 FROM node:22-alpine
