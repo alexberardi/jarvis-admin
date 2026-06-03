@@ -34,9 +34,16 @@ export interface WizardState {
   remoteWhisperUrl: string
   platform: 'darwin' | 'linux'
   hardware: HardwareInfo | null
-  /** Jarvis Relay (OAuth callback proxy at https://relay.jarvisautomation.io). */
+  /** Jarvis Relay (OAuth callback proxy + Expo Push at https://relay.jarvisautomation.io). */
   relayEnabled: boolean
   relayUrl: string
+  /**
+   * Household JWT for jarvis-notifications → relay /v1/send. Signed by the
+   * relay's RELAY_JWT_SECRET; carries household_id and an expiry. Without it,
+   * the notifications service has no way to authenticate to the relay and
+   * push delivery silently no-ops.
+   */
+  relayHouseholdJwt?: string
   /** Docker image tag track: stable uses :latest, dev uses :dev. */
   releaseTrack: 'stable' | 'dev'
   /**

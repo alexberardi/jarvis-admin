@@ -392,6 +392,15 @@ function generateServiceBlock(
     lines.push('      JARVIS_RELAY_URL: ${JARVIS_RELAY_URL:-}')
   }
 
+  // Notifications → relay: inject URL + household JWT when relay is enabled.
+  // The env-file name is JARVIS_RELAY_URL/JARVIS_RELAY_HOUSEHOLD_JWT (namespaced);
+  // the notifications Python code reads them as RELAY_URL/RELAY_HOUSEHOLD_JWT.
+  // Without both, _deliver_via_relay short-circuits and push silently no-ops.
+  if (service.id === 'jarvis-notifications' && state.relayEnabled) {
+    lines.push('      RELAY_URL: ${JARVIS_RELAY_URL:-}')
+    lines.push('      RELAY_HOUSEHOLD_JWT: ${JARVIS_RELAY_HOUSEHOLD_JWT:-}')
+  }
+
   // Admin → host platform: env-generator writes HOST_OS to .env at install
   // time; admin reads it via getHostPlatform() to know whether to expose the
   // native-services UI (Docker masks the real platform from process.platform).

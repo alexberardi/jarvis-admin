@@ -65,6 +65,7 @@ export function reconstructWizardState(
   // Detect relay
   const relayEnabled = !!existingEnv.JARVIS_RELAY_URL
   const relayUrl = existingEnv.JARVIS_RELAY_URL || ''
+  const relayHouseholdJwt = existingEnv.JARVIS_RELAY_HOUSEHOLD_JWT || ''
 
   // Re-detect hardware at reconcile time. The .env doesn't store the user's
   // original wizard hardware selection, so without this, state.hardware stays
@@ -106,6 +107,7 @@ export function reconstructWizardState(
     releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,
     relayEnabled,
     relayUrl,
+    relayHouseholdJwt,
     nativeServices,
   }
 }
