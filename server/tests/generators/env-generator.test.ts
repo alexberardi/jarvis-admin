@@ -146,6 +146,31 @@ describe('env-generator', () => {
       const output = generateEnv(state, registry)
       expect(output).not.toContain('JARVIS_RELAY_URL=')
     })
+
+    it('emits empty JARVIS_RELAY_HOUSEHOLD_JWT placeholder when enabled and no value', () => {
+      const state = makeState({ relayEnabled: true, relayUrl: '' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_RELAY_HOUSEHOLD_JWT=')
+    })
+
+    it('emits JARVIS_RELAY_HOUSEHOLD_JWT with provided value', () => {
+      const state = makeState({
+        relayEnabled: true,
+        relayUrl: '',
+        relayHouseholdJwt: 'eyJhbGciOiJIUzI1NiJ9.testtoken',
+      })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('JARVIS_RELAY_HOUSEHOLD_JWT=eyJhbGciOiJIUzI1NiJ9.testtoken')
+    })
+
+    it('omits JARVIS_RELAY_HOUSEHOLD_JWT entirely when relayEnabled is false', () => {
+      const state = makeState({
+        relayEnabled: false,
+        relayHouseholdJwt: 'eyJhbGciOiJIUzI1NiJ9.testtoken',
+      })
+      const output = generateEnv(state, registry)
+      expect(output).not.toContain('JARVIS_RELAY_HOUSEHOLD_JWT')
+    })
   })
 
   describe('Release Track', () => {

@@ -83,6 +83,42 @@ describe('upgradeCompose with UpgradeOverrides', () => {
     expect(compose).not.toMatch(/^ {2}jarvis-tts:/m)
   })
 
+  it('reconciles a relay-enabled install missing the household JWT — adds placeholder + wires notifications', async () => {
+    // Reproduces the prod state: JARVIS_RELAY_URL is set, but neither
+    // JARVIS_RELAY_HOUSEHOLD_JWT nor the per-container RELAY_* envs exist.
+    writeFakeInstall(composePath, {
+      JARVIS_RELAY_URL: 'https://relay.jarvisautomation.io',
+      NOTIFICATIONS_PORT: '7712',
+    })
+
+    await upgradeCompose(fakeApp)
+
+    const env = readFileSync(join(composePath, '.env'), 'utf-8')
+    expect(env).toContain('JARVIS_RELAY_URL=https://relay.jarvisautomation.io')
+    expect(env).toMatch(/JARVIS_RELAY_HOUSEHOLD_JWT=\s*$/m)
+
+    const compose = readFileSync(join(composePath, 'docker-compose.yml'), 'utf-8')
+    const notifIdx = compose.indexOf('jarvis-notifications:')
+    const nextSvcIdx = compose.indexOf('\n  jarvis-', notifIdx + 1)
+    const notifBlock = compose.slice(notifIdx, nextSvcIdx === -1 ? undefined : nextSvcIdx)
+    expect(notifBlock).toContain('RELAY_URL: ${JARVIS_RELAY_URL:-}')
+    expect(notifBlock).toContain('RELAY_HOUSEHOLD_JWT: ${JARVIS_RELAY_HOUSEHOLD_JWT:-}')
+  })
+
+  it('preserves an existing JARVIS_RELAY_HOUSEHOLD_JWT through reconcile', async () => {
+    const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.preserved'
+    writeFakeInstall(composePath, {
+      JARVIS_RELAY_URL: 'https://relay.jarvisautomation.io',
+      JARVIS_RELAY_HOUSEHOLD_JWT: jwt,
+      NOTIFICATIONS_PORT: '7712',
+    })
+
+    await upgradeCompose(fakeApp)
+
+    const env = readFileSync(join(composePath, '.env'), 'utf-8')
+    expect(env).toContain(`JARVIS_RELAY_HOUSEHOLD_JWT=${jwt}`)
+  })
+
   it('creates a backup directory before regenerating', async () => {
     writeFakeInstall(composePath)
 

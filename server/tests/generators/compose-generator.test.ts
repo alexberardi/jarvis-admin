@@ -268,6 +268,33 @@ describe('compose-generator', () => {
       const output = generateCompose(state, registry)
       expect(output).not.toContain('JARVIS_RELAY_URL:')
     })
+
+    it('emits RELAY_URL + RELAY_HOUSEHOLD_JWT on jarvis-notifications when enabled', () => {
+      const state = makeState({
+        relayEnabled: true,
+        enabledModules: ['jarvis-notifications'],
+      })
+      const output = generateCompose(state, registry)
+      // Sliced to the notifications block so we don't accidentally match the CC line.
+      const notifIdx = output.indexOf('jarvis-notifications:')
+      const nextSvcIdx = output.indexOf('\n  jarvis-', notifIdx + 1)
+      const notifBlock = output.slice(notifIdx, nextSvcIdx === -1 ? undefined : nextSvcIdx)
+      expect(notifBlock).toContain('RELAY_URL: ${JARVIS_RELAY_URL:-}')
+      expect(notifBlock).toContain('RELAY_HOUSEHOLD_JWT: ${JARVIS_RELAY_HOUSEHOLD_JWT:-}')
+    })
+
+    it('omits RELAY_URL + RELAY_HOUSEHOLD_JWT on jarvis-notifications when disabled', () => {
+      const state = makeState({
+        relayEnabled: false,
+        enabledModules: ['jarvis-notifications'],
+      })
+      const output = generateCompose(state, registry)
+      const notifIdx = output.indexOf('jarvis-notifications:')
+      const nextSvcIdx = output.indexOf('\n  jarvis-', notifIdx + 1)
+      const notifBlock = output.slice(notifIdx, nextSvcIdx === -1 ? undefined : nextSvcIdx)
+      expect(notifBlock).not.toContain('RELAY_URL:')
+      expect(notifBlock).not.toContain('RELAY_HOUSEHOLD_JWT:')
+    })
   })
 
   describe('native services on macOS', () => {
