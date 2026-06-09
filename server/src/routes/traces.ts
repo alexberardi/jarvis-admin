@@ -1,14 +1,26 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
 import { proxyRequest } from '../services/proxy.js'
+
+async function resolveCcUrl(app: FastifyInstance, reply: FastifyReply): Promise<string | null> {
+  try {
+    return await app.serviceRegistry.get('jarvis-command-center')
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    reply.code(503).send({ detail: `Service discovery failed: ${message}` })
+    return null
+  }
+}
 
 export async function tracesRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireSuperuser)
 
   // List recent traces (proxy to command-center)
   app.get('/', async (request, reply) => {
+    const ccUrl = await resolveCcUrl(app, reply)
+    if (!ccUrl) return
     const qs = new URLSearchParams(request.query as Record<string, string>).toString()
-    const url = `${app.config.commandCenterUrl}/api/v0/admin/traces${qs ? `?${qs}` : ''}`
+    const url = `${ccUrl}/api/v0/admin/traces${qs ? `?${qs}` : ''}`
     const result = await proxyRequest({
       method: 'GET',
       url,
@@ -22,10 +34,12 @@ export async function tracesRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { traceId: string } }>(
     '/:traceId',
     async (request, reply) => {
+      const ccUrl = await resolveCcUrl(app, reply)
+      if (!ccUrl) return
       const { traceId } = request.params
       const result = await proxyRequest({
         method: 'GET',
-        url: `${app.config.commandCenterUrl}/api/v0/admin/traces/${traceId}`,
+        url: `${ccUrl}/api/v0/admin/traces/${traceId}`,
         headers: { 'X-API-Key': app.config.commandCenterAdminKey },
         timeout: 10_000,
       })

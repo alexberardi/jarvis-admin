@@ -16,7 +16,9 @@ export interface TraceListItem {
   request_type: string
   source: string
   node_id: string | null
+  household_id: string | null
   user_command: string | null
+  assistant_message: string | null
   status: string
   total_duration_ms: number
   span_count: number
@@ -24,7 +26,6 @@ export interface TraceListItem {
 }
 
 export interface TraceDetail extends Omit<TraceListItem, 'span_count'> {
-  household_id: string | null
   error_message: string | null
   spans: TraceSpan[]
 }
@@ -39,6 +40,8 @@ export interface TraceListParams {
   offset?: number
   status?: string
   source?: string
+  household_id?: string
+  node_id?: string
 }
 
 export async function fetchTraces(params: TraceListParams = {}): Promise<TraceListResponse> {

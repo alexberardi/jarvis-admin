@@ -18,7 +18,9 @@ import { updateRoutes } from './routes/update.js'
 import { installRoutes } from './routes/install.js'
 import { nativeServicesRoutes } from './routes/native-services.js'
 import { tracesRoutes } from './routes/traces.js'
+import { adminRoutes } from './routes/admin.js'
 import { resolveServiceUrls } from './services/configService.js'
+import { ServiceRegistry } from './services/serviceRegistry.js'
 import type { DockerService } from './services/docker.js'
 import type { ComposeService } from './services/compose.js'
 import type { RegistryService } from './services/registry.js'
@@ -28,6 +30,7 @@ export interface AppOptions {
   docker?: DockerService | null
   compose?: ComposeService | null
   registry?: RegistryService | null
+  serviceRegistry?: ServiceRegistry
 }
 
 declare module 'fastify' {
@@ -36,6 +39,7 @@ declare module 'fastify' {
     docker: DockerService | null
     compose: ComposeService | null
     registry: RegistryService | null
+    serviceRegistry: ServiceRegistry
   }
 }
 
@@ -55,8 +59,9 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   const config = { ...loadConfig(), ...opts.config }
 
   // Resolve service URLs from config-service (only fill in blanks — env vars take priority)
+  const configUrlStyle = process.env.JARVIS_CONFIG_URL_STYLE || undefined
   try {
-    const serviceMap = await resolveServiceUrls(config.configServiceUrl)
+    const serviceMap = await resolveServiceUrls(config.configServiceUrl, configUrlStyle)
     for (const [serviceName, configKey] of Object.entries(SERVICE_NAME_TO_CONFIG)) {
       if (!(config as Record<string, unknown>)[configKey]) {
         const url = serviceMap.get(serviceName)
@@ -106,6 +111,11 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   app.decorate('docker', opts.docker ?? null)
   app.decorate('compose', opts.compose ?? null)
   app.decorate('registry', opts.registry ?? null)
+  app.decorate(
+    'serviceRegistry',
+    opts.serviceRegistry ??
+      new ServiceRegistry(config.configServiceUrl, { style: configUrlStyle }),
+  )
   app.decorateRequest('user', null as never)
 
   await app.register(healthRoutes)
@@ -123,6 +133,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(installRoutes, { prefix: '/api/install' })
   await app.register(nativeServicesRoutes, { prefix: '/api/native-services' })
   await app.register(tracesRoutes, { prefix: '/api/traces' })
+  await app.register(adminRoutes, { prefix: '/api/admin' })
 
   // Serve static frontend in production
   if (config.staticDir && existsSync(config.staticDir)) {

@@ -37,6 +37,19 @@ describe('resolveServiceUrls', () => {
     )
   })
 
+  it('passes style query param when provided', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      mockFetchJson({ services: [] }),
+    )
+
+    await resolveServiceUrls('http://config:7700', 'dockerized')
+
+    expect(fetch).toHaveBeenCalledWith(
+      'http://config:7700/services?style=dockerized',
+      expect.anything(),
+    )
+  })
+
   it('throws on non-200 response', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response('Not Found', { status: 404, statusText: 'Not Found' }),
