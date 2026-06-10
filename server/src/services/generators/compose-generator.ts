@@ -225,7 +225,7 @@ function generateInfraBlock(
     for (const vol of infra.volumes) {
       lines.push(`      - ${vol}`)
     }
-    lines.push('      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh')
+    lines.push('      - ${INIT_DB_PATH:-./init-db.sh}:/docker-entrypoint-initdb.d/init-db.sh')
   } else if (infra.volumes.length > 0) {
     lines.push('    volumes:')
     for (const vol of infra.volumes) {
@@ -412,7 +412,7 @@ function generateServiceBlock(
   if (service.id === 'go2rtc') {
     // No app-to-app auth, no extra environment — skip to volumes/network
     lines.push('    volumes:')
-    lines.push('      - ./go2rtc.yaml:/config/go2rtc.yaml')
+    lines.push('      - ${GO2RTC_CONFIG_PATH:-./go2rtc.yaml}:/config/go2rtc.yaml')
     lines.push('    networks:')
     lines.push('      - jarvis')
     lines.push('    restart: unless-stopped')
@@ -480,7 +480,10 @@ function generateServiceBlock(
   // Volumes
   const vols: string[] = []
   if (isWhisper) {
-    vols.push('      - ./whisper-models:/whisper-models:ro')
+    // Same docker-out-of-docker pattern as MODELS_DIR — env-generator fills
+    // WHISPER_MODELS_DIR with the absolute host path when admin runs in a
+    // container. Native installs fall through to the relative default.
+    vols.push('      - ${WHISPER_MODELS_DIR:-./whisper-models}:/whisper-models:ro')
   }
   // modelVolume: only LLM-style services that load weights from disk need this
   // bind. Generic GPU services (like whisper, which bakes its model into the image)

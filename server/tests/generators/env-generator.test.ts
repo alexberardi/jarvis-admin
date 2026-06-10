@@ -128,6 +128,54 @@ describe('env-generator', () => {
     })
   })
 
+  describe('WHISPER_MODELS_DIR (admin-in-docker)', () => {
+    it('writes absolute WHISPER_MODELS_DIR when state.hostComposePath is set', () => {
+      const state = makeState({ hostComposePath: '/home/jarvis/.jarvis/compose' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('WHISPER_MODELS_DIR=/home/jarvis/.jarvis/compose/whisper-models')
+    })
+
+    it('strips trailing slash from hostComposePath for WHISPER_MODELS_DIR', () => {
+      const state = makeState({ hostComposePath: '/var/lib/jarvis/' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('WHISPER_MODELS_DIR=/var/lib/jarvis/whisper-models')
+    })
+
+    it('omits WHISPER_MODELS_DIR when hostComposePath is unset (native install)', () => {
+      const state = makeState({ hostComposePath: undefined })
+      const output = generateEnv(state, registry)
+      expect(output).not.toContain('WHISPER_MODELS_DIR=')
+    })
+  })
+
+  describe('INIT_DB_PATH and GO2RTC_CONFIG_PATH (admin-in-docker)', () => {
+    it('writes absolute INIT_DB_PATH when state.hostComposePath is set', () => {
+      const state = makeState({ hostComposePath: '/home/jarvis/.jarvis/compose' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('INIT_DB_PATH=/home/jarvis/.jarvis/compose/init-db.sh')
+    })
+
+    it('writes absolute GO2RTC_CONFIG_PATH when state.hostComposePath is set', () => {
+      const state = makeState({ hostComposePath: '/home/jarvis/.jarvis/compose' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('GO2RTC_CONFIG_PATH=/home/jarvis/.jarvis/compose/go2rtc.yaml')
+    })
+
+    it('strips trailing slash from hostComposePath for both vars', () => {
+      const state = makeState({ hostComposePath: '/var/lib/jarvis/' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('INIT_DB_PATH=/var/lib/jarvis/init-db.sh')
+      expect(output).toContain('GO2RTC_CONFIG_PATH=/var/lib/jarvis/go2rtc.yaml')
+    })
+
+    it('omits both vars when hostComposePath is unset (native install)', () => {
+      const state = makeState({ hostComposePath: undefined })
+      const output = generateEnv(state, registry)
+      expect(output).not.toContain('INIT_DB_PATH=')
+      expect(output).not.toContain('GO2RTC_CONFIG_PATH=')
+    })
+  })
+
   describe('Jarvis Relay', () => {
     it('writes JARVIS_RELAY_URL with default when enabled and no custom URL', () => {
       const state = makeState({ relayEnabled: true, relayUrl: '' })
