@@ -101,8 +101,24 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   // docker daemon then binds to a non-existent host path → empty /app/.models
   // → llm-proxy's model_service crashes on startup.
   if (state.hostComposePath) {
-    lines.push('# --- Models Directory (host absolute path) ---')
-    lines.push(`MODELS_DIR=${state.hostComposePath.replace(/\/$/, '')}/.models`)
+    const root = state.hostComposePath.replace(/\/$/, '')
+    lines.push('# --- Host paths for admin-in-docker binds ---')
+    lines.push(`MODELS_DIR=${root}/.models`)
+    // Whisper models dir: same docker-out-of-docker bind-resolution problem.
+    // The compose uses `${WHISPER_MODELS_DIR:-./whisper-models}` so a native
+    // install still gets the relative-path behavior; admin-in-docker fills
+    // the env var with the absolute host path. Prod incident 2026-06-10:
+    // the daemon resolved `./whisper-models` against /host/compose, created
+    // an empty dir there, and whisper-api silently loaded a NULL model
+    // (pywhispercpp's download_model returns None on a path-shaped input).
+    lines.push(`WHISPER_MODELS_DIR=${root}/whisper-models`)
+    // Same class for postgres' init-db.sh and go2rtc's config — both are
+    // file binds; without an absolute host path the daemon creates empty
+    // directories at /host/compose/init-db.sh and /host/compose/go2rtc.yaml,
+    // postgres skips init (silent, because /docker-entrypoint-initdb.d
+    // scans for *files*), and go2rtc fails to read its config.
+    lines.push(`INIT_DB_PATH=${root}/init-db.sh`)
+    lines.push(`GO2RTC_CONFIG_PATH=${root}/go2rtc.yaml`)
     lines.push('')
   }
 

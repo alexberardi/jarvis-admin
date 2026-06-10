@@ -221,6 +221,13 @@ describe('compose-generator', () => {
       expect(whisperOnly).not.toContain('${MODELS_DIR:-./.models}:/app/.models')
     })
 
+    it('mounts whisper-models via WHISPER_MODELS_DIR with relative fallback', () => {
+      // Templated so env-generator's WHISPER_MODELS_DIR can swap in the
+      // absolute host path under admin-in-docker without changing compose.
+      const output = generateCompose(whisperState('nvidia'), registry)
+      expect(output).toContain('${WHISPER_MODELS_DIR:-./whisper-models}:/whisper-models:ro')
+    })
+
     it('still mounts models volume on llm-proxy (modelVolume: true)', () => {
       const state = makeState({
         platform: 'linux',
@@ -344,6 +351,21 @@ describe('compose-generator', () => {
       expect(output).toContain('postgres:')
       expect(output).toContain('pg_isready')
       expect(output).toContain('init-db.sh')
+    })
+
+    it('mounts init-db.sh via INIT_DB_PATH with relative fallback', () => {
+      // Templated so env-generator's INIT_DB_PATH can swap in the absolute
+      // host path under admin-in-docker without changing compose.
+      const output = generateCompose(makeState(), registry)
+      expect(output).toContain('${INIT_DB_PATH:-./init-db.sh}:/docker-entrypoint-initdb.d/init-db.sh')
+    })
+  })
+
+  describe('go2rtc', () => {
+    it('mounts go2rtc.yaml via GO2RTC_CONFIG_PATH with relative fallback', () => {
+      const state = makeState({ enabledModules: ['go2rtc'] })
+      const output = generateCompose(state, registry)
+      expect(output).toContain('${GO2RTC_CONFIG_PATH:-./go2rtc.yaml}:/config/go2rtc.yaml')
     })
   })
 
