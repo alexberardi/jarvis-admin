@@ -22,7 +22,7 @@
     "installer"
   ],
   "author": "Alex Berardi",
-  "license": "MIT",
+  "license": "AGPL-3.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/alexberardi/jarvis-admin"

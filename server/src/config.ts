@@ -12,6 +12,10 @@ export interface Config {
   dockerSocket: string
   registryPath: string | null
   staticDir: string | null
+  /** Allowed CORS origins for the admin API. Empty = same-origin only (no
+   *  cross-origin reflection). Set JARVIS_ADMIN_CORS_ORIGINS to a
+   *  comma-separated allowlist (e.g. "http://localhost:5173"). */
+  corsOrigins: string[]
 }
 
 /** Persisted service URLs and version info from the setup wizard. */
@@ -63,5 +67,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     dockerSocket: env.DOCKER_SOCKET ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
     registryPath: env.REGISTRY_PATH ?? null,
     staticDir: env.STATIC_DIR ?? null,
+    corsOrigins: (env.JARVIS_ADMIN_CORS_ORIGINS ?? '')
+      .split(',')
+      .map((o) => o.trim())
+      .filter((o) => o.length > 0),
   }
 }
