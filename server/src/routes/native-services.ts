@@ -121,6 +121,22 @@ function nativeCapableServices(registry: ServiceRegistry): ServiceDefinition[] {
 export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> {
   const registry = parseRegistry(registryData)
 
+  // Guard the :id path param before it is interpolated into any launchctl/shell
+  // command. Only IDs present in the service registry are accepted; anything
+  // else is rejected so an attacker cannot smuggle shell metacharacters into
+  // the launchd label. Returns the validated id, or null after sending a 404.
+  const requireKnownServiceId = (
+    request: { params: { id: string } },
+    reply: { code: (n: number) => { send: (b: unknown) => unknown } },
+  ): string | null => {
+    const { id } = request.params
+    if (!registry.services.some((s) => s.id === id)) {
+      reply.code(404).send({ error: `Unknown service: ${id}` })
+      return null
+    }
+    return id
+  }
+
   // Auth policy here mirrors /api/install/*: the wizard runs install BEFORE
   // there is a superuser account, so install + status are open (same trust
   // model as the rest of the bootstrap). Post-install lifecycle ops
@@ -239,7 +255,9 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   /** Restart (kickstart -k) — also used for "start". */
   app.post<{ Params: { id: string } }>('/:id/restart', { preHandler: requireSuperuser }, async (request, reply) => {
     if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
-    const label = launchdLabel(request.params.id)
+    const id = requireKnownServiceId(request, reply)
+    if (!id) return
+    const label = launchdLabel(id)
     if (!existsSync(plistPath(label))) {
       return reply.code(404).send({ error: `${label} not installed` })
     }
@@ -257,7 +275,9 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   /** Stop (bootout) — leaves the plist in place so the user can re-enable later. */
   app.post<{ Params: { id: string } }>('/:id/stop', { preHandler: requireSuperuser }, async (request, reply) => {
     if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
-    const label = launchdLabel(request.params.id)
+    const id = requireKnownServiceId(request, reply)
+    if (!id) return
+    const label = launchdLabel(id)
     try {
       const uid = execSync('id -u', { encoding: 'utf-8' }).trim()
       execSync(`launchctl bootout gui/${uid}/${label} 2>/dev/null || true`, { timeout: 5000 })
@@ -272,7 +292,9 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   /** Uninstall: stop AND remove the plist file. */
   app.post<{ Params: { id: string } }>('/:id/uninstall', { preHandler: requireSuperuser }, async (request, reply) => {
     if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
-    const label = launchdLabel(request.params.id)
+    const id = requireKnownServiceId(request, reply)
+    if (!id) return
+    const label = launchdLabel(id)
     const plist = plistPath(label)
     try {
       const uid = execSync('id -u', { encoding: 'utf-8' }).trim()
@@ -298,7 +320,8 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: requireSuperuser },
     async (request, reply) => {
       if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
-      const { id } = request.params as { id: string }
+      const id = requireKnownServiceId(request, reply)
+      if (!id) return
       const { stream = 'stderr', lines = '200' } = request.query as { stream?: string; lines?: string }
       const dir = logDir(id)
       const file = join(dir, stream === 'stdout' ? 'out.log' : 'err.log')

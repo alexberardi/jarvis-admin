@@ -94,7 +94,14 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     }
   })
 
-  await app.register(cors, { origin: true })
+  // Restrict CORS on this authenticated admin API. In production the SPA is
+  // served same-origin (see fastifyStatic below), so the default is no
+  // cross-origin reflection (origin: false). For split-origin dev setups, set
+  // JARVIS_ADMIN_CORS_ORIGINS to an explicit comma-separated allowlist.
+  await app.register(cors, {
+    origin: config.corsOrigins.length > 0 ? config.corsOrigins : false,
+    credentials: true,
+  })
 
   // Request logging for debugging
   app.addHook('onResponse', (request, reply, done) => {
