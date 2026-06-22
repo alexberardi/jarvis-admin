@@ -800,7 +800,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     const composePath = getComposePath()
     const env = loadEnvFile(composePath)
     const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
-    const state = reconstructWizardState(env, registry, composePath)
+    const state = reconstructWizardState(env, registry)
 
     // Build options: optional + recommended services with current enabled state
     const options = registry.services
