@@ -80,6 +80,29 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Sync is available in compose-export mode too — admin has the docker
+            socket + the compose mount, so it can regenerate + re-register
+            (e.g. to apply mobile-reachable service URLs). */}
+        <div className="flex items-center justify-between rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <div className="flex items-center gap-3">
+            <GitMerge size={20} className="text-[var(--color-text-muted)]" />
+            <div>
+              <p className="text-sm font-medium text-[var(--color-text)]">
+                Sync compose to latest registry
+              </p>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                Regenerate docker-compose.yml, apply changes, and re-register services with config-service
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/reconcile')}
+            className="rounded-lg border border-[var(--color-border)] px-3 py-1.5 text-xs text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+          >
+            Sync now
+          </button>
+        </div>
+
         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center">
           <Server size={32} className="mx-auto mb-3 text-[var(--color-text-muted)]" />
           <p className="text-sm font-medium text-[var(--color-text)]">
