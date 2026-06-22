@@ -800,7 +800,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     const composePath = getComposePath()
     const env = loadEnvFile(composePath)
     const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
-    const state = reconstructWizardState(env, registry)
+    const state = reconstructWizardState(env, registry, composePath)
 
     // Build options: optional + recommended services with current enabled state
     const options = registry.services
@@ -930,8 +930,31 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       })
 
       await new Promise<void>((resolve) => {
-        child.on('close', (code) => {
+        child.on('close', async (code) => {
           if (code === 0) {
+            // Re-register with config-service so the registry picks up any
+            // coordinate changes (e.g. the external/published coords mobile
+            // needs). Sync regenerates compose, but config-service registration
+            // is a separate runtime step — push it here so existing installs
+            // self-heal via the Sync button instead of needing a reinstall.
+            try {
+              emit({ phase: 'register', message: 'Re-registering services with config-service...' })
+              const adminToken = env.JARVIS_AUTH_ADMIN_TOKEN ?? ''
+              const configPort = parseInt(env.CONFIG_SERVICE_PORT ?? '7700', 10)
+              const regServices = registry.services.filter(
+                (s) => s.category === 'core' || s.category === 'recommended',
+              )
+              await registerServices(
+                regServices,
+                `http://localhost:${configPort}`,
+                adminToken,
+                reconstructed.portOverrides ?? {},
+                composePath,
+              )
+              emit({ stream: 'stdout', text: 'Re-registered services with config-service\n' })
+            } catch (regErr) {
+              emit({ stream: 'stderr', text: `Re-register warning: ${regErr instanceof Error ? regErr.message : String(regErr)}\n` })
+            }
             emit({ phase: 'done', message: 'Reconcile complete. To pick up admin changes: docker compose pull jarvis-admin && docker compose up -d --force-recreate jarvis-admin', done: true, code: 0 })
           } else {
             emit({ phase: 'error', message: `docker compose up exited with code ${code}`, done: true, code })
