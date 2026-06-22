@@ -115,12 +115,17 @@ export async function registerServices(
   // Register with host.docker.internal so Docker containers can reach services
   // via host port mapping. This also supports future multi-machine deployments
   // where remote services would be re-registered with their actual IP.
+  // Also register external (published) coords so off-docker clients (the mobile
+  // app, via ?style=external) get a reachable URL: external_host=localhost is
+  // the sentinel the client rewrites to the host it reached config-service on.
   const serviceList = services
     .filter((s) => s.id !== 'jarvis-admin') // Admin doesn't need registration
     .map((s) => ({
       name: s.id,
       host: 'host.docker.internal',
       port: portOverrides[s.id] ?? s.port,
+      external_host: 'localhost',
+      external_port: portOverrides[s.id] ?? s.port,
     }))
 
   try {
