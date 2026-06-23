@@ -503,6 +503,97 @@ describe('compose-generator', () => {
     })
   })
 
+  describe('migration entrypoint wrapper', () => {
+    // Every service the registry marks `migrate: true` must get the
+    // alembic-then-exec entrypoint wrapper so it runs `alembic upgrade head`
+    // before serving. Driven by the registry flag — no service-id hardcoding.
+    const MIGRATE_SET = registry.services
+      .filter((s) => s.migrate)
+      .map((s) => s.id)
+
+    // Slice the compose output to a single service's block.
+    function serviceBlock(output: string, id: string): string {
+      const start = output.indexOf(`\n  ${id}:\n`)
+      expect(start, `${id} missing from compose`).toBeGreaterThanOrEqual(0)
+      const after = output.slice(start + `\n  ${id}:\n`.length)
+      const next = after.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+      return next ? after.slice(0, next.index) : after
+    }
+
+    // Enable every recommended/optional migrate-set service so they all emit.
+    const allMigrateState = makeState({
+      platform: 'linux',
+      enabledModules: MIGRATE_SET,
+      hardware: {
+        platform: 'linux',
+        arch: 'x86_64',
+        totalMemoryGb: 32,
+        gpuName: 'NVIDIA RTX 3090',
+        gpuVramMb: 24576,
+        gpuType: 'nvidia',
+        recommendedBackends: ['gguf'],
+        recommendedBackend: 'gguf',
+      },
+    })
+
+    it('marks the expected services as migrate-set in the registry', () => {
+      // Regression guard: config-service (the one that 500'd) and the other
+      // DB-backed services must carry the flag. logs/tts are intentionally
+      // deferred — their images don't ship alembic and their prod DBs are
+      // un-stamped, so they need separate wiring before they can auto-migrate.
+      expect(MIGRATE_SET).toEqual(
+        expect.arrayContaining([
+          'jarvis-config-service',
+          'jarvis-auth',
+          'jarvis-command-center',
+          'jarvis-whisper-api',
+          'jarvis-llm-proxy-api',
+          'jarvis-notifications',
+        ]),
+      )
+      expect(MIGRATE_SET).not.toContain('jarvis-logs')
+      expect(MIGRATE_SET).not.toContain('jarvis-tts')
+    })
+
+    it.each(MIGRATE_SET)('emits the alembic entrypoint wrapper for %s', (id) => {
+      const output = generateCompose(allMigrateState, registry)
+      const block = serviceBlock(output, id)
+      expect(block).toContain('entrypoint:')
+      expect(block).toContain('- /bin/sh')
+      expect(block).toContain('- -c')
+      expect(block).toContain('- python -m alembic upgrade head && exec "$@"')
+      expect(block).toContain('- jarvis-migrate')
+    })
+
+    it('does NOT emit a migrate entrypoint for non-migrate services (jarvis-web)', () => {
+      const output = generateCompose(makeState({ enabledModules: ['jarvis-web'] }), registry)
+      const block = serviceBlock(output, 'jarvis-web')
+      expect(block).not.toContain('alembic upgrade head')
+      expect(block).not.toContain('entrypoint:')
+    })
+
+    it('no longer emits a leading alembic command override on command-center or whisper (image CMD serves)', () => {
+      const output = generateCompose(allMigrateState, registry)
+      const cc = serviceBlock(output, 'jarvis-command-center')
+      const whisper = serviceBlock(output, 'jarvis-whisper-api')
+      // The migrate now lives in the entrypoint; these services keep no command override.
+      expect(cc).not.toContain('    command:')
+      expect(whisper).not.toContain('    command:')
+    })
+
+    it('llm-proxy keeps a dual-uvicorn command WITHOUT the alembic prefix (no image CMD)', () => {
+      const output = generateCompose(allMigrateState, registry)
+      const llm = serviceBlock(output, 'jarvis-llm-proxy-api')
+      // Entrypoint migrates; the command starts both uvicorn processes.
+      expect(llm).toContain('entrypoint:')
+      expect(llm).toContain('    command:')
+      expect(llm).toContain('uvicorn services.model_service:app')
+      expect(llm).toContain('uvicorn main:app')
+      // The command itself must not re-run migrations (the entrypoint does that).
+      expect(llm).not.toContain('command: ["sh", "-c", "python -m alembic')
+    })
+  })
+
   describe('command-center prompt-provider volume', () => {
     it('emits the prompt-providers mount under jarvis-command-center', () => {
       const state = makeState({ enabledModules: [] })
