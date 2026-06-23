@@ -572,13 +572,32 @@ describe('compose-generator', () => {
       expect(block).not.toContain('entrypoint:')
     })
 
-    it('no longer emits a leading alembic command override on command-center or whisper (image CMD serves)', () => {
+    it('keeps an explicit serve command on migrate services with no seed (overriding entrypoint clears image CMD)', () => {
       const output = generateCompose(allMigrateState, registry)
       const cc = serviceBlock(output, 'jarvis-command-center')
       const whisper = serviceBlock(output, 'jarvis-whisper-api')
-      // The migrate now lives in the entrypoint; these services keep no command override.
-      expect(cc).not.toContain('    command:')
-      expect(whisper).not.toContain('    command:')
+      // Overriding `entrypoint` CLEARS the image CMD — so the migrate wrapper's
+      // `exec "$@"` has nothing to run unless these carry a command. Without it
+      // they exit right after migrating (restart-loop, no server).
+      expect(cc).toContain('    command:')
+      expect(cc).toContain('"uvicorn", "app.main:app"')
+      expect(whisper).toContain('    command:')
+      expect(whisper).toContain('"uvicorn", "app.main:app"')
+    })
+
+    it('INVARIANT: every migrate service emits a non-empty command (no exec "" exit)', () => {
+      // Generic class guard — unlike a per-service test, this can't be written to
+      // encode the bug. Any migrate service that overrides entrypoint MUST supply
+      // a command, or `exec "$@"` runs nothing and the container exits.
+      const output = generateCompose(allMigrateState, registry)
+      const offenders = MIGRATE_SET.filter((id) => {
+        const block = serviceBlock(output, id)
+        return block.includes('exec "$@"') && !/\n {4}command:/.test(block)
+      })
+      expect(
+        offenders,
+        `migrate services with entrypoint but NO command (exec "" → exit): ${offenders.join(', ')}`,
+      ).toEqual([])
     })
 
     it('llm-proxy keeps a dual-uvicorn command WITHOUT the alembic prefix (no image CMD)', () => {
