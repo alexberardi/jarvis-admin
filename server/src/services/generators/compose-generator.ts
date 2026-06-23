@@ -487,11 +487,15 @@ function generateServiceBlock(
     lines.push('      - jarvis-migrate')
   }
 
-  // LLM proxy has no CMD in its Dockerfile, so the migrate entrypoint above has
-  // nothing to exec. Supply the dual-uvicorn start as the compose command — it
-  // lands in "$@" after migrations run (no alembic prefix; the entrypoint migrates).
+  // Overriding `entrypoint` (above) CLEARS the image's CMD, so the migrate
+  // wrapper's `exec "$@"` has nothing to run unless we supply a command. llm-proxy
+  // needs its dual-uvicorn start; every other migrate service serves app.main:app.
+  // Without this, command-center/whisper/notifications exec "" and exit right
+  // after migrating (restart-loop, no server) — the bug that 500'd the fleet.
   if (service.id === 'jarvis-llm-proxy-api') {
     lines.push(`    command: ["sh", "-c", "python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
+  } else if (service.migrate) {
+    lines.push(`    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${containerPort}"]`)
   }
 
   pushGpuConfig(lines, service, state)
