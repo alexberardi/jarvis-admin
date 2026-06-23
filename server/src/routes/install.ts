@@ -907,6 +907,51 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const serviceIds = composeServices.filter((s) => s.id !== 'jarvis-admin').map((s) => s.id)
       const workerIds = getComposeWorkerIds(composeServices)
 
+      // One-time Compose project-name migration. The generated compose now pins
+      // `name: jarvis`. An install created before that has its running
+      // containers under a directory-derived project (e.g. "compose"), so the
+      // `up` below would collide on the fixed container_name:s ("container name
+      // already in use" on jarvis-loki etc.). Detect a stale project from a
+      // probe container and remove the stale NON-admin containers so `up`
+      // recreates them under "jarvis". Their data lives in named volumes
+      // (postgres/loki/grafana/...), which survive container removal.
+      // jarvis-admin is left running — it is the parent of this process and is
+      // updated separately. Best-effort + fully guarded: any failure here just
+      // falls through to the normal `up` (which would surface a real conflict).
+      try {
+        let staleProject = ''
+        try {
+          staleProject = execSync(
+            'docker inspect -f \'{{ index .Config.Labels "com.docker.compose.project" }}\' jarvis-postgres',
+            { encoding: 'utf-8', timeout: 5000 },
+          ).trim()
+        } catch {
+          /* probe container absent (fresh install) — nothing to migrate */
+        }
+        if (staleProject && staleProject !== 'jarvis') {
+          emit({ phase: 'apply', message: `Migrating Compose project '${staleProject}' → 'jarvis' (one-time; named-volume data is preserved)...` })
+          const ids = execSync(
+            `docker ps -aq --filter "label=com.docker.compose.project=${staleProject}"`,
+            { encoding: 'utf-8', timeout: 5000 },
+          ).trim().split('\n').filter(Boolean)
+          for (const id of ids) {
+            let name = ''
+            try {
+              name = execSync(`docker inspect -f '{{.Name}}' ${id}`, { encoding: 'utf-8', timeout: 5000 }).trim().replace(/^\//, '')
+            } catch { /* ignore */ }
+            if (name === 'jarvis-admin') continue // never remove our own parent
+            try {
+              execSync(`docker rm -f ${id}`, { timeout: 20000 })
+              emit({ stream: 'stdout', text: `Removed stale-project container ${name || id}\n` })
+            } catch (rmErr) {
+              emit({ stream: 'stderr', text: `Could not remove ${name || id}: ${rmErr instanceof Error ? rmErr.message : String(rmErr)}\n` })
+            }
+          }
+        }
+      } catch (migErr) {
+        emit({ stream: 'stderr', text: `Project-migration check skipped: ${migErr instanceof Error ? migErr.message : String(migErr)}\n` })
+      }
+
       const upArgs = ['compose', '-f', composeFile, 'up', '-d']
       if (trackChanged) upArgs.push('--force-recreate')
       upArgs.push(...serviceIds, ...workerIds)

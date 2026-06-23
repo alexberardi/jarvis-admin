@@ -110,6 +110,15 @@ export function generateCompose(state: WizardState, registry: ServiceRegistry): 
 
   const lines: string[] = []
 
+  // Pin the Compose project name. The services use fixed `container_name:`s but
+  // had no top-level `name:`, so Compose derived the project from the directory
+  // it ran in — and the admin (in a container) resolves a different dir than the
+  // host, so `up` thought none of the running containers were "its" project and
+  // tried to CREATE fresh ones → "container name already in use" on jarvis-loki
+  // etc. Pinning `name: jarvis` makes the project identity-stable everywhere.
+  // (2026-06 reconcile incident.)
+  lines.push('name: jarvis')
+
   lines.push('services:')
 
   // Infrastructure first
