@@ -633,3 +633,14 @@ describe('compose-generator', () => {
     })
   })
 })
+
+describe('compose-generator: pinned project name', () => {
+  const registry = loadRegistry()
+  it('pins the Compose project name (name: jarvis) above services:', () => {
+    const output = generateCompose(makeState(), registry)
+    expect(output).toContain('name: jarvis')
+    // must be a top-level key, before services:
+    expect(output.indexOf('name: jarvis')).toBeGreaterThanOrEqual(0)
+    expect(output.indexOf('name: jarvis')).toBeLessThan(output.indexOf('services:'))
+  })
+})
