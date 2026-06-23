@@ -119,6 +119,46 @@ describe('upgradeCompose with UpgradeOverrides', () => {
     expect(env).toContain(`JARVIS_RELAY_HOUSEHOLD_JWT=${jwt}`)
   })
 
+  it('migrates every registry migrate-set service on regenerate — including the previously-missing config-service', async () => {
+    // Root incident: config-service shipped migration 005 (services.external_host)
+    // but its compose never ran `alembic upgrade head`, so every /services query
+    // 500'd. The upgrader must now wrap EVERY registry `migrate: true` service in
+    // the alembic-then-exec entrypoint, not just cc/whisper/llm-proxy.
+    writeFakeInstall(composePath)
+
+    await upgradeCompose(fakeApp)
+
+    const compose = readFileSync(join(composePath, 'docker-compose.yml'), 'utf-8')
+
+    function block(id: string): string {
+      const start = compose.indexOf(`\n  ${id}:\n`)
+      expect(start, `${id} missing from regenerated compose`).toBeGreaterThanOrEqual(0)
+      const after = compose.slice(start + `\n  ${id}:\n`.length)
+      const next = after.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+      return next ? after.slice(0, next.index) : after
+    }
+
+    // Every enabled `migrate: true` service must carry the entrypoint wrapper —
+    // including config-service, the one that 500'd.
+    for (const id of [
+      'jarvis-config-service',
+      'jarvis-auth',
+      'jarvis-command-center',
+    ]) {
+      const b = block(id)
+      expect(b, `${id} should have the migrate entrypoint`).toContain('entrypoint:')
+      expect(b).toContain('python -m alembic upgrade head && exec "$@"')
+      expect(b).toContain('- jarvis-migrate')
+    }
+
+    // ...and an enabled service that is NOT in the migrate set must NOT get it —
+    // proves the registry flag gates the wrapper. jarvis-logs is intentionally
+    // deferred (its image doesn't ship alembic and its prod DB is un-stamped),
+    // so it must come up exactly as before, with no migrate entrypoint.
+    expect(block('jarvis-logs'), 'deferred service must not get the migrate entrypoint')
+      .not.toContain('jarvis-migrate')
+  })
+
   it('creates a backup directory before regenerating', async () => {
     writeFakeInstall(composePath)
 

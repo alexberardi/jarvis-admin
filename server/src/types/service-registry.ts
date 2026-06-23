@@ -78,6 +78,13 @@ export interface ServiceDefinition {
   volumes?: string[]
   /** Sibling worker containers that share this service's image and most config. */
   workers?: WorkerDefinition[]
+  /**
+   * true = this service has Alembic migrations and must run `alembic upgrade head`
+   * before serving. The compose generator wraps the image CMD in an entrypoint that
+   * migrates first, then execs the original command. Driven by this flag, never by
+   * a hardcoded service id.
+   */
+  migrate?: boolean
 }
 
 export interface InfrastructureDefinition {

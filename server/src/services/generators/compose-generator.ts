@@ -465,14 +465,24 @@ function generateServiceBlock(
     }
   }
 
-  // Services with Alembic migrations: run before starting the server
-  if (service.id === 'jarvis-command-center' || service.id === 'jarvis-whisper-api') {
-    lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${containerPort}"]`)
+  // Services with Alembic migrations (registry `migrate: true`): wrap the image
+  // CMD in an entrypoint that runs `alembic upgrade head` first, then execs the
+  // original command via "$@". This keeps migrations consistent across every
+  // migrate-set service without duplicating per-service serve commands. None of
+  // these images set ENTRYPOINT (all use CMD), so overriding entrypoint is safe.
+  if (service.migrate) {
+    lines.push('    entrypoint:')
+    lines.push('      - /bin/sh')
+    lines.push('      - -c')
+    lines.push('      - python -m alembic upgrade head && exec "$@"')
+    lines.push('      - jarvis-migrate')
   }
 
-  // LLM proxy: no CMD in Dockerfile — run migrations, start model service + API
+  // LLM proxy has no CMD in its Dockerfile, so the migrate entrypoint above has
+  // nothing to exec. Supply the dual-uvicorn start as the compose command — it
+  // lands in "$@" after migrations run (no alembic prefix; the entrypoint migrates).
   if (service.id === 'jarvis-llm-proxy-api') {
-    lines.push(`    command: ["sh", "-c", "python -m alembic upgrade head && python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
+    lines.push(`    command: ["sh", "-c", "python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
   }
 
   pushGpuConfig(lines, service, state)
