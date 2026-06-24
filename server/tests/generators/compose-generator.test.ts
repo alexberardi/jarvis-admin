@@ -663,3 +663,12 @@ describe('compose-generator: pinned project name', () => {
     expect(output.indexOf('name: jarvis')).toBeLessThan(output.indexOf('services:'))
   })
 })
+
+describe('dockerized URL style', () => {
+  it('emits JARVIS_CONFIG_URL_STYLE=dockerized for services so localhost broker resolves', () => {
+    const output = generateCompose(makeState({ enabledModules: ['jarvis-notifications'] }), loadRegistry())
+    // lets a localhost-registered broker resolve to host.docker.internal for in-Docker
+    // services while remote nodes resolve it to the server IP
+    expect(output).toContain('JARVIS_CONFIG_URL_STYLE: "dockerized"')
+  })
+})
