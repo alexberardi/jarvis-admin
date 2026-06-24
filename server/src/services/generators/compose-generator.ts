@@ -336,6 +336,12 @@ function generateServiceBlock(
 
   // Environment
   lines.push('    environment:')
+  // Discovery URL style: dockerized makes config-service rewrite localhost-
+  // registered entries (e.g. the MQTT broker) → host.docker.internal, reachable
+  // via the extra_hosts host-gateway + published port. Only localhost entries are
+  // rewritten; container-name entries stay on the bridge. Lets one broker entry
+  // (localhost) resolve for both in-Docker services and remote Pi nodes.
+  lines.push('      JARVIS_CONFIG_URL_STYLE: "dockerized"')
   // Set port env vars so the service listens on the expected port inside the container.
   // Different services use different env var names for their port.
   const portVarMap: Record<string, string[]> = {

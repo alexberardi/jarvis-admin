@@ -358,9 +358,16 @@ export async function tieredStartup(
         },
         body: JSON.stringify({
           name: 'jarvis-mqtt-broker',
-          host: 'host.docker.internal',
+          // Neutral `localhost` so the entry resolves per-consumer: in-Docker
+          // services (dockerized style) → host.docker.internal, remote Pi nodes
+          // (remote style) → the server IP. host.docker.internal CANNOT be
+          // resolved by a remote node, so it must NOT be the registered host —
+          // that's why remote nodes never discovered the broker before.
+          host: 'localhost',
           port: mqttPort,
           scheme: 'mqtt',
+          external_host: 'localhost',
+          external_port: mqttPort,
           description: 'MQTT message broker (Mosquitto)',
           health_path: '',
         }),
