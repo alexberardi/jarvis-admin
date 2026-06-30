@@ -42,7 +42,12 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   lines.push('# --- Service Ports ---')
   for (const svc of allEnabled) {
     const portVar = serviceIdToPortVar(svc.id)
-    const port = state.portOverrides[svc.id] ?? svc.port
+    // admin's containerized backend (SPA + API + /health) serves on 7711, not
+    // the registry's nominal 7710 (that's its local redirect target). Keep
+    // ADMIN_PORT in lockstep with the compose generator so the published host
+    // port lands on 7711. See generateServiceBlock's `effectivePort`.
+    const defaultPort = svc.id === 'jarvis-admin' ? 7711 : svc.port
+    const port = state.portOverrides[svc.id] ?? defaultPort
     lines.push(`${portVar}=${port}`)
   }
   lines.push('')

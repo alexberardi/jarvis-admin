@@ -66,6 +66,17 @@ describe('env-generator', () => {
     expect(output).toContain('COMMAND_CENTER_PORT=7703')
   })
 
+  it('emits ADMIN_PORT on the backend port 7711, not the registry nominal 7710', () => {
+    // admin's containerized backend (SPA + API + /health) serves on 7711; 7710 is
+    // only its local redirect target. ADMIN_PORT must match the compose generator
+    // so the published host port lands on 7711 (the install-e2e harness probes
+    // :7711/health).
+    const state = makeState({ enabledModules: ['jarvis-admin'] })
+    const output = generateEnv(state, registry)
+    expect(output).toContain('ADMIN_PORT=7711')
+    expect(output).not.toContain('ADMIN_PORT=7710')
+  })
+
   it('applies port overrides', () => {
     const state = makeState({
       portOverrides: { 'jarvis-auth': 8888 },
