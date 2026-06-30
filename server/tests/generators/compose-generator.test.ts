@@ -611,6 +611,18 @@ describe('compose-generator', () => {
       // The command itself must not re-run migrations (the entrypoint does that).
       expect(llm).not.toContain('command: ["sh", "-c", "python -m alembic')
     })
+
+    it('jarvis-auth serves jarvis_auth.app.main:app, NOT the generic app.main:app', () => {
+      // auth is the one migrate service whose app is packaged under `jarvis_auth.`
+      // rather than at top-level `app.main`. The generic `app.main:app` crash-loops
+      // it with `ModuleNotFoundError: No module named 'app'`, so it never serves
+      // /health (the bug that kept the install-e2e sync-live lane red).
+      const output = generateCompose(allMigrateState, registry)
+      const auth = serviceBlock(output, 'jarvis-auth')
+      expect(auth).toContain('    command:')
+      expect(auth).toContain('"uvicorn", "jarvis_auth.app.main:app"')
+      expect(auth).not.toContain('"uvicorn", "app.main:app"')
+    })
   })
 
   describe('command-center prompt-provider volume', () => {

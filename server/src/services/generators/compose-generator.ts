@@ -500,6 +500,13 @@ function generateServiceBlock(
   // after migrating (restart-loop, no server) — the bug that 500'd the fleet.
   if (service.id === 'jarvis-llm-proxy-api') {
     lines.push(`    command: ["sh", "-c", "python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
+  } else if (service.id === 'jarvis-auth') {
+    // jarvis-auth is the one migrate service whose app is NOT at top-level
+    // `app.main` — its image packages it under `jarvis_auth.app.main`. Using the
+    // generic `app.main:app` here crash-loops auth with `ModuleNotFoundError: No
+    // module named 'app'`, so it never serves /health (the installer's
+    // gen-export-compose already special-cases auth this same way).
+    lines.push(`    command: ["uvicorn", "jarvis_auth.app.main:app", "--host", "0.0.0.0", "--port", "${containerPort}"]`)
   } else if (service.migrate) {
     lines.push(`    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${containerPort}"]`)
   }
