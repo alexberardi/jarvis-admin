@@ -25,13 +25,26 @@ function compareSemver(a: string, b: string): number {
   return 0
 }
 
-export async function checkForUpdate(force = false): Promise<UpdateInfo> {
+export async function checkForUpdate(force = false, enabled = true): Promise<UpdateInfo> {
+  const current = VERSION.replace(/^v/, '')
+
+  // Privacy gate: when updates are disabled, never reach out to GitHub.
+  // Fail closed — report "no update available" without any network call.
+  if (!enabled) {
+    return {
+      currentVersion: current,
+      latestVersion: current,
+      updateAvailable: false,
+      releaseUrl: '',
+      releaseNotes: '',
+      publishedAt: '',
+    }
+  }
+
   const now = Date.now()
   if (!force && cached && now - lastCheck < CHECK_INTERVAL_MS) {
     return cached
   }
-
-  const current = VERSION.replace(/^v/, '')
 
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {

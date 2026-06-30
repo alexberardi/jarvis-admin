@@ -16,6 +16,10 @@ export interface Config {
    *  cross-origin reflection). Set JARVIS_ADMIN_CORS_ORIGINS to a
    *  comma-separated allowlist (e.g. "http://localhost:5173"). */
   corsOrigins: string[]
+  /** Global, box-level opt-in for outbound update checks + self-update.
+   *  Defaults to false (fully local; no outbound internet unless opted in).
+   *  Set JARVIS_ALLOW_UPDATES=true to allow GitHub release checks and applies. */
+  allowUpdates: boolean
 }
 
 /** Persisted service URLs and version info from the setup wizard. */
@@ -26,6 +30,7 @@ interface PersistedConfig {
   commandCenterUrl?: string
   installedVersion?: string
   installed?: boolean
+  allowUpdates?: boolean
 }
 
 export function isInstalled(): boolean {
@@ -71,5 +76,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       .split(',')
       .map((o) => o.trim())
       .filter((o) => o.length > 0),
+    // Default false: fully local, no outbound update checks unless opted in.
+    allowUpdates:
+      (persisted.allowUpdates ??
+        (env.JARVIS_ALLOW_UPDATES === 'true' || env.JARVIS_ALLOW_UPDATES === '1')) === true,
   }
 }
