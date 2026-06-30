@@ -321,7 +321,14 @@ function generateServiceBlock(
 ): string[] {
   const lines: string[] = []
   const portVar = serviceIdToPortVar(service.id)
-  const hostPort = state.portOverrides[service.id] ?? service.port
+  // jarvis-admin's containerized backend serves the SPA + API + /health on
+  // PORT ?? 7711. The registry's 7710 is only the local "already-installed"
+  // redirect target (startRedirectServer), unused in a fresh container. Forcing
+  // the compose onto 7710 leaves 7711 dead — so the install-e2e harness's
+  // :7711/health probe (and real admin access) miss it. Mirror the installer:
+  // serve + publish + health-check admin on 7711.
+  const effectivePort = service.id === 'jarvis-admin' ? 7711 : service.port
+  const hostPort = state.portOverrides[service.id] ?? effectivePort
   const image = getServiceImage(service, state)
 
   lines.push(`  ${service.id}:`)
@@ -330,7 +337,7 @@ function generateServiceBlock(
 
   // Ports — containerPort is the port the service listens on inside the container
   // (may differ from the external port when the Dockerfile hardcodes a port)
-  const containerPort = service.containerPort ?? service.port
+  const containerPort = service.containerPort ?? effectivePort
   lines.push('    ports:')
   lines.push(`      - "\${${portVar}:-${hostPort}}:${containerPort}"`)
 
@@ -351,7 +358,7 @@ function generateServiceBlock(
   }
   const portVarNames = portVarMap[service.id] ?? ['PORT']
   for (const pv of portVarNames) {
-    lines.push(`      ${pv}: "${service.port}"`)
+    lines.push(`      ${pv}: "${effectivePort}"`)
   }
   if (service.database) {
     const driver = service.dbDriverPrefix ?? 'postgresql://'

@@ -623,6 +623,19 @@ describe('compose-generator', () => {
       expect(auth).toContain('"uvicorn", "jarvis_auth.app.main:app"')
       expect(auth).not.toContain('"uvicorn", "app.main:app"')
     })
+
+    it('serves jarvis-admin on the backend port 7711, not the registry nominal 7710', () => {
+      // admin's containerized backend (SPA + API + /health) listens on PORT ?? 7711;
+      // the registry's 7710 is only its local "already-installed" redirect target.
+      // The compose must publish + set PORT + health-check on 7711, or the
+      // install-e2e harness's :7711/health probe (and real admin access) miss it.
+      const output = generateCompose(makeState({ enabledModules: ['jarvis-admin'] }), registry)
+      const admin = serviceBlock(output, 'jarvis-admin')
+      expect(admin).toContain('PORT: "7711"')
+      expect(admin).toContain('${ADMIN_PORT:-7711}:7711')
+      expect(admin).toContain('localhost:7711/health')
+      expect(admin).not.toContain('7710')
+    })
   })
 
   describe('command-center prompt-provider volume', () => {
