@@ -160,6 +160,8 @@ SPA → /api/update/check → UpdateChecker
 SPA → /api/update/apply → pulls images + runs compose up -d per tier
 ```
 
+> **Privacy gate:** the whole update flow is off by default. Both `/check` and `/apply` are gated by `JARVIS_ALLOW_UPDATES` (default `false`) — see the Config surface table. Disabled = no `api.github.com` request and no self-update download; the gate fails closed.
+
 ---
 
 ## "How to..." recipes
@@ -273,6 +275,9 @@ server/src/
 | `JARVIS_ROOT` | `/home/jarvis/jarvis` or similar | Root for docker-compose path resolution |
 | `STATIC_DIR` | `./dist` | Where the built SPA lives — backend serves this in prod |
 | `JARVIS_ADMIN_PORT` | `7710` | Bind port |
+| `JARVIS_ALLOW_UPDATES` | `false` | **Global, box-level opt-in for outbound update checks + self-update.** Default `false` (fully local; no outbound internet unless opted in). Set to `true`/`1` to allow `/api/update/check` to query `api.github.com` and `/api/update/apply` to run the self-updater (which downloads `public.tar.gz`). When `false`, `/check` returns "no update" with **no network call** and `/apply` returns `403` before any work. |
+
+> **Why env, not a DB setting?** The update *check* call site (`GET /api/update/check`) is unauthenticated/informational — there's no JWT and admin has no household or settings credential at that point in the flow (it runs pre-wizard, first-boot). A box-level env flag is the only credential-free gate available here. Resolution order is `~/.jarvis/admin.json` (`allowUpdates`) → `JARVIS_ALLOW_UPDATES` env → `false`.
 
 Settings are not persisted by this service. Wizard state is persisted to `~/.jarvis/admin.json` (see `config.ts:savePersistedConfig`).
 
