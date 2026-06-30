@@ -33,13 +33,13 @@ function getUpgradeStatus(): UpgradeStatus {
 export async function updateRoutes(app: FastifyInstance): Promise<void> {
   /** Check for available updates (no auth required — informational) */
   app.get('/check', async (_request, reply) => {
-    const info = await checkForUpdate()
+    const info = await checkForUpdate(false, app.config.allowUpdates)
     return reply.send(info)
   })
 
   /** Force a fresh update check */
   app.post('/check', async (_request, reply) => {
-    const info = await checkForUpdate(true)
+    const info = await checkForUpdate(true, app.config.allowUpdates)
     return reply.send(info)
   })
 
@@ -50,7 +50,12 @@ export async function updateRoutes(app: FastifyInstance): Promise<void> {
 
   /** Apply an update — SSE endpoint that orchestrates the full upgrade */
   app.post('/apply', { preHandler: requireSuperuser }, async (request, reply) => {
-    const info = await checkForUpdate(true)
+    if (!app.config.allowUpdates) {
+      return reply.code(403).send({
+        error: 'Updates are disabled. Set JARVIS_ALLOW_UPDATES=true to allow update checks and applies.',
+      })
+    }
+    const info = await checkForUpdate(true, app.config.allowUpdates)
     if (!info.updateAvailable) {
       return reply.code(400).send({ error: 'No update available' })
     }
