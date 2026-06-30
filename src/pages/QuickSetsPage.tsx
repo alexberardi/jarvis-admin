@@ -3,6 +3,7 @@ import { Zap, Check, RefreshCw, AlertTriangle, Cpu, Plus, Trash2, X } from 'luci
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useQuickSets, useApplyQuickSet, useCreateCustomPreset, useDeleteCustomPreset } from '@/hooks/useQuickSets'
+import { useInstalledModels } from '@/hooks/useModels'
 import type { QuickSetPreset } from '@/api/quickSets'
 
 const BACKEND_OPTIONS = ['GGUF', 'MLX', 'VLLM', 'TRANSFORMERS', 'REST']
@@ -13,9 +14,20 @@ export default function QuickSetsPage() {
   const createMutation = useCreateCustomPreset()
   const deleteMutation = useDeleteCustomPreset()
 
+  const { data: installedModels } = useInstalledModels()
+  // Installed models on disk become dropdown options for the model path. Values are
+  // '.models/'-prefixed to match what the backend writes to model.live/background.name.
+  const modelOptions = useMemo(
+    () => (installedModels ?? []).map((m) => `.models/${m.name}`),
+    [installedModels],
+  )
+
   // Apply panel state
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [modelName, setModelName] = useState('')
+  // When true (or when the value isn't an installed model), show a free-text input so
+  // HuggingFace IDs and not-yet-downloaded paths remain enterable.
+  const [modelOtherMode, setModelOtherMode] = useState(false)
   const [contextWindow, setContextWindow] = useState<number | ''>('')
   const [backend, setBackend] = useState('')
   const [chatFormat, setChatFormat] = useState('')
@@ -51,6 +63,7 @@ export default function QuickSetsPage() {
     }
     setSelectedId(preset.id)
     setModelName(data?.currentValues.modelName ?? '')
+    setModelOtherMode(false)
     setBackend(preset.defaultBackend)
     setChatFormat(preset.chatFormat)
     setPromptProvider(preset.promptProvider)
@@ -388,17 +401,49 @@ export default function QuickSetsPage() {
 
           {/* User Inputs */}
           <div className="space-y-3">
-            <div>
+            <div className="space-y-2">
               <label className="mb-1 block text-xs text-[var(--color-text-muted)]">
                 Model file path
               </label>
-              <input
-                type="text"
-                value={modelName}
-                onChange={(e) => setModelName(e.target.value)}
-                placeholder=".models/model-name.gguf"
-                className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
-              />
+              {modelOptions.length > 0 && (
+                <select
+                  value={
+                    modelOtherMode || (modelName !== '' && !modelOptions.includes(modelName))
+                      ? '__other__'
+                      : modelName
+                  }
+                  onChange={(e) => {
+                    if (e.target.value === '__other__') {
+                      setModelOtherMode(true)
+                    } else {
+                      setModelOtherMode(false)
+                      setModelName(e.target.value)
+                    }
+                  }}
+                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-text)]"
+                >
+                  <option value="" disabled>
+                    Select a model…
+                  </option>
+                  {modelOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt.replace(/^\.models\//, '')}
+                    </option>
+                  ))}
+                  <option value="__other__">Other (custom path / HF ID)…</option>
+                </select>
+              )}
+              {(modelOptions.length === 0 ||
+                modelOtherMode ||
+                (modelName !== '' && !modelOptions.includes(modelName))) && (
+                <input
+                  type="text"
+                  value={modelName}
+                  onChange={(e) => setModelName(e.target.value)}
+                  placeholder=".models/model-name.gguf"
+                  className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+                />
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
