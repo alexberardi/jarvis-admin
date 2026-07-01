@@ -1,5 +1,6 @@
+import { lookup } from 'node:dns/promises'
 import type { FastifyInstance } from 'fastify'
-import { savePersistedConfig } from '../config.js'
+import { savePersistedConfig, isInstalled } from '../config.js'
 import { resolveServiceUrls } from '../services/configService.js'
 import type { Config } from '../config.js'
 
@@ -10,6 +11,17 @@ interface ProbeBody {
 interface ProbeResult {
   healthy: boolean
   error?: string
+}
+
+// Reject link-local / cloud-metadata targets (169.254.0.0/16, incl. 169.254.169.254,
+// and IPv6 fe80::/10). These are never a valid Jarvis service URL and are the classic
+// SSRF pivot. RFC1918 / localhost stay allowed — the wizard legitimately probes LAN
+// service URLs (e.g. http://10.0.0.5:7701, http://localhost:7700, container names).
+function isBlockedProbeAddress(ip: string): boolean {
+  const v4 = ip.startsWith('::ffff:') ? ip.slice(7) : ip
+  if (v4.startsWith('169.254.')) return true
+  if (ip.toLowerCase().startsWith('fe80:')) return true
+  return false
 }
 
 export async function setupRoutes(app: FastifyInstance): Promise<void> {
@@ -64,6 +76,31 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ healthy: false, error: 'URL must use http or https' })
     }
 
+    // Defense-in-depth for the native installer process: once it has recorded an
+    // install, refuse the wizard probe (it becomes a redirect-only server anyway).
+    // NOTE: in the containerized deployment this flag isn't present, so the real
+    // SSRF protection below (metadata block + no-redirect) is what carries there.
+    if (isInstalled() && !process.env.JARVIS_FORCE_INSTALL) {
+      return reply.code(403).send({ healthy: false, error: 'Setup already completed' })
+    }
+
+    // Block cloud-metadata / link-local targets — the highest-value SSRF pivot.
+    // Resolve and inspect the actual IPs, so a hostname whose A-record points at a
+    // blocked range is caught too. RFC1918 / localhost stay allowed: the wizard
+    // legitimately probes LAN service URLs. (Residual: a DNS-rebinding server can
+    // return a benign IP here and a blocked one to fetch()'s own resolver — the
+    // admin surface is expected to sit on a trusted LAN behind the operator's edge,
+    // never on the public internet; see the threat model.)
+    try {
+      const resolved = await lookup(parsed.hostname, { all: true })
+      if (resolved.some((a) => isBlockedProbeAddress(a.address))) {
+        return reply.code(400).send({ healthy: false, error: 'Target address not allowed' })
+      }
+    } catch {
+      // Host doesn't resolve here — not an SSRF concern. Let the probe fetch below
+      // fail naturally (surfaced to the wizard as an unreachable/unhealthy target).
+    }
+
     // Try /health first, then /info, then root
     const paths = ['/health', '/info', '/']
     let lastError = ''
@@ -72,6 +109,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
       try {
         const probeUrl = `${url.replace(/\/$/, '')}${path}`
         const response = await fetch(probeUrl, {
+          redirect: 'manual', // never follow a 3xx into a blocked/internal target
           signal: AbortSignal.timeout(5000),
         })
 
