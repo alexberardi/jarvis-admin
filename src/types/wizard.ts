@@ -1,5 +1,8 @@
 export type GpuType = 'nvidia' | 'amd' | 'amd-rocm' | 'apple' | 'none'
 
+/** Explicit Whisper GPU backend (default "cpu"); independent of hardware.gpuType. */
+export type WhisperBackend = 'cpu' | 'cuda' | 'vulkan' | 'rocm'
+
 export interface HardwareInfo {
   platform: 'darwin' | 'linux'
   arch: string
@@ -21,6 +24,7 @@ export interface WizardState {
   dbUser: string
   whisperModel: string
   whisperModelPath: string
+  whisperBackend?: WhisperBackend
   llmInterface: string
   deploymentMode: 'local' | 'remote-llm'
   deploymentTarget: 'standard' | 'compose-export'
@@ -50,6 +54,7 @@ export type WizardAction =
   | { type: 'SET_SECRETS'; secrets: Record<string, string> }
   | { type: 'SET_DB_USER'; user: string }
   | { type: 'SET_WHISPER_MODEL'; model: string }
+  | { type: 'SET_WHISPER_BACKEND'; backend: WhisperBackend }
   | { type: 'SET_LLM_INTERFACE'; interfaceId: string }
   | { type: 'SET_DEPLOYMENT_MODE'; mode: 'local' | 'remote-llm' }
   | { type: 'SET_DEPLOYMENT_TARGET'; target: 'standard' | 'compose-export' }
