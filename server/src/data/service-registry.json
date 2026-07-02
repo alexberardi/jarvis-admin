@@ -120,8 +120,12 @@
       "port": 7707,
       "image": "ghcr.io/alexberardi/jarvis-tts:latest",
       "healthCheck": "/health",
-      "dependsOn": ["jarvis-auth", "jarvis-config-service"],
+      "dependsOn": ["postgres", "jarvis-auth", "jarvis-config-service"],
+      "database": "jarvis_tts",
+      "dbDriverPrefix": "postgresql+psycopg2://",
+      "migrate": true,
       "envVars": [
+        { "name": "DATABASE_URL", "description": "PostgreSQL connection string", "required": true },
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
         { "name": "TTS_PROVIDER", "description": "Active TTS provider (piper, kokoro)", "required": false, "default": "kokoro" },
         { "name": "HF_HOME", "description": "HuggingFace cache dir for Kokoro voice weights", "required": false, "default": "/app/models/hf_cache" }
