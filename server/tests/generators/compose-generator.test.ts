@@ -538,9 +538,10 @@ describe('compose-generator', () => {
 
     it('marks the expected services as migrate-set in the registry', () => {
       // Regression guard: config-service (the one that 500'd) and the other
-      // DB-backed services must carry the flag. logs/tts are intentionally
-      // deferred — their images don't ship alembic and their prod DBs are
-      // un-stamped, so they need separate wiring before they can auto-migrate.
+      // DB-backed services must carry the flag. jarvis-tts now ships alembic in
+      // its image and has DATABASE_URL wired, so it carries the flag too (its
+      // settings writes 500'd fleet-wide without it). jarvis-logs stays deferred
+      // — its image doesn't ship alembic yet.
       expect(MIGRATE_SET).toEqual(
         expect.arrayContaining([
           'jarvis-config-service',
@@ -549,10 +550,10 @@ describe('compose-generator', () => {
           'jarvis-whisper-api',
           'jarvis-llm-proxy-api',
           'jarvis-notifications',
+          'jarvis-tts',
         ]),
       )
       expect(MIGRATE_SET).not.toContain('jarvis-logs')
-      expect(MIGRATE_SET).not.toContain('jarvis-tts')
     })
 
     it.each(MIGRATE_SET)('emits the alembic entrypoint wrapper for %s', (id) => {
