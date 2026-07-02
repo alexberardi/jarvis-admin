@@ -163,6 +163,78 @@ describe('compose-generator', () => {
     })
   })
 
+  // Guards the "a generated AMD/Vulkan install actually works" contract against a
+  // known-good compose. Shaped so a CUDA profile can be added the same way.
+  describe('AMD/Vulkan install profile', () => {
+    function serviceBlock(output: string, id: string): string {
+      const start = output.indexOf(`\n  ${id}:\n`)
+      expect(start, `${id} missing from compose`).toBeGreaterThanOrEqual(0)
+      const after = output.slice(start + `\n  ${id}:\n`.length)
+      const next = after.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+      return next ? after.slice(0, next.index) : after
+    }
+    function amdState() {
+      return makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-llm-proxy-api', 'jarvis-whisper-api'],
+        hardware: {
+          platform: 'linux',
+          arch: 'x86_64',
+          totalMemoryGb: 32,
+          gpuName: 'AMD Radeon RX 9070',
+          gpuVramMb: 16384,
+          gpuType: 'amd',
+          recommendedBackends: ['gguf'],
+          recommendedBackend: 'gguf',
+        },
+      })
+    }
+
+    it('emits MODEL_SERVICE_TOKEN on the llm-proxy API AND worker (else inference 503s)', () => {
+      const out = generateCompose(amdState(), registry)
+      expect(serviceBlock(out, 'jarvis-llm-proxy-api')).toContain('MODEL_SERVICE_TOKEN: ${MODEL_SERVICE_TOKEN}')
+      expect(serviceBlock(out, 'llm-proxy-worker')).toContain('MODEL_SERVICE_TOKEN: ${MODEL_SERVICE_TOKEN}')
+    })
+
+    it('emits JARVIS_FLASH_ATTN=false on the AMD llm-proxy API AND worker', () => {
+      const out = generateCompose(amdState(), registry)
+      expect(serviceBlock(out, 'jarvis-llm-proxy-api')).toContain('JARVIS_FLASH_ATTN: "false"')
+      expect(serviceBlock(out, 'llm-proxy-worker')).toContain('JARVIS_FLASH_ATTN: "false"')
+    })
+
+    it('does NOT emit JARVIS_FLASH_ATTN for nvidia (its FA kernel is fine)', () => {
+      const nv = makeState({
+        platform: 'linux',
+        enabledModules: ['jarvis-llm-proxy-api'],
+        hardware: {
+          platform: 'linux', arch: 'x86_64', totalMemoryGb: 32,
+          gpuName: 'RTX 3090', gpuVramMb: 24576, gpuType: 'nvidia',
+          recommendedBackends: ['gguf'], recommendedBackend: 'gguf',
+        },
+      })
+      expect(generateCompose(nv, registry)).not.toContain('JARVIS_FLASH_ATTN')
+    })
+
+    it('gives llm-proxy the -vulkan image on AMD', () => {
+      const llm = serviceBlock(generateCompose(amdState(), registry), 'jarvis-llm-proxy-api')
+      expect(llm).toMatch(/image:.*jarvis-llm-proxy-api:.*-vulkan/)
+    })
+
+    it('passes the discrete GPU through to llm-proxy (dri/kfd + render group + shm)', () => {
+      const llm = serviceBlock(generateCompose(amdState(), registry), 'jarvis-llm-proxy-api')
+      expect(llm).toContain('/dev/dri:/dev/dri')
+      expect(llm).toContain('/dev/kfd:/dev/kfd')
+      expect(llm).toContain('- render')
+      expect(llm).toContain('shm_size')
+    })
+
+    it('does NOT hardcode a device index — the image auto-selects the discrete GPU', () => {
+      const llm = serviceBlock(generateCompose(amdState(), registry), 'jarvis-llm-proxy-api')
+      expect(llm).not.toContain('GGML_VK_VISIBLE_DEVICES')
+      expect(llm).not.toContain('HIP_VISIBLE_DEVICES')
+    })
+  })
+
   describe('cpuFallback (whisper) GPU variant selection', () => {
     function whisperState(gpuType: 'nvidia' | 'amd' | 'amd-rocm' | 'none' | null, platform: 'linux' | 'darwin' = 'linux') {
       return makeState({
