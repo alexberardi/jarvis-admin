@@ -1,5 +1,12 @@
 export type GpuType = 'nvidia' | 'amd' | 'amd-rocm' | 'apple' | 'none'
 
+/**
+ * Whisper GPU backend, chosen explicitly and independently of the LLM gpuType.
+ * Default "cpu" — Whisper's base.en is fast on CPU and leaves the GPU for the LLM.
+ * Maps to the whisper image suffix: cpu "" / cuda "-cuda" / vulkan "-vulkan" / rocm "-rocm".
+ */
+export type WhisperBackend = 'cpu' | 'cuda' | 'vulkan' | 'rocm'
+
 export interface HardwareInfo {
   platform: 'darwin' | 'linux'
   arch: string
@@ -25,6 +32,8 @@ export interface WizardState {
   dbUser: string
   whisperModel: string
   whisperModelPath: string
+  /** Explicit Whisper GPU backend (default "cpu" when unset). Independent of hardware.gpuType. */
+  whisperBackend?: WhisperBackend
   llmInterface: string
 
   // New: deployment mode

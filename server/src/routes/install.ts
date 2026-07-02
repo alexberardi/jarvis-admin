@@ -860,10 +860,10 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const { getComposeServices, getComposeWorkerIds } = await import('../services/generators/compose-generator.js')
 
       // Apply user overrides from the options screen (if provided)
-      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string; releaseTrack?: 'stable' | 'dev' } | null
-      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperModelPath || body?.releaseTrack
+      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string; whisperBackend?: 'cpu' | 'cuda' | 'vulkan' | 'rocm'; releaseTrack?: 'stable' | 'dev' } | null
+      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperModelPath || body?.whisperBackend || body?.releaseTrack
       const overrides = hasOverrides
-        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperModelPath: body?.whisperModelPath, releaseTrack: body?.releaseTrack }
+        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperModelPath: body?.whisperModelPath, whisperBackend: body?.whisperBackend, releaseTrack: body?.releaseTrack }
         : undefined
 
       // Detect if the release track is changing (requires pull + force-recreate)

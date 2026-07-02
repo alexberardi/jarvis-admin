@@ -47,6 +47,7 @@ export default function ReconcilePage() {
   const [relayEnabled, setRelayEnabled] = useState(false)
   const [relayUrl, setRelayUrl] = useState('https://relay.jarvisautomation.io')
   const [whisperModelPath, setWhisperModelPath] = useState('/whisper-models/ggml-base.en.bin')
+  const [whisperBackend, setWhisperBackend] = useState<'cpu' | 'cuda' | 'vulkan' | 'rocm'>('cpu')
   const [releaseTrack, setReleaseTrack] = useState<'stable' | 'dev'>('stable')
 
   const addLog = useCallback((line: LogLine) => {
@@ -102,7 +103,7 @@ export default function ReconcilePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, releaseTrack }),
+        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, releaseTrack }),
       })
 
       if (!res.ok || !res.body) {
@@ -276,6 +277,20 @@ export default function ReconcilePage() {
                 />
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
                   Path inside the container. Place model files in <code className="rounded bg-[var(--color-bg)] px-1">./whisper-models/</code> next to your compose file.
+                </p>
+                <label className="mt-3 block text-xs font-medium text-[var(--color-text-muted)]">GPU backend</label>
+                <select
+                  value={whisperBackend}
+                  onChange={(e) => setWhisperBackend(e.target.value as 'cpu' | 'cuda' | 'vulkan' | 'rocm')}
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm text-[var(--color-text)]"
+                >
+                  <option value="cpu">CPU (default)</option>
+                  <option value="cuda">NVIDIA (CUDA)</option>
+                  <option value="vulkan">AMD / generic (Vulkan)</option>
+                  <option value="rocm">AMD (ROCm)</option>
+                </select>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Where speech-to-text runs. CPU leaves the GPU for the LLM; pick a GPU backend to run Whisper on the GPU.
                 </p>
               </div>
             </div>

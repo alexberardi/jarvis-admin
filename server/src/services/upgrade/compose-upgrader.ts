@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'node
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { ServiceRegistry } from '../../types/service-registry.js'
+import type { WhisperBackend } from '../../types/wizard.js'
 import { generateCompose, getAllEnabledServices } from '../generators/compose-generator.js'
 import { generateEnv } from '../generators/env-generator.js'
 import { generateInitDbScript } from '../generators/init-db-generator.js'
@@ -43,6 +44,7 @@ export interface UpgradeOverrides {
   relayEnabled?: boolean
   relayUrl?: string
   whisperModelPath?: string
+  whisperBackend?: WhisperBackend
   releaseTrack?: 'stable' | 'dev'
 }
 
@@ -81,6 +83,9 @@ export async function upgradeCompose(
   }
   if (overrides?.whisperModelPath) {
     state.whisperModelPath = overrides.whisperModelPath
+  }
+  if (overrides?.whisperBackend) {
+    state.whisperBackend = overrides.whisperBackend
   }
   if (overrides?.releaseTrack) {
     state.releaseTrack = overrides.releaseTrack

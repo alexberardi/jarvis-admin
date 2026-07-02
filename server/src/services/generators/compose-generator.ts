@@ -67,6 +67,22 @@ const CPU_FALLBACK_GPU_VARIANTS = new Set<string>(['nvidia', 'amd-rocm'])
 
 const FIRST_PARTY_PREFIX = 'ghcr.io/alexberardi/'
 
+// Whisper's variant is chosen EXPLICITLY via state.whisperBackend (default "cpu"),
+// independent of the auto-detected LLM gpuType. WHISPER_BACKEND_GPU maps the
+// selection to the gpuType the device emitter understands.
+const WHISPER_BACKEND_SUFFIX: Record<string, string> = {
+  cpu: '',
+  cuda: '-cuda',
+  vulkan: '-vulkan',
+  rocm: '-rocm',
+}
+const WHISPER_BACKEND_GPU: Record<string, string> = {
+  cpu: 'none',
+  cuda: 'nvidia',
+  vulkan: 'amd',
+  rocm: 'amd-rocm',
+}
+
 /** Whether a service should use a GPU image variant + GPU runtime config for the host. */
 function shouldUseGpuVariant(service: ServiceDefinition, gpuType: string | undefined): boolean {
   if (!service.gpu || !gpuType) return false
@@ -257,6 +273,12 @@ function getServiceImage(service: ServiceDefinition, state: WizardState): string
   // Third-party images (e.g. go2rtc) keep their original tag
   if (!isFirstParty) return raw
 
+  // Whisper: explicit backend selection (cpu default), independent of the LLM gpuType.
+  if (service.id === 'jarvis-whisper-api') {
+    const suffix = WHISPER_BACKEND_SUFFIX[state.whisperBackend ?? 'cpu'] ?? ''
+    return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${suffix}`
+  }
+
   // Build tag with optional GPU suffix
   let gpuSuffix = ''
   if (shouldUseGpuVariant(service, state.hardware?.gpuType)) {
@@ -272,24 +294,7 @@ function getServiceImage(service: ServiceDefinition, state: WizardState): string
   return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${gpuSuffix}`
 }
 
-function pushGpuConfig(
-  lines: string[],
-  service: ServiceDefinition,
-  state: WizardState,
-): void {
-  if (!service.gpu) return
-  const detected = state.hardware?.gpuType
-  // cpuFallback services skip GPU runtime config when the host either has no
-  // GPU or has a GPU type we don't ship a variant for — they degrade to the
-  // CPU image gracefully.
-  if (service.cpuFallback) {
-    if (!detected || !CPU_FALLBACK_GPU_VARIANTS.has(detected)) return
-  }
-  // GPU-required services (no cpuFallback) MUST get GPU passthrough or the
-  // container won't boot. If detection failed (state-reconstructor couldn't
-  // probe the host), fall back to nvidia — the most common case and matches
-  // legacy installs whose original wizard hardware selection wasn't persisted.
-  const gpuType = detected ?? 'nvidia'
+function pushGpuDevices(lines: string[], gpuType: string): void {
   if (gpuType === 'nvidia') {
     lines.push('    ipc: host')
     lines.push('    shm_size: "8gb"')
@@ -309,6 +314,38 @@ function pushGpuConfig(
     lines.push('    group_add:')
     lines.push('      - video')
     lines.push('      - render')
+  }
+}
+
+function pushGpuConfig(
+  lines: string[],
+  service: ServiceDefinition,
+  state: WizardState,
+): void {
+  if (!service.gpu) return
+
+  // Whisper: device passthrough follows the EXPLICIT whisperBackend selection
+  // (cpu default), independent of the auto-detected LLM gpuType. cpu -> nothing.
+  if (service.id === 'jarvis-whisper-api') {
+    const wb = state.whisperBackend ?? 'cpu'
+    if (wb !== 'cpu') pushGpuDevices(lines, WHISPER_BACKEND_GPU[wb] ?? 'none')
+    return
+  }
+
+  const detected = state.hardware?.gpuType
+  // cpuFallback services skip GPU runtime config when the host either has no
+  // GPU or has a GPU type we don't ship a variant for — they degrade to the
+  // CPU image gracefully.
+  if (service.cpuFallback) {
+    if (!detected || !CPU_FALLBACK_GPU_VARIANTS.has(detected)) return
+  }
+  // GPU-required services (no cpuFallback) MUST get GPU passthrough or the
+  // container won't boot. If detection failed (state-reconstructor couldn't
+  // probe the host), fall back to nvidia — the most common case and matches
+  // legacy installs whose original wizard hardware selection wasn't persisted.
+  const gpuType = detected ?? 'nvidia'
+  if (gpuType === 'nvidia' || gpuType === 'amd' || gpuType === 'amd-rocm') {
+    pushGpuDevices(lines, gpuType)
   } else {
     lines.push('    ipc: host')
   }

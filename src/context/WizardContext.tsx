@@ -73,6 +73,8 @@ function wizardReducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, dbUser: action.user }
     case 'SET_WHISPER_MODEL':
       return { ...state, whisperModel: action.model }
+    case 'SET_WHISPER_BACKEND':
+      return { ...state, whisperBackend: action.backend }
     case 'SET_LLM_INTERFACE':
       return { ...state, llmInterface: action.interfaceId }
     case 'SET_DEPLOYMENT_MODE':
