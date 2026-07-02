@@ -98,6 +98,7 @@ cd server && npm test
 | `/api/update` | `update.ts` | Stack-wide update flow — check + apply |
 | `/api/install` | `install.ts` | Install/reconcile services — invokes compose generation + docker compose up |
 | `/api/traces` | `traces.ts` | Request trace viewer — proxies to CC `/api/v0/admin/traces` |
+| `/api/admin` | `admin.ts` | Cross-household superuser views — households, nodes, users list + temp-password reset. Proxies jarvis-auth `/superuser/*`, forwarding the operator's JWT |
 
 All `/api/*` routes (except `/auth/login`) require a valid superuser JWT, enforced via `middleware/auth.ts`. Tokens come from jarvis-auth.
 
@@ -308,6 +309,6 @@ Settings are not persisted by this service. Wizard state is persisted to `~/.jar
 
 - **Settings storage.** Each service owns its settings; admin only aggregates the view.
 - **Authentication.** Login is forwarded to jarvis-auth; this service has no user table.
-- **User management.** Admin users (superusers) are managed in jarvis-auth's database.
+- **User creation / role management.** Users register via jarvis-auth (invite codes); superuser promotion lives in jarvis-auth. The Users page only *lists* users and issues temp-password resets (show-once; the user is forced to change it at next login).
 - **Per-household admin UI.** The wizard and settings views are global — no household scoping yet.
 - **MQTT or push.** Admin is request/response only. Real-time updates come from polling.

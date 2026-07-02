@@ -11,6 +11,7 @@ import SettingsPage from '@/pages/SettingsPage'
 import ServicesPage from '@/pages/ServicesPage'
 import DashboardPage from '@/pages/DashboardPage'
 import NodesPage from '@/pages/NodesPage'
+import UsersPage from '@/pages/UsersPage'
 import NativeServicesPage from '@/pages/NativeServicesPage'
 import ModelsPage from '@/pages/ModelsPage'
 import QuickSetsPage from '@/pages/QuickSetsPage'
@@ -72,6 +73,7 @@ function AppRoutes() {
         <Route path="/update" element={<UpdatePage />} />
         <Route path="/reconcile" element={<ReconcilePage />} />
         <Route path="/nodes" element={<NodesPage />} />
+        <Route path="/users" element={<UsersPage />} />
         <Route path="/native-services" element={<NativeServicesPage />} />
         <Route
           path="/"
