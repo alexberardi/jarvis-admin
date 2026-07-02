@@ -464,6 +464,15 @@ function generateServiceBlock(
     lines.push('      JARVIS_MODEL_CONTEXT_WINDOW: ${JARVIS_MODEL_CONTEXT_WINDOW:-32768}')
     lines.push('      HUGGINGFACE_HUB_TOKEN: ${HUGGINGFACE_HUB_TOKEN:-}')
     lines.push('      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0')
+    // Internal auth to the model service (:7705). The model service 503s ALL
+    // inference when this is unset (while /health stays green), so it must be
+    // present on both the API and the worker.
+    lines.push('      MODEL_SERVICE_TOKEN: ${MODEL_SERVICE_TOKEN}')
+    // gfx1201 (RDNA4) HIP flash-attn kernel faults during inference; ship it OFF
+    // on AMD (matches the installer). Discrete-GPU selection is handled in-image.
+    if (state.hardware?.gpuType === 'amd' || state.hardware?.gpuType === 'amd-rocm') {
+      lines.push('      JARVIS_FLASH_ATTN: "false"')
+    }
   }
 
   // Settings server needs the auth secret for JWT validation
@@ -640,9 +649,18 @@ function generateWorkerBlock(
       ['JARVIS_MODEL_CONTEXT_WINDOW', '${JARVIS_MODEL_CONTEXT_WINDOW:-32768}'],
       ['HUGGINGFACE_HUB_TOKEN', '${HUGGINGFACE_HUB_TOKEN:-}'],
       ['REDIS_URL', 'redis://:${REDIS_PASSWORD}@redis:6379/0'],
+      // The worker authenticates to the model service with the SAME token as the API.
+      ['MODEL_SERVICE_TOKEN', '${MODEL_SERVICE_TOKEN}'],
     ]
     for (const [key, val] of llmProxyEnv) {
       if (!overrideKeys.has(key)) lines.push(`      ${key}: ${val}`)
+    }
+    // gfx1201 (RDNA4) HIP flash-attn kernel faults; ship it OFF on AMD (matches API + installer).
+    if (
+      (state.hardware?.gpuType === 'amd' || state.hardware?.gpuType === 'amd-rocm') &&
+      !overrideKeys.has('JARVIS_FLASH_ATTN')
+    ) {
+      lines.push('      JARVIS_FLASH_ATTN: "false"')
     }
   }
 
