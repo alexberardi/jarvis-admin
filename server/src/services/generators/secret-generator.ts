@@ -14,6 +14,11 @@ export const SECRET_KEYS = [
   'POSTGRES_PASSWORD',
   'REDIS_PASSWORD',
   'ADMIN_API_KEY',
+  // Internal auth between the llm-proxy API/worker and its model service (:7705).
+  // The model service 503s ALL inference when this is unset (while /health stays
+  // green), so it must be generated + injected on every install. No 'PASSWORD' in
+  // the name -> 32 bytes / 64 hex, matching the installer.
+  'MODEL_SERVICE_TOKEN',
 ] as const
 
 export type SecretKey = (typeof SECRET_KEYS)[number]

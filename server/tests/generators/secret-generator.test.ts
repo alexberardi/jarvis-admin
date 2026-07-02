@@ -41,5 +41,11 @@ describe('secret-generator', () => {
       expect(secrets.AUTH_SECRET_KEY).toHaveLength(64)
       expect(secrets.JARVIS_CONFIG_ADMIN_TOKEN).toHaveLength(64)
     })
+
+    it('includes MODEL_SERVICE_TOKEN as a 64-hex secret (llm-proxy <-> model service auth)', () => {
+      expect(SECRET_KEYS).toContain('MODEL_SERVICE_TOKEN')
+      const secrets = generateAllSecrets()
+      expect(secrets.MODEL_SERVICE_TOKEN).toHaveLength(64)
+    })
   })
 })
