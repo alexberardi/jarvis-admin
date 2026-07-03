@@ -232,11 +232,31 @@ function generateInfraBlock(
     lines.push('    command: redis-server --requirepass ${REDIS_PASSWORD}')
   }
 
-  // Mosquitto needs a config for anonymous access (no config file needed).
-  // Two listeners: raw MQTT on 1884 (LAN nodes) and WebSockets on 9001
-  // (external nodes via Cloudflare Tunnel; CF terminates TLS).
+  // Mosquitto: hash the shared MQTT credential into a password_file at startup
+  // (the generator can't produce mosquitto's $7$ PBKDF2 hash itself), then serve
+  // two listeners — raw MQTT on 1884 (LAN nodes) and WebSockets on 9001 (external
+  // nodes via Cloudflare Tunnel; CF terminates TLS). allow_anonymous is env-driven
+  // and defaults true so the broker still accepts un-migrated clients while
+  // credentials roll out; flip MQTT_ALLOW_ANON=false to lock it down. The `$$`
+  // escapes Compose interpolation so the CONTAINER shell expands the env vars
+  // (MQTT_USERNAME/MQTT_PASSWORD/MQTT_ALLOW_ANON from the environment block above).
   if (infra.id === 'mosquitto') {
-    lines.push('    command: ["sh", "-c", "echo -e \'listener 1884\\nprotocol mqtt\\nlistener 9001\\nprotocol websockets\\nallow_anonymous true\\npersistence true\\npersistence_location /mosquitto/data/\' > /tmp/mosquitto.conf && exec mosquitto -c /tmp/mosquitto.conf"]')
+    lines.push('    command:')
+    lines.push('      - sh')
+    lines.push('      - -c')
+    lines.push('      - |')
+    lines.push('        mosquitto_passwd -b -c /tmp/pwfile "$$MQTT_USERNAME" "$$MQTT_PASSWORD"')
+    lines.push('        {')
+    lines.push('          echo "listener 1884"')
+    lines.push('          echo "protocol mqtt"')
+    lines.push('          echo "listener 9001"')
+    lines.push('          echo "protocol websockets"')
+    lines.push('          echo "allow_anonymous $$MQTT_ALLOW_ANON"')
+    lines.push('          echo "password_file /tmp/pwfile"')
+    lines.push('          echo "persistence true"')
+    lines.push('          echo "persistence_location /mosquitto/data/"')
+    lines.push('        } > /tmp/mosquitto.conf')
+    lines.push('        exec mosquitto -c /tmp/mosquitto.conf')
   }
 
   // Postgres needs healthcheck and init-db mount

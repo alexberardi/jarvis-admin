@@ -794,3 +794,47 @@ describe('dockerized URL style', () => {
     expect(output).toContain('JARVIS_CONFIG_URL_STYLE: "dockerized"')
   })
 })
+
+describe('MQTT broker auth', () => {
+  const registry = loadRegistry()
+
+  // Slice a top-level compose block (works for both `  mosquitto:` infra and
+  // `  jarvis-command-center:` service headers).
+  function block(output: string, id: string): string {
+    const start = output.indexOf(`\n  ${id}:\n`)
+    expect(start, `${id} missing from compose`).toBeGreaterThanOrEqual(0)
+    const after = output.slice(start + `\n  ${id}:\n`.length)
+    const next = after.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+    return next ? after.slice(0, next.index) : after
+  }
+
+  it('mosquitto builds a password file from env before launching (no anonymous-only broker)', () => {
+    // The generator cannot hash to mosquitto's $7$ PBKDF2 format, so the
+    // container runs mosquitto_passwd at startup and points the broker at it.
+    const m = block(generateCompose(makeState(), registry), 'mosquitto')
+    expect(m).toContain('mosquitto_passwd -b -c /tmp/pwfile')
+    expect(m).toContain('password_file /tmp/pwfile')
+  })
+
+  it('mosquitto allow_anonymous is env-driven, defaulting to true (safe transition window)', () => {
+    // Transition default: a live node that has not adopted creds yet still
+    // connects. The operator flips MQTT_ALLOW_ANON=false to lock down.
+    // $$ escapes Compose interpolation so the CONTAINER shell expands the env var.
+    const m = block(generateCompose(makeState(), registry), 'mosquitto')
+    expect(m).toContain('allow_anonymous $$MQTT_ALLOW_ANON')
+    expect(m).toContain('MQTT_ALLOW_ANON: ${MQTT_ALLOW_ANON:-true}')
+  })
+
+  it('mosquitto receives the shared MQTT credential via env', () => {
+    const m = block(generateCompose(makeState(), registry), 'mosquitto')
+    expect(m).toContain('MQTT_USERNAME: ${MQTT_USERNAME:-jarvis}')
+    expect(m).toContain('MQTT_PASSWORD: ${MQTT_PASSWORD}')
+  })
+
+  it('command-center gets the same MQTT credential so it authenticates to the broker', () => {
+    // CC's get_mqtt_credentials() reads MQTT_USERNAME/MQTT_PASSWORD from env.
+    const cc = block(generateCompose(makeState({ enabledModules: [] }), registry), 'jarvis-command-center')
+    expect(cc).toContain('MQTT_USERNAME: jarvis')
+    expect(cc).toContain('MQTT_PASSWORD: ${MQTT_PASSWORD}')
+  })
+})
