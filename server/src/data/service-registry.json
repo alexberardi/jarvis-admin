@@ -300,7 +300,7 @@
       "image": "grafana/grafana:latest",
       "port": 3000,
       "envVars": [
-        { "name": "GF_SECURITY_ADMIN_PASSWORD", "description": "Grafana admin password", "required": true, "default": "jarvis" }
+        { "name": "GF_SECURITY_ADMIN_PASSWORD", "description": "Grafana admin password", "required": true, "secret": true, "secretRef": "GRAFANA_ADMIN_PASSWORD" }
       ],
       "volumes": ["jarvis-grafana-data:/var/lib/grafana"]
     }

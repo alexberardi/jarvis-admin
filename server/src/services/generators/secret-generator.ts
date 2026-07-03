@@ -24,6 +24,11 @@ export const SECRET_KEYS = [
   // client (command-center, nodes) authenticates with it. 'PASSWORD' in the name
   // -> 16 bytes / 32 hex. Preserved across regen so nodes keep authenticating.
   'MQTT_PASSWORD',
+  // Grafana admin password. Without this the registry default was the well-known
+  // literal 'jarvis' on a 0.0.0.0:3000 bind — any LAN client could log in and read
+  // all Loki logs (voice transcripts / PII) + SSRF-pivot via the datasource proxy.
+  // 'PASSWORD' in the name -> 16 bytes / 32 hex.
+  'GRAFANA_ADMIN_PASSWORD',
 ] as const
 
 export type SecretKey = (typeof SECRET_KEYS)[number]

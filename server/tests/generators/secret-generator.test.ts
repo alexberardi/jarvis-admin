@@ -48,6 +48,12 @@ describe('secret-generator', () => {
       expect(secrets.MODEL_SERVICE_TOKEN).toHaveLength(64)
     })
 
+    it('includes GRAFANA_ADMIN_PASSWORD as a 32-hex password (replaces the admin/jarvis default)', () => {
+      expect(SECRET_KEYS).toContain('GRAFANA_ADMIN_PASSWORD')
+      const secrets = generateAllSecrets()
+      expect(secrets.GRAFANA_ADMIN_PASSWORD).toHaveLength(32)
+    })
+
     it('includes MQTT_PASSWORD as a 32-hex password (shared broker credential)', () => {
       // The broker password gates MQTT — without it in SECRET_KEYS the generator
       // would emit no MQTT_PASSWORD and the mosquitto password_file build fails.
