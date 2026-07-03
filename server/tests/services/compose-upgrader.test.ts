@@ -234,4 +234,32 @@ describe('regenerateComposeFiles (non-destructive)', () => {
 
     expect(result.env).toContain('MQTT_PASSWORD=' + 'e'.repeat(32))
   })
+
+  it('locks the broker when mqttAllowAnon override is false', () => {
+    writeFakeInstall(composePath)
+    const result = regenerateComposeFiles(composePath, { mqttAllowAnon: false })
+    expect(result.env).toContain('MQTT_ALLOW_ANON=false')
+  })
+
+  it('unlocks (override true) even when the existing .env had the broker locked', () => {
+    // The lock flag is operational — an explicit flip must win over mergeEnv's
+    // "existing value wins" preservation rule.
+    writeFakeInstall(composePath, { MQTT_ALLOW_ANON: 'false' })
+    const result = regenerateComposeFiles(composePath, { mqttAllowAnon: true })
+    expect(result.env).toContain('MQTT_ALLOW_ANON=true')
+    expect(result.env).not.toContain('MQTT_ALLOW_ANON=false')
+  })
+
+  it('preserves an existing broker lock across a plain regen (no override)', () => {
+    // Once locked, a routine regenerate must not silently re-open the broker.
+    writeFakeInstall(composePath, { MQTT_ALLOW_ANON: 'false' })
+    const result = regenerateComposeFiles(composePath)
+    expect(result.env).toContain('MQTT_ALLOW_ANON=false')
+  })
+
+  it('leaves MQTT_ALLOW_ANON unset when neither override nor .env set it (compose defaults true)', () => {
+    writeFakeInstall(composePath)
+    const result = regenerateComposeFiles(composePath)
+    expect(result.env).not.toContain('MQTT_ALLOW_ANON')
+  })
 })
