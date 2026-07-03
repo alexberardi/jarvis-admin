@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync, mkdirSync
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
-import { upgradeCompose } from '../../src/services/upgrade/compose-upgrader.js'
+import { upgradeCompose, regenerateComposeFiles } from '../../src/services/upgrade/compose-upgrader.js'
 
 /**
  * Minimal valid starting state — registry-conformant .env keys for core services
@@ -170,5 +170,58 @@ describe('upgradeCompose with UpgradeOverrides', () => {
     )
     const found = backupDirs.find((d) => existsSync(join(composePath, d)))
     expect(found).toBeDefined()
+  })
+})
+
+describe('regenerateComposeFiles (non-destructive)', () => {
+  let composePath: string
+
+  beforeEach(() => {
+    composePath = mkdtempSync(join(tmpdir(), 'jarvis-regen-'))
+    process.env.JARVIS_COMPOSE_PATH = composePath
+  })
+
+  afterEach(() => {
+    delete process.env.JARVIS_COMPOSE_PATH
+    rmSync(composePath, { recursive: true, force: true })
+  })
+
+  it('returns regenerated files as strings without touching the originals', () => {
+    writeFakeInstall(composePath)
+    const originalCompose = readFileSync(join(composePath, 'docker-compose.yml'), 'utf-8')
+    const originalEnv = readFileSync(join(composePath, '.env'), 'utf-8')
+
+    const result = regenerateComposeFiles(composePath)
+
+    // Produced a real, fuller compose than the stub we started with.
+    expect(result.compose).toContain('services:')
+    expect(result.compose.length).toBeGreaterThan(originalCompose.length)
+    expect(result.initDb.length).toBeGreaterThan(0)
+
+    // Source files are byte-for-byte untouched.
+    expect(readFileSync(join(composePath, 'docker-compose.yml'), 'utf-8')).toBe(originalCompose)
+    expect(readFileSync(join(composePath, '.env'), 'utf-8')).toBe(originalEnv)
+  })
+
+  it('preserves existing secrets in the regenerated env', () => {
+    writeFakeInstall(composePath)
+
+    const result = regenerateComposeFiles(composePath)
+
+    // The old secret values are carried forward, not re-minted.
+    expect(result.env).toContain('AUTH_SECRET_KEY=' + 'a'.repeat(64))
+    expect(result.env).toContain('JARVIS_AUTH_ADMIN_TOKEN=' + 'c'.repeat(64))
+    expect(result.env).toContain('ADMIN_API_KEY=' + 'd'.repeat(64))
+  })
+
+  it('applies overrides in the returned files', () => {
+    writeFakeInstall(composePath)
+
+    const result = regenerateComposeFiles(composePath, {
+      relayEnabled: true,
+      relayUrl: 'https://relay.example.com',
+    })
+
+    expect(result.env).toContain('JARVIS_RELAY_URL=https://relay.example.com')
   })
 })
