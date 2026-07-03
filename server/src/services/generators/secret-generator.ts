@@ -19,6 +19,11 @@ export const SECRET_KEYS = [
   // green), so it must be generated + injected on every install. No 'PASSWORD' in
   // the name -> 32 bytes / 64 hex, matching the installer.
   'MODEL_SERVICE_TOKEN',
+  // Shared MQTT broker credential (username is the literal 'jarvis'). The
+  // mosquitto container hashes this into a password_file at startup; every MQTT
+  // client (command-center, nodes) authenticates with it. 'PASSWORD' in the name
+  // -> 16 bytes / 32 hex. Preserved across regen so nodes keep authenticating.
+  'MQTT_PASSWORD',
 ] as const
 
 export type SecretKey = (typeof SECRET_KEYS)[number]

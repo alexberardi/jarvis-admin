@@ -81,7 +81,9 @@
         { "name": "ADMIN_API_KEY", "description": "Admin endpoint protection", "required": true, "secret": true, "secretRef": "ADMIN_API_KEY" },
         { "name": "JARVIS_AUTH_SECRET_KEY", "description": "JWT signing key (shared with jarvis-auth)", "required": true, "secret": true, "secretRef": "AUTH_SECRET_KEY" },
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
-        { "name": "JARVIS_MQTT_BROKER_URL", "description": "MQTT broker URL for node communication", "required": false, "default": "mqtt://mosquitto:1884" }
+        { "name": "JARVIS_MQTT_BROKER_URL", "description": "MQTT broker URL for node communication", "required": false, "default": "mqtt://mosquitto:1884" },
+        { "name": "MQTT_USERNAME", "description": "Shared broker username", "required": false, "default": "jarvis" },
+        { "name": "MQTT_PASSWORD", "description": "Shared broker password (authenticates CC to mosquitto)", "required": true, "secret": true, "secretRef": "MQTT_PASSWORD" }
       ]
     },
     {
@@ -284,7 +286,11 @@
       "description": "MQTT message broker — node-to-service communication for TTS, commands, and settings",
       "image": "eclipse-mosquitto:2",
       "port": 1884,
-      "envVars": [],
+      "envVars": [
+        { "name": "MQTT_USERNAME", "description": "Shared broker username", "required": false, "default": "jarvis" },
+        { "name": "MQTT_PASSWORD", "description": "Shared broker password (hashed into the password_file at startup)", "required": true, "secret": true, "secretRef": "MQTT_PASSWORD" },
+        { "name": "MQTT_ALLOW_ANON", "description": "Accept anonymous clients (transition window). Set false to lock the broker.", "required": false, "default": "true" }
+      ],
       "volumes": ["jarvis-mosquitto-data:/mosquitto/data"]
     },
     {
