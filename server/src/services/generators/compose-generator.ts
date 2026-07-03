@@ -268,7 +268,13 @@ function generateInfraBlock(
     lines.push('      - sh')
     lines.push('      - -c')
     lines.push('      - |')
+    // rm -f: mosquitto_passwd -c refuses an existing file on restart (2.1+).
+    // chown: mosquitto drops privileges to the mosquitto user BEFORE reading
+    // the password file (2.0.22+/2.1 image rebuilds), so a root-owned 0600
+    // pwfile crash-loops the broker (mirrors jarvis-installer#16).
+    lines.push('        rm -f /tmp/pwfile')
     lines.push('        mosquitto_passwd -b -c /tmp/pwfile "$$MQTT_USERNAME" "$$MQTT_PASSWORD"')
+    lines.push('        chown mosquitto:mosquitto /tmp/pwfile')
     lines.push('        {')
     lines.push('          echo "listener 1884"')
     lines.push('          echo "protocol mqtt"')
