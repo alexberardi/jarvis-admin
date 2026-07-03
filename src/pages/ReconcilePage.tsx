@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, Loader2, AlertTriangle, RefreshCw, GitMerge, Circle, Download } from 'lucide-react'
+import { CheckCircle2, Loader2, AlertTriangle, RefreshCw, GitMerge, Circle, Download, Lock, Unlock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Phase = 'loading_options' | 'options' | 'regenerate' | 'pull' | 'apply' | 'done' | 'error'
@@ -165,7 +165,7 @@ export default function ReconcilePage() {
   // Regenerate the compose from the current install + selections and hand the
   // files back for the operator to review, drop in, and `docker compose up -d`.
   // Never touches the running stack — the safe alternative to "Sync now".
-  async function handleDownload() {
+  async function handleDownload(extra?: { mqttAllowAnon?: boolean }) {
     setDownloading(true)
     setError(null)
     setRegenFiles(null)
@@ -173,7 +173,7 @@ export default function ReconcilePage() {
       const res = await fetch('/api/install/regenerate-download', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(currentOverrides()),
+        body: JSON.stringify({ ...currentOverrides(), ...extra }),
       })
       if (!res.ok) {
         const body = await res.text()
@@ -460,13 +460,35 @@ export default function ReconcilePage() {
         )}
         {phase === 'options' && (
           <button
-            onClick={handleDownload}
+            onClick={() => handleDownload()}
             disabled={downloading}
             title="Regenerate the compose and download it to apply by hand — doesn't touch the running stack"
             className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             Download updated compose
+          </button>
+        )}
+        {phase === 'options' && (
+          <button
+            onClick={() => handleDownload({ mqttAllowAnon: false })}
+            disabled={downloading}
+            title="Download a compose with the MQTT broker locked (allow_anonymous=false). Do this only after every node has authenticated, or un-migrated nodes will drop off."
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
+            Download + lock broker
+          </button>
+        )}
+        {phase === 'options' && (
+          <button
+            onClick={() => handleDownload({ mqttAllowAnon: true })}
+            disabled={downloading}
+            title="Download a compose that re-opens the MQTT broker to anonymous clients (allow_anonymous=true) — the transition/rollback state."
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Unlock size={16} />}
+            Download + unlock broker
           </button>
         )}
         {/* Back-to-dashboard available in options + done; disabled while reconcile is in flight. */}

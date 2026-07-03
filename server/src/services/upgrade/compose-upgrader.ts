@@ -14,6 +14,19 @@ import { getComposePath } from '../compose-path.js'
 import { getHostComposePath } from '../host-paths.js'
 import registryData from '../../data/service-registry.json' with { type: 'json' }
 
+/**
+ * Set ``key=value`` in a .env string: replace the line in place if the key
+ * exists, otherwise append it. Used for operational flags (e.g. the broker lock)
+ * that must win over the merge preservation rule.
+ */
+function upsertEnvVar(env: string, key: string, value: string): string {
+  const line = `${key}=${value}`
+  const pattern = new RegExp(`^${key}=.*$`, 'm')
+  if (pattern.test(env)) return env.replace(pattern, line)
+  const base = env.endsWith('\n') ? env : env + '\n'
+  return base + line + '\n'
+}
+
 export function loadEnvFile(composePath: string): Record<string, string> {
   const envFile = join(composePath, '.env')
   if (!existsSync(envFile)) return {}
@@ -77,7 +90,16 @@ export function buildUpgradedComposeFiles(
 
   const compose = generateCompose(state, registry)
   const newEnvTemplate = generateEnv(state, registry)
-  const env = mergeEnv(existingEnv, newEnvTemplate)
+  let env = mergeEnv(existingEnv, newEnvTemplate)
+
+  // Broker lock flag is operational, not user config: when the caller flips it,
+  // that value must win over mergeEnv's "existing value wins" rule. Absent an
+  // override we leave .env untouched — the compose defaults allow_anonymous to
+  // true (transition), and a previously-written MQTT_ALLOW_ANON is preserved by
+  // mergeEnv so a lock stays locked across routine regens.
+  if (overrides?.mqttAllowAnon !== undefined) {
+    env = upsertEnvVar(env, 'MQTT_ALLOW_ANON', String(overrides.mqttAllowAnon))
+  }
 
   const enabledServices = getAllEnabledServices(state, registry)
   const primaryDb = registry.infrastructure.find((i) => i.id === 'postgres')
@@ -121,6 +143,13 @@ export interface UpgradeOverrides {
   whisperModelPath?: string
   whisperBackend?: WhisperBackend
   releaseTrack?: 'stable' | 'dev'
+  /**
+   * Flip the MQTT broker's ``allow_anonymous`` (the transition→lockdown control).
+   * ``false`` locks the broker to authenticated clients only; ``true`` re-opens
+   * it. Undefined leaves the current state untouched. This is an operational
+   * flag, not user config, so an explicit value wins over env preservation.
+   */
+  mqttAllowAnon?: boolean
 }
 
 export async function upgradeCompose(
