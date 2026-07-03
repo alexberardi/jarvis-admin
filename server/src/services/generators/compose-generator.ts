@@ -380,6 +380,10 @@ function generateServiceBlock(
 
   // Environment
   lines.push('    environment:')
+  // Prod deployment: opt every service into strict boot-time secret enforcement
+  // (jarvis-auth's guard is warn-only unless JARVIS_ENV=production). Safe because
+  // the generator writes strong secrets for every SECRET_KEY.
+  lines.push('      JARVIS_ENV: "production"')
   // Discovery URL style: dockerized makes config-service rewrite localhost-
   // registered entries (e.g. the MQTT broker) → host.docker.internal, reachable
   // via the extra_hosts host-gateway + published port. Only localhost entries are
@@ -636,6 +640,7 @@ function generateWorkerBlock(
   lines.push(`    container_name: ${worker.id}`)
 
   lines.push('    environment:')
+  lines.push('      JARVIS_ENV: "production"')
 
   if (parent.database) {
     const driver = parent.dbDriverPrefix ?? 'postgresql://'
