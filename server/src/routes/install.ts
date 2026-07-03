@@ -4,7 +4,7 @@ import { homedir, platform, arch, totalmem } from 'node:os'
 import { exec, spawn, execSync } from 'node:child_process'
 import net from 'node:net'
 import type { FastifyInstance } from 'fastify'
-import { requireSuperuser } from '../middleware/auth.js'
+import { requireSuperuser, requireSuperuserIfInstalled } from '../middleware/auth.js'
 import { getComposePath } from '../services/compose-path.js'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
 import { generateEnv } from '../services/generators/env-generator.js'
@@ -484,7 +484,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Generate compose, env, and init-db files.
    */
-  app.post<{ Body: WizardState }>('/generate', async (request, reply) => {
+  app.post<{ Body: WizardState }>('/generate', { preHandler: requireSuperuserIfInstalled }, async (request, reply) => {
     const state = request.body as WizardState
     const composePath = getComposePath()
 
@@ -527,7 +527,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   /**
    * SSE: docker compose pull
    */
-  app.get('/pull', async (request, reply) => {
+  app.get('/pull', { preHandler: requireSuperuserIfInstalled }, async (request, reply) => {
     const composePath = getComposePath()
     const composeFile = join(composePath, 'docker-compose.yml')
 
@@ -567,7 +567,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   /**
    * SSE: tiered startup — infra → config → auth → register → all services
    */
-  app.get('/start', async (request, reply) => {
+  app.get('/start', { preHandler: requireSuperuserIfInstalled }, async (request, reply) => {
     const composePath = getComposePath()
     const composeFile = join(composePath, 'docker-compose.yml')
 
@@ -664,6 +664,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post<{ Body: { portOverrides?: Record<string, number> } }>(
     '/register',
+    { preHandler: requireSuperuserIfInstalled },
     async (request, reply) => {
       const composePath = getComposePath()
       const envFile = join(composePath, '.env')
@@ -716,7 +717,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post<{
     Body: { email: string; password: string; displayName: string }
-  }>('/account', async (request, reply) => {
+  }>('/account', { preHandler: requireSuperuserIfInstalled }, async (request, reply) => {
     const { email, password, displayName } = request.body as {
       email: string
       password: string
