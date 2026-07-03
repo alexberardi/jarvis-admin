@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises'
 import type { FastifyInstance } from 'fastify'
 import { savePersistedConfig, isInstalled } from '../config.js'
+import { requireSuperuserIfInstalled } from '../middleware/auth.js'
 import { resolveServiceUrls } from '../services/configService.js'
 import type { Config } from '../config.js'
 
@@ -134,6 +135,7 @@ export async function setupRoutes(app: FastifyInstance): Promise<void> {
    */
   app.post<{ Body: { authUrl: string; configUrl: string } }>(
     '/configure',
+    { preHandler: requireSuperuserIfInstalled },
     async (request, reply) => {
       const { authUrl, configUrl } = request.body as {
         authUrl: string
