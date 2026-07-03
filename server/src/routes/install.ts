@@ -824,6 +824,33 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
   })
 
   /**
+   * Non-destructive regeneration for the "hand the operator a new file" flow.
+   *
+   * Rebuilds docker-compose.yml / .env / init-db.sh from the current install
+   * (secrets + user config preserved, new fields added) and RETURNS them as
+   * strings — nothing on disk is touched. The operator reviews, swaps the files
+   * in, and runs `docker compose up -d`. This is the same engine `/reconcile`
+   * uses, exposed for a review-first (or compose-mode) migration.
+   */
+  app.post('/regenerate-download', { preHandler: requireSuperuser }, async (request, reply) => {
+    const composePath = getComposePath()
+    if (!existsSync(join(composePath, 'docker-compose.yml'))) {
+      return reply.code(400).send({ error: 'No existing install found. Run /generate first.' })
+    }
+
+    const overrides = (request.body ?? undefined) as
+      | import('../services/upgrade/compose-upgrader.js').UpgradeOverrides
+      | undefined
+
+    const { regenerateComposeFiles } = await import('../services/upgrade/compose-upgrader.js')
+    const { getHostComposePath } = await import('../services/host-paths.js')
+    const hostPath = await getHostComposePath()
+
+    const files = regenerateComposeFiles(composePath, overrides, hostPath || undefined)
+    return reply.send(files)
+  })
+
+  /**
    * Regenerates docker-compose.yml/.env/init-db.sh from the current install state
    * (reconstructed from the existing .env), then runs `docker compose up -d` to
    * create any new containers (e.g. workers added in a registry update) without

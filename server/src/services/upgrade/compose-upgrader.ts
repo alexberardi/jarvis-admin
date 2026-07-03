@@ -14,7 +14,7 @@ import { getComposePath } from '../compose-path.js'
 import { getHostComposePath } from '../host-paths.js'
 import registryData from '../../data/service-registry.json' with { type: 'json' }
 
-function loadEnvFile(composePath: string): Record<string, string> {
+export function loadEnvFile(composePath: string): Record<string, string> {
   const envFile = join(composePath, '.env')
   if (!existsSync(envFile)) return {}
   const vars: Record<string, string> = {}
@@ -26,6 +26,81 @@ function loadEnvFile(composePath: string): Record<string, string> {
     vars[trimmed.slice(0, eqIdx)] = trimmed.slice(eqIdx + 1)
   }
   return vars
+}
+
+export interface UpgradedComposeFiles {
+  compose: string
+  env: string
+  initDb: string
+}
+
+/**
+ * PURE regeneration core: reconstruct the wizard state from an existing install's
+ * env and produce the upgraded compose / .env / init-db.sh as STRINGS. Writes
+ * nothing. Both the in-place upgrader and the download/CLI path build on this so
+ * they can never diverge.
+ *
+ * Secrets and user config are preserved because they're recovered from
+ * ``existingEnv`` (via reconstructWizardState + mergeEnv); named data volumes are
+ * matched by Docker on ``up`` since the generator emits stable names, and
+ * bind-mount host paths come from env too. A regenerated file is CANONICAL — any
+ * hand-edits to the original compose are intentionally not carried over.
+ */
+export function buildUpgradedComposeFiles(
+  existingEnv: Record<string, string>,
+  registry: ServiceRegistry,
+  overrides?: UpgradeOverrides,
+  hostComposePath?: string,
+): UpgradedComposeFiles {
+  const state = reconstructWizardState(existingEnv, registry)
+  if (overrides?.enabledModules) {
+    state.enabledModules = overrides.enabledModules
+  }
+  if (overrides?.relayEnabled !== undefined) {
+    state.relayEnabled = overrides.relayEnabled
+  }
+  if (overrides?.relayUrl) {
+    state.relayUrl = overrides.relayUrl
+  }
+  if (overrides?.whisperModelPath) {
+    state.whisperModelPath = overrides.whisperModelPath
+  }
+  if (overrides?.whisperBackend) {
+    state.whisperBackend = overrides.whisperBackend
+  }
+  if (overrides?.releaseTrack) {
+    state.releaseTrack = overrides.releaseTrack
+  }
+  if (hostComposePath) {
+    state.hostComposePath = hostComposePath
+  }
+
+  const compose = generateCompose(state, registry)
+  const newEnvTemplate = generateEnv(state, registry)
+  const env = mergeEnv(existingEnv, newEnvTemplate)
+
+  const enabledServices = getAllEnabledServices(state, registry)
+  const primaryDb = registry.infrastructure.find((i) => i.id === 'postgres')
+    ?.envVars.find((e) => e.name === 'POSTGRES_DB')?.default ?? 'jarvis_config'
+  const initDb = generateInitDbScript(enabledServices, primaryDb)
+
+  return { compose, env, initDb }
+}
+
+/**
+ * Non-destructive regeneration for the "download / hand it to the user" flow:
+ * read the existing install's env from ``composePath`` and return the upgraded
+ * files as strings WITHOUT touching anything on disk. Used by the compose-mode
+ * migrator (installer CLI) and the admin download endpoint.
+ */
+export function regenerateComposeFiles(
+  composePath: string,
+  overrides?: UpgradeOverrides,
+  hostComposePath?: string,
+): UpgradedComposeFiles {
+  const registry: ServiceRegistry = parseRegistry(registryData)
+  const existingEnv = loadEnvFile(composePath)
+  return buildUpgradedComposeFiles(existingEnv, registry, overrides, hostComposePath)
 }
 
 /**
@@ -70,50 +145,22 @@ export async function upgradeCompose(
   // Step 2: Load existing env
   const existingEnv = loadEnvFile(composePath)
 
-  // Step 3: Reconstruct state, apply overrides from reconcile options
-  const state = reconstructWizardState(existingEnv, registry)
-  if (overrides?.enabledModules) {
-    state.enabledModules = overrides.enabledModules
-  }
-  if (overrides?.relayEnabled !== undefined) {
-    state.relayEnabled = overrides.relayEnabled
-  }
-  if (overrides?.relayUrl) {
-    state.relayUrl = overrides.relayUrl
-  }
-  if (overrides?.whisperModelPath) {
-    state.whisperModelPath = overrides.whisperModelPath
-  }
-  if (overrides?.whisperBackend) {
-    state.whisperBackend = overrides.whisperBackend
-  }
-  if (overrides?.releaseTrack) {
-    state.releaseTrack = overrides.releaseTrack
-  }
-
+  // Step 3-6: Reconstruct + regenerate via the shared pure core.
+  //
   // When admin runs in docker, fetch the absolute host path of the compose
   // dir we were mounted at. env-generator uses it to write MODELS_DIR so
   // bind mounts in the regenerated compose resolve on the host (otherwise
   // they resolve to /host/compose/.models — a path that exists in the admin
   // container but not on the host, so the daemon binds an empty directory).
   const hostPath = await getHostComposePath()
-  if (hostPath) {
-    state.hostComposePath = hostPath
-  }
+  const { compose, env, initDb } = buildUpgradedComposeFiles(
+    existingEnv,
+    registry,
+    overrides,
+    hostPath || undefined,
+  )
 
-  // Step 4: Generate new compose
-  const newCompose = generateCompose(state, registry)
-  writeFileSync(join(composePath, 'docker-compose.yml'), newCompose)
-
-  // Step 5: Generate new env template, merge
-  const newEnvTemplate = generateEnv(state, registry)
-  const mergedEnv = mergeEnv(existingEnv, newEnvTemplate)
-  writeFileSync(join(composePath, '.env'), mergedEnv)
-
-  // Step 6: Regenerate init-db.sh
-  const enabledServices = getAllEnabledServices(state, registry)
-  const primaryDb = registry.infrastructure.find((i) => i.id === 'postgres')
-    ?.envVars.find((e) => e.name === 'POSTGRES_DB')?.default ?? 'jarvis_config'
-  const initDb = generateInitDbScript(enabledServices, primaryDb)
+  writeFileSync(join(composePath, 'docker-compose.yml'), compose)
+  writeFileSync(join(composePath, '.env'), env)
   writeFileSync(join(composePath, 'init-db.sh'), initDb, { mode: 0o755 })
 }
