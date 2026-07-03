@@ -12,6 +12,29 @@ import {
   getOptionalServices,
   getRequiredInfrastructure,
 } from './service-registry.js'
+import imageDigests from '../../data/image-digests.json' with { type: 'json' }
+
+/** repo name -> full tag (track+variant suffix, e.g. "latest-cuda") -> "sha256:…" */
+type ImageDigestMap = Record<string, Record<string, string>>
+
+/**
+ * Pin a first-party image by `@sha256` digest when one is recorded for this
+ * `(repo, track+suffix)`, so a GHCR tag overwrite can't change what a generated
+ * compose pulls. Falls back to the floating `${JARVIS_IMAGE_TAG}` tag when no
+ * digest is recorded (offline installs, or before the digest map is refreshed) —
+ * a missing digest degrades gracefully, it never breaks generation.
+ */
+export function pinnedOrTaggedImage(
+  baseImage: string,
+  track: string,
+  suffix: string,
+  digests: ImageDigestMap = imageDigests as ImageDigestMap,
+): string {
+  const repo = baseImage.slice(baseImage.lastIndexOf('/') + 1)
+  const digest = digests[repo]?.[`${track}${suffix}`]
+  if (digest) return `${baseImage}@${digest}`
+  return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${suffix}`
+}
 import { serviceIdToPortVar } from './port-utils.js'
 
 /**
@@ -287,31 +310,28 @@ function generateInfraBlock(
 
 function getServiceImage(service: ServiceDefinition, state: WizardState): string {
   const raw = service.ghcrImage ?? service.image
-  const isFirstParty = raw.startsWith(FIRST_PARTY_PREFIX)
-  const baseImage = raw.includes(':') ? raw.slice(0, raw.lastIndexOf(':')) : raw
 
   // Third-party images (e.g. go2rtc) keep their original tag
-  if (!isFirstParty) return raw
+  if (!raw.startsWith(FIRST_PARTY_PREFIX)) return raw
+  const baseImage = raw.includes(':') ? raw.slice(0, raw.lastIndexOf(':')) : raw
 
-  // Whisper: explicit backend selection (cpu default), independent of the LLM gpuType.
+  // Variant suffix: whisper's explicit backend selection (cpu default), else the
+  // LLM gpu variant. Both are independent of each other.
+  let suffix = ''
   if (service.id === 'jarvis-whisper-api') {
-    const suffix = WHISPER_BACKEND_SUFFIX[state.whisperBackend ?? 'cpu'] ?? ''
-    return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${suffix}`
-  }
-
-  // Build tag with optional GPU suffix
-  let gpuSuffix = ''
-  if (shouldUseGpuVariant(service, state.hardware?.gpuType)) {
+    suffix = WHISPER_BACKEND_SUFFIX[state.whisperBackend ?? 'cpu'] ?? ''
+  } else if (shouldUseGpuVariant(service, state.hardware?.gpuType)) {
     const variantSuffix: Record<string, string> = {
       nvidia: '-cuda',
       amd: '-vulkan',
       'amd-rocm': '-rocm',
       none: '-cpu',
     }
-    gpuSuffix = variantSuffix[state.hardware!.gpuType] ?? ''
+    suffix = variantSuffix[state.hardware!.gpuType] ?? ''
   }
 
-  return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${gpuSuffix}`
+  const track = state.releaseTrack === 'dev' ? 'dev' : 'latest'
+  return pinnedOrTaggedImage(baseImage, track, suffix)
 }
 
 function pushGpuDevices(lines: string[], gpuType: string): void {

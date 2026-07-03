@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { generateCompose, getAllEnabledServices, getComposeServices, getComposeWorkerIds } from '../../src/services/generators/compose-generator.js'
+import { generateCompose, getAllEnabledServices, getComposeServices, getComposeWorkerIds, pinnedOrTaggedImage } from '../../src/services/generators/compose-generator.js'
+
+// Expected image line for a first-party service at (track, variant suffix).
+// Computed through the same helper the generator uses, so these assertions
+// verify correct VARIANT selection and survive a digest-map refresh (they read
+// whatever the committed map holds — a digest when pinned, the tag when not).
+const WHISPER_IMG = 'ghcr.io/alexberardi/jarvis-whisper-api'
+function imgLine(base: string, suffix: string, track: 'latest' | 'dev' = 'latest'): string {
+  return 'image: ' + pinnedOrTaggedImage(base, track, suffix)
+}
 import { parseRegistry } from '../../src/services/generators/service-registry.js'
 import type { ServiceRegistry } from '../../src/types/service-registry.js'
 import type { WizardState } from '../../src/types/wizard.js'
@@ -217,7 +226,7 @@ describe('compose-generator', () => {
 
     it('gives llm-proxy the -vulkan image on AMD', () => {
       const llm = serviceBlock(generateCompose(amdState(), registry), 'jarvis-llm-proxy-api')
-      expect(llm).toMatch(/image:.*jarvis-llm-proxy-api:.*-vulkan/)
+      expect(llm).toContain(imgLine('ghcr.io/alexberardi/jarvis-llm-proxy-api', '-vulkan'))
     })
 
     it('passes the discrete GPU through to llm-proxy (dri/kfd + render group + shm)', () => {
@@ -268,7 +277,7 @@ describe('compose-generator', () => {
 
     it('cpu (default): plain image, no GPU passthrough', () => {
       const w = whisperBlock(generateCompose(whisperBackendState('cpu'), registry))
-      expect(w).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}')
+      expect(w).toContain(imgLine(WHISPER_IMG, ''))
       expect(w).not.toContain('-vulkan')
       expect(w).not.toContain('-cuda')
       expect(w).not.toContain('/dev/dri')
@@ -277,20 +286,20 @@ describe('compose-generator', () => {
 
     it('cuda: -cuda image + nvidia deploy block', () => {
       const w = whisperBlock(generateCompose(whisperBackendState('cuda'), registry))
-      expect(w).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-cuda')
+      expect(w).toContain(imgLine(WHISPER_IMG, '-cuda'))
       expect(w).toContain('driver: nvidia')
     })
 
     it('vulkan: -vulkan image + /dev/dri + render group', () => {
       const w = whisperBlock(generateCompose(whisperBackendState('vulkan'), registry))
-      expect(w).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-vulkan')
+      expect(w).toContain(imgLine(WHISPER_IMG, '-vulkan'))
       expect(w).toContain('/dev/dri:/dev/dri')
       expect(w).toContain('- render')
     })
 
     it('rocm: -rocm image + /dev/dri + /dev/kfd', () => {
       const w = whisperBlock(generateCompose(whisperBackendState('rocm'), registry))
-      expect(w).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-rocm')
+      expect(w).toContain(imgLine(WHISPER_IMG, '-rocm'))
       expect(w).toContain('/dev/dri:/dev/dri')
       expect(w).toContain('/dev/kfd:/dev/kfd')
     })
@@ -298,7 +307,7 @@ describe('compose-generator', () => {
     it('is independent of the LLM gpuType (amd LLM + default cpu whisper -> plain whisper)', () => {
       // whisperState('amd') sets an AMD *LLM* host but leaves whisperBackend unset (-> cpu).
       const w = whisperBlock(generateCompose(whisperState('amd'), registry))
-      expect(w).toContain('image: ghcr.io/alexberardi/jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}')
+      expect(w).toContain(imgLine(WHISPER_IMG, ''))
       expect(w).not.toContain('-vulkan')
       expect(w).not.toContain('/dev/dri')
     })
