@@ -257,9 +257,14 @@ describe('regenerateComposeFiles (non-destructive)', () => {
     expect(result.env).toContain('MQTT_ALLOW_ANON=false')
   })
 
-  it('leaves MQTT_ALLOW_ANON unset when neither override nor .env set it (compose defaults true)', () => {
-    writeFakeInstall(composePath)
+  it('forces the transition window (true) when upgrading an install that predates locked-by-default', () => {
+    // The fresh-install template now emits MQTT_ALLOW_ANON=false, but an in-place
+    // upgrade of a fleet whose .env never had the key must NOT inherit that lock:
+    // its nodes may not have fetched broker creds yet, so locking would drop them
+    // all. The upgrader keeps the broker open until the operator locks explicitly.
+    writeFakeInstall(composePath) // fixture .env has no MQTT_ALLOW_ANON
     const result = regenerateComposeFiles(composePath)
-    expect(result.env).not.toContain('MQTT_ALLOW_ANON')
+    expect(result.env).toContain('MQTT_ALLOW_ANON=true')
+    expect(result.env).not.toContain('MQTT_ALLOW_ANON=false')
   })
 })

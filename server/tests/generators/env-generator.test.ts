@@ -99,6 +99,16 @@ describe('env-generator', () => {
     expect(output).toContain('JARVIS_APP_KEY_AUTH=')
   })
 
+  it('locks the MQTT broker for fresh installs (P0.4 — allow_anonymous=false)', () => {
+    // A fresh node fetches broker creds over authenticated HTTP before it ever
+    // opens an MQTT connection, so there is no anonymous client to strand —
+    // locking from the first boot closes the anonymous-broker RCE window. The
+    // transition window (true) is reserved for in-place upgrades only.
+    const state = makeState()
+    const output = generateEnv(state, registry)
+    expect(output).toContain('MQTT_ALLOW_ANON=false')
+  })
+
   describe('remote-llm mode', () => {
     it('includes remote URLs', () => {
       const state = makeState({
