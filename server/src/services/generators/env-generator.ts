@@ -136,6 +136,18 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   lines.push(`JARVIS_IMAGE_TAG=${state.releaseTrack === 'dev' ? 'dev' : 'latest'}`)
   lines.push('')
 
+  // MQTT broker lock. Fresh installs lock the broker from the first boot
+  // (allow_anonymous=false): the command-center reads MQTT_PASSWORD from its
+  // env and every node fetches broker creds over authenticated HTTP *before* it
+  // ever opens an MQTT connection, so there's no anonymous client to strand.
+  // The transition window (true) is reserved for in-place UPGRADES of fleets
+  // whose nodes predate credential auto-fetch — handled in the compose-upgrader,
+  // not here. Compose still defaults `${MQTT_ALLOW_ANON:-true}` as a safety
+  // fallback if this line is ever missing.
+  lines.push('# --- MQTT Broker ---')
+  lines.push('MQTT_ALLOW_ANON=false')
+  lines.push('')
+
   // Native services (macOS only). Comma-separated list of service IDs the user
   // opted to run as LaunchAgents instead of in Docker. Read back by
   // state-reconstructor so reconcile flows keep them out of compose.
