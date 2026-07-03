@@ -92,13 +92,20 @@ export function buildUpgradedComposeFiles(
   const newEnvTemplate = generateEnv(state, registry)
   let env = mergeEnv(existingEnv, newEnvTemplate)
 
-  // Broker lock flag is operational, not user config: when the caller flips it,
-  // that value must win over mergeEnv's "existing value wins" rule. Absent an
-  // override we leave .env untouched — the compose defaults allow_anonymous to
-  // true (transition), and a previously-written MQTT_ALLOW_ANON is preserved by
-  // mergeEnv so a lock stays locked across routine regens.
+  // Broker lock flag is operational, not user config.
+  //  - An explicit override always wins over mergeEnv's "existing value wins".
+  //  - A previously-written MQTT_ALLOW_ANON is preserved by mergeEnv, so a lock
+  //    stays locked (and an open transition stays open) across routine regens.
+  //  - The fresh-install template now sets MQTT_ALLOW_ANON=false, but an UPGRADE
+  //    of an install that predates that change (no MQTT_ALLOW_ANON in its .env)
+  //    must NOT inherit the locked default — its nodes may not have fetched
+  //    broker creds yet, and locking would drop the whole fleet. Force the
+  //    transition window (true) in that case; the operator locks explicitly from
+  //    the admin UI once nodes have migrated.
   if (overrides?.mqttAllowAnon !== undefined) {
     env = upsertEnvVar(env, 'MQTT_ALLOW_ANON', String(overrides.mqttAllowAnon))
+  } else if (existingEnv['MQTT_ALLOW_ANON'] === undefined) {
+    env = upsertEnvVar(env, 'MQTT_ALLOW_ANON', 'true')
   }
 
   const enabledServices = getAllEnabledServices(state, registry)
