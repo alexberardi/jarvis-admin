@@ -103,6 +103,31 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
     credentials: true,
   })
 
+  // Security headers on every response (the backend also serves the SPA
+  // same-origin). CSP is the SPA's XSS backstop and frame-ancestors/X-Frame-
+  // Options stop clickjacking of this Docker-control surface. The built SPA is a
+  // single external module script with no inline scripts, so script-src 'self'
+  // holds; 'unsafe-inline' is allowed only for styles (React runtime inline
+  // styles). Everything the SPA talks to is same-origin.
+  const csp = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "object-src 'none'",
+  ].join('; ')
+  app.addHook('onRequest', async (_request, reply) => {
+    reply.header('Content-Security-Policy', csp)
+    reply.header('X-Frame-Options', 'DENY')
+    reply.header('X-Content-Type-Options', 'nosniff')
+    reply.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  })
+
   // Request logging for debugging
   app.addHook('onResponse', (request, reply, done) => {
     console.log(`${request.method} ${request.url} → ${reply.statusCode}`)
