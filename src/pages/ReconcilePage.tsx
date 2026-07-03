@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, Loader2, AlertTriangle, RefreshCw, GitMerge, Circle } from 'lucide-react'
+import { CheckCircle2, Loader2, AlertTriangle, RefreshCw, GitMerge, Circle, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Phase = 'loading_options' | 'options' | 'regenerate' | 'pull' | 'apply' | 'done' | 'error'
@@ -49,6 +49,10 @@ export default function ReconcilePage() {
   const [whisperModelPath, setWhisperModelPath] = useState('/whisper-models/ggml-base.en.bin')
   const [whisperBackend, setWhisperBackend] = useState<'cpu' | 'cuda' | 'vulkan' | 'rocm'>('cpu')
   const [releaseTrack, setReleaseTrack] = useState<'stable' | 'dev'>('stable')
+
+  // Download-instead-of-apply: regenerated files the operator swaps in by hand.
+  const [regenFiles, setRegenFiles] = useState<{ compose: string; env: string; initDb: string } | null>(null)
+  const [downloading, setDownloading] = useState(false)
 
   const addLog = useCallback((line: LogLine) => {
     setLogs((prev) => [...prev, line])
@@ -147,6 +151,55 @@ export default function ReconcilePage() {
     }
   }
 
+  function currentOverrides() {
+    return {
+      enabledModules: serviceOptions.filter((s) => s.enabled).map((s) => s.id),
+      relayEnabled,
+      relayUrl,
+      whisperModelPath,
+      whisperBackend,
+      releaseTrack,
+    }
+  }
+
+  // Regenerate the compose from the current install + selections and hand the
+  // files back for the operator to review, drop in, and `docker compose up -d`.
+  // Never touches the running stack — the safe alternative to "Sync now".
+  async function handleDownload() {
+    setDownloading(true)
+    setError(null)
+    setRegenFiles(null)
+    try {
+      const res = await fetch('/api/install/regenerate-download', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(currentOverrides()),
+      })
+      if (!res.ok) {
+        const body = await res.text()
+        throw new Error(body || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      setRegenFiles({ compose: data.compose, env: data.env, initDb: data.initDb })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  function saveFile(name: string, content: string) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const completedPhases = Object.keys(PHASE_LABELS).filter((p) => {
     const order = Object.keys(PHASE_LABELS)
     const currentIdx = order.indexOf(phase)
@@ -159,8 +212,10 @@ export default function ReconcilePage() {
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text)]">Sync Compose</h1>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-          Regenerate <code className="rounded bg-[var(--color-surface)] px-1.5 py-0.5 text-xs">docker-compose.yml</code> from the latest service registry and apply changes
-          to the running stack.
+          Regenerate <code className="rounded bg-[var(--color-surface)] px-1.5 py-0.5 text-xs">docker-compose.yml</code> from the latest service registry, preserving your
+          secrets. <strong className="text-[var(--color-text)]">Sync now</strong> applies it to the running stack;
+          <strong className="text-[var(--color-text)]"> Download</strong> hands you the files to review and apply
+          by hand (<code className="rounded bg-[var(--color-surface)] px-1 text-xs">docker compose up -d</code>).
         </p>
       </div>
 
@@ -298,6 +353,50 @@ export default function ReconcilePage() {
         </div>
       )}
 
+      {/* Regenerated files ready to download + apply by hand */}
+      {regenFiles && phase === 'options' && (
+        <div className="rounded-lg border border-[var(--color-primary)]/40 bg-[var(--color-surface)] p-4">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+            <CheckCircle2 size={16} className="text-green-500" />
+            Updated files ready
+          </h2>
+          <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+            Your existing secrets and settings are carried over. Download, replace the files next to your
+            compose, then run <code className="rounded bg-[var(--color-bg)] px-1">docker compose up -d</code>.
+            Nothing on the server was changed.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => saveFile('docker-compose.yml', regenFiles.compose)}
+              className="flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+            >
+              <Download size={15} />
+              docker-compose.yml
+            </button>
+            <button
+              onClick={() => saveFile('.env', regenFiles.env)}
+              className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+            >
+              <Download size={15} />
+              .env
+            </button>
+            <button
+              onClick={() => saveFile('init-db.sh', regenFiles.initDb)}
+              className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)]"
+            >
+              <Download size={15} />
+              init-db.sh
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-[var(--color-text-muted)]">
+            The <code className="rounded bg-[var(--color-bg)] px-1">.env</code> merges new keys into your
+            existing values, and <code className="rounded bg-[var(--color-bg)] px-1">init-db.sh</code> covers any
+            new databases — replace all three to be safe. Diff them against your current files first if you want
+            to eyeball the changes.
+          </p>
+        </div>
+      )}
+
       {/* Progress phases */}
       {phase !== 'loading_options' && phase !== 'options' && (
         <div className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
@@ -357,6 +456,17 @@ export default function ReconcilePage() {
           >
             <GitMerge size={16} />
             Sync now
+          </button>
+        )}
+        {phase === 'options' && (
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            title="Regenerate the compose and download it to apply by hand — doesn't touch the running stack"
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Download updated compose
           </button>
         )}
         {/* Back-to-dashboard available in options + done; disabled while reconcile is in flight. */}
