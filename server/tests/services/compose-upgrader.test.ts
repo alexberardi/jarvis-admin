@@ -224,4 +224,14 @@ describe('regenerateComposeFiles (non-destructive)', () => {
 
     expect(result.env).toContain('JARVIS_RELAY_URL=https://relay.example.com')
   })
+
+  it('preserves the existing MQTT_PASSWORD across regen (nodes hold this password)', () => {
+    // Re-minting the broker password on regen would silently orphan every node
+    // (they carry the old password in their config) once the broker locks down.
+    writeFakeInstall(composePath, { MQTT_PASSWORD: 'e'.repeat(32) })
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toContain('MQTT_PASSWORD=' + 'e'.repeat(32))
+  })
 })

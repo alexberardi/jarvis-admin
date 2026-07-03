@@ -47,5 +47,14 @@ describe('secret-generator', () => {
       const secrets = generateAllSecrets()
       expect(secrets.MODEL_SERVICE_TOKEN).toHaveLength(64)
     })
+
+    it('includes MQTT_PASSWORD as a 32-hex password (shared broker credential)', () => {
+      // The broker password gates MQTT — without it in SECRET_KEYS the generator
+      // would emit no MQTT_PASSWORD and the mosquitto password_file build fails.
+      // 'PASSWORD' in the name -> 16 bytes / 32 hex.
+      expect(SECRET_KEYS).toContain('MQTT_PASSWORD')
+      const secrets = generateAllSecrets()
+      expect(secrets.MQTT_PASSWORD).toHaveLength(32)
+    })
   })
 })
