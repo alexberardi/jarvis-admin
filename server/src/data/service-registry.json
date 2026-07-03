@@ -284,7 +284,7 @@
       "id": "mosquitto",
       "name": "Mosquitto",
       "description": "MQTT message broker — node-to-service communication for TTS, commands, and settings",
-      "image": "eclipse-mosquitto:2",
+      "image": "eclipse-mosquitto:2.0",
       "port": 1884,
       "envVars": [
         { "name": "MQTT_USERNAME", "description": "Shared broker username", "required": false, "default": "jarvis" },
