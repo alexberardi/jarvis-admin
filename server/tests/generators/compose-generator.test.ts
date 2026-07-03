@@ -804,6 +804,33 @@ describe('dockerized URL style', () => {
   })
 })
 
+describe('P1.4 — data-plane loopback bind + Grafana password', () => {
+  const registry = loadRegistry()
+  function block(output: string, id: string): string {
+    const start = output.indexOf(`\n  ${id}:\n`)
+    expect(start, `${id} missing from compose`).toBeGreaterThanOrEqual(0)
+    const after = output.slice(start + `\n  ${id}:\n`.length)
+    const next = after.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+    return next ? after.slice(0, next.index) : after
+  }
+
+  it('binds data-plane infra (postgres, redis) to loopback, opt-out via JARVIS_INFRA_BIND_HOST', () => {
+    const out = generateCompose(makeState(), registry)
+    expect(block(out, 'postgres')).toContain('- "${JARVIS_INFRA_BIND_HOST:-127.0.0.1}:${')
+    expect(block(out, 'redis')).toContain('${JARVIS_INFRA_BIND_HOST:-127.0.0.1}:')
+  })
+
+  it('does NOT loopback-bind mosquitto (remote nodes must reach it)', () => {
+    expect(block(generateCompose(makeState(), registry), 'mosquitto')).not.toContain('JARVIS_INFRA_BIND_HOST')
+  })
+
+  it('Grafana uses a generated admin password, never the literal "jarvis"', () => {
+    const g = block(generateCompose(makeState(), registry), 'grafana')
+    expect(g).toContain('GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}')
+    expect(g).not.toContain('GF_SECURITY_ADMIN_PASSWORD: jarvis')
+  })
+})
+
 describe('MQTT broker auth', () => {
   const registry = loadRegistry()
 

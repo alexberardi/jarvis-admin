@@ -90,6 +90,18 @@ const CPU_FALLBACK_GPU_VARIANTS = new Set<string>(['nvidia', 'amd-rocm'])
 
 const FIRST_PARTY_PREFIX = 'ghcr.io/alexberardi/'
 
+// Data-plane infra that holds persistent state/secrets and should NOT be
+// reachable off-host by default. Their published ports bind to 127.0.0.1 (other
+// containers still reach them over the internal `jarvis` network). Opt back out
+// via JARVIS_INFRA_BIND_HOST=0.0.0.0. Infra that legitimately serves external
+// clients — mosquitto (remote nodes), grafana/loki (dashboards) — is excluded;
+// grafana is instead protected by a generated admin password (not a default).
+const DATA_PLANE_INFRA = new Set<string>(['postgres', 'redis', 'minio'])
+
+function infraBindPrefix(infraId: string): string {
+  return DATA_PLANE_INFRA.has(infraId) ? '${JARVIS_INFRA_BIND_HOST:-127.0.0.1}:' : ''
+}
+
 // Whisper's variant is chosen EXPLICITLY via state.whisperBackend (default "cpu"),
 // independent of the auto-detected LLM gpuType. WHISPER_BACKEND_GPU maps the
 // selection to the gpuType the device emitter understands.
@@ -230,7 +242,7 @@ function generateInfraBlock(
 
   if (infra.port) {
     lines.push('    ports:')
-    lines.push(`      - "\${${portVar}:-${hostPort}}:${infra.port}"`)
+    lines.push(`      - "${infraBindPrefix(infra.id)}\${${portVar}:-${hostPort}}:${infra.port}"`)
     if (infra.id === 'mosquitto') {
       // WebSocket listener for external nodes via Cloudflare Tunnel
       lines.push('      - "${MOSQUITTO_WS_PORT:-9883}:9001"')
