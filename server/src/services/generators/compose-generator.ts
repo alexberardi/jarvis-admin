@@ -30,8 +30,12 @@ export function pinnedOrTaggedImage(
   suffix: string,
   digests: ImageDigestMap = imageDigests as ImageDigestMap,
 ): string {
+  // The dev track ALWAYS floats (mirrors jarvis-installer#17): dev exists to
+  // run the freshest CI-built images, and a frozen digest silently pins
+  // dev-lane CI (install-e2e GPU sync stack) to whatever build existed at the
+  // last map refresh. Pinning is for release tracks.
   const repo = baseImage.slice(baseImage.lastIndexOf('/') + 1)
-  const digest = digests[repo]?.[`${track}${suffix}`]
+  const digest = track === 'dev' ? undefined : digests[repo]?.[`${track}${suffix}`]
   if (digest) return `${baseImage}@${digest}`
   return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${suffix}`
 }
