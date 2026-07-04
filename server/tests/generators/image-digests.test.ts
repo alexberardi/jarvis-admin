@@ -15,8 +15,9 @@ describe('pinnedOrTaggedImage', () => {
     expect(pinnedOrTaggedImage(cc, 'latest', '', digests)).toBe(`${cc}@sha256:aaaa`)
   })
 
-  it('picks the digest for the requested track', () => {
-    expect(pinnedOrTaggedImage(cc, 'dev', '', digests)).toBe(`${cc}@sha256:bbbb`)
+  it('NEVER pins the dev track — dev exists to run the freshest CI-built images', () => {
+    // mirrors jarvis-installer#17: even with a recorded dev digest, dev floats
+    expect(pinnedOrTaggedImage(cc, 'dev', '', digests)).toBe(`${cc}:\${JARVIS_IMAGE_TAG:-latest}`)
   })
 
   it('pins the variant digest via the suffix, and whisper-cpu via the plain tag', () => {
