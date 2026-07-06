@@ -85,9 +85,9 @@ function block(compose: string, id: string): string {
 describe('prod-shape regression: a reconcile must preserve the GPU/broker deployment', () => {
   const { compose, env } = regenerate()
 
-  it('whisper keeps its cuda digest pin and GPU passthrough', () => {
+  it('whisper keeps its cuda variant and GPU passthrough (floating tag by default)', () => {
     const w = block(compose, 'jarvis-whisper-api')
-    expect(w).toContain('sha256:' + 'a'.repeat(64))
+    expect(w).toContain('jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-cuda')
     expect(w).toContain('driver: nvidia')
   })
 
@@ -98,14 +98,33 @@ describe('prod-shape regression: a reconcile must preserve the GPU/broker deploy
     expect(t).toContain('TTS_KOKORO_DEVICE')
   })
 
-  it('llm-proxy api AND worker keep the cuda digest pin + GPU + supervised serve.sh', () => {
+  it('llm-proxy api AND worker keep the cuda variant + GPU + supervised serve.sh', () => {
     const api = block(compose, 'jarvis-llm-proxy-api')
     const worker = block(compose, 'llm-proxy-worker')
-    expect(api).toContain('sha256:' + 'b'.repeat(64))
-    expect(worker).toContain('sha256:' + 'b'.repeat(64))
+    expect(api).toContain('jarvis-llm-proxy-api:${JARVIS_IMAGE_TAG:-latest}-cuda')
+    expect(worker).toContain('jarvis-llm-proxy-api:${JARVIS_IMAGE_TAG:-latest}-cuda')
     expect(api).toContain('driver: nvidia')
     expect(worker).toContain('driver: nvidia')
     expect(api).toContain('serve.sh')
+  })
+
+  it('floating tags by default: no @sha256 pins anywhere (2026-07-06 decision)', () => {
+    expect(compose).not.toContain('@sha256:')
+  })
+
+  it('PIN_IMAGES=true opts back in to digest pins (supply-chain hardening)', () => {
+    const registry = loadRegistry()
+    const envWithPin = { ...prodShapedEnv(), PIN_IMAGES: 'true' }
+    const state = reconstructWizardState(envWithPin, registry)
+    state.platform = 'linux'
+    state.hardware = {
+      platform: 'linux', arch: 'x86_64', totalMemoryGb: 64,
+      gpuName: 'NVIDIA GeForce RTX 3090', gpuVramMb: 24576, gpuType: 'nvidia',
+      recommendedBackends: ['gguf'], recommendedBackend: 'gguf',
+    }
+    const pinned = generateCompose(state, registry, DIGESTS)
+    expect(block(pinned, 'jarvis-whisper-api')).toContain('sha256:' + 'a'.repeat(64))
+    expect(block(pinned, 'jarvis-llm-proxy-api')).toContain('sha256:' + 'b'.repeat(64))
   })
 
   it('command-center gets broker credentials that exist in .env (never a blank password)', () => {

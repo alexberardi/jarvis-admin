@@ -46,12 +46,12 @@ describe('generateCompose digest override (runtime pin refresh)', () => {
 
   it('pins a first-party image to a provided fresh digest (override wins over bundled)', () => {
     const digests: ImageDigestMap = { 'jarvis-admin': { latest: FRESH } }
-    const output = generateCompose(makeState({ enabledModules: ['jarvis-admin'] }), registry, digests)
+    const output = generateCompose(makeState({ enabledModules: ['jarvis-admin'], pinImages: true }), registry, digests)
     expect(output).toContain(`ghcr.io/alexberardi/jarvis-admin@${FRESH}`)
   })
 
   it('falls back to the bundled digest map when no override is given', () => {
-    const output = generateCompose(makeState({ enabledModules: ['jarvis-admin'] }), registry)
+    const output = generateCompose(makeState({ enabledModules: ['jarvis-admin'], pinImages: true }), registry)
     expect(output).toMatch(/ghcr\.io\/alexberardi\/jarvis-admin@sha256:[0-9a-f]{64}/)
     expect(output).not.toContain(FRESH)
   })

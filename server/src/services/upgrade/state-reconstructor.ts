@@ -74,6 +74,11 @@ export function reconstructWizardState(
   // TTS device — same persistence contract as whisperBackend (see above).
   const ttsBackend: TtsBackend = existingEnv.TTS_BACKEND === 'cuda' ? 'cuda' : 'cpu'
 
+  // Image pinning: opt-in only. Missing key = floating tags (this is also
+  // the migration path — pre-existing pinned installs heal to floating tags
+  // on their next regen, ending the stale-pin stranding class).
+  const pinImages = existingEnv.PIN_IMAGES === 'true'
+
   // Detect relay
   const relayEnabled = !!existingEnv.JARVIS_RELAY_URL
   const relayUrl = existingEnv.JARVIS_RELAY_URL || ''
@@ -116,6 +121,7 @@ export function reconstructWizardState(
     whisperModelPath: existingEnv.WHISPER_MODEL ?? '/whisper-models/ggml-base.en.bin',
     whisperBackend,
     ttsBackend,
+    pinImages,
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
     releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,
