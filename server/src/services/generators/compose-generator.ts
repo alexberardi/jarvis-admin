@@ -29,13 +29,20 @@ export function pinnedOrTaggedImage(
   track: string,
   suffix: string,
   digests: ImageDigestMap = imageDigests as ImageDigestMap,
+  pinImages: boolean = false,
 ): string {
-  // The dev track ALWAYS floats (mirrors jarvis-installer#17): dev exists to
-  // run the freshest CI-built images, and a frozen digest silently pins
-  // dev-lane CI (install-e2e GPU sync stack) to whatever build existed at the
-  // last map refresh. Pinning is for release tracks.
+  // Floating tags are the DEFAULT (2026-07-06 decision): digest pins as a
+  // default meant `docker compose pull` could never update anything, stale
+  // maps silently downgraded GPU services, and a stuck non-expert operator
+  // has no way out. `pinImages` (PIN_IMAGES=true in .env) opts back in to
+  // digest pinning for supply-chain-hardened installs — a GHCR tag overwrite
+  // can't change what a pinned compose pulls.
+  // The dev track ALWAYS floats regardless (mirrors jarvis-installer#17):
+  // dev exists to run the freshest CI-built images.
   const repo = baseImage.slice(baseImage.lastIndexOf('/') + 1)
-  const digest = track === 'dev' ? undefined : digests[repo]?.[`${track}${suffix}`]
+  const digest = !pinImages || track === 'dev'
+    ? undefined
+    : digests[repo]?.[`${track}${suffix}`]
   if (digest) return `${baseImage}@${digest}`
   return `${baseImage}:\${JARVIS_IMAGE_TAG:-latest}${suffix}`
 }
@@ -361,7 +368,7 @@ function getServiceImage(
   }
 
   const track = state.releaseTrack === 'dev' ? 'dev' : 'latest'
-  return pinnedOrTaggedImage(baseImage, track, suffix, digests)
+  return pinnedOrTaggedImage(baseImage, track, suffix, digests, state.pinImages ?? false)
 }
 
 function pushGpuDevices(lines: string[], gpuType: string): void {

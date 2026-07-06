@@ -148,6 +148,12 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   // TTS device — same persistence rationale as WHISPER_BACKEND. TTS_GPU_DEVICE
   // pins the single GPU the container may reserve (operators re-pin when GPU0
   // is already full of LLM+whisper — prod 2026-07-05); compose defaults to 0.
+  // Image pinning policy — read back by state-reconstructor so reconciles
+  // respect it. Default false: floating tags, `docker compose pull` updates.
+  lines.push('# --- Image Pinning (opt-in supply-chain hardening) ---')
+  lines.push(`PIN_IMAGES=${state.pinImages ? 'true' : 'false'}`)
+  lines.push('')
+
   lines.push('# --- TTS Backend ---')
   lines.push(`TTS_BACKEND=${state.ttsBackend ?? 'cpu'}`)
   if ((state.ttsBackend ?? 'cpu') === 'cuda') {

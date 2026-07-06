@@ -96,7 +96,7 @@ describe('POST /api/install/regenerate-download', () => {
       method: 'POST',
       url: '/api/install/regenerate-download?latest=true',
       headers: { authorization: 'Bearer good' },
-      payload: {},
+      payload: { pinImages: true },
     })
 
     expect(res.statusCode).toBe(200)

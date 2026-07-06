@@ -27,6 +27,8 @@ const existingEnv: Record<string, string> = {
   COMMAND_CENTER_PORT: '7703',
   TTS_PORT: '7707',
   JARVIS_IMAGE_TAG: 'latest',
+  // Digest pinning is opt-in (2026-07-06): this suite tests the pin machinery.
+  PIN_IMAGES: 'true',
 }
 
 describe('buildUpgradedComposeFiles honors a digest override', () => {
