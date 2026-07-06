@@ -706,15 +706,19 @@ describe('compose-generator', () => {
       ).toEqual([])
     })
 
-    it('llm-proxy keeps a dual-uvicorn command WITHOUT the alembic prefix (no image CMD)', () => {
+    it('llm-proxy runs the supervised scripts/serve.sh, NOT the raw dual-uvicorn pattern', () => {
       const output = generateCompose(allMigrateState, registry)
       const llm = serviceBlock(output, 'jarvis-llm-proxy-api')
-      // Entrypoint migrates; the command starts both uvicorn processes.
+      // Entrypoint migrates; the command runs the image's supervised launcher
+      // (API foreground + model service respawned with backoff). The old raw
+      // `model_service & exec main` left the model service unsupervised — a
+      // native crash meant no respawn and the API 503'd forever (2026-07-02
+      // outage; roadmap #59).
       expect(llm).toContain('entrypoint:')
-      expect(llm).toContain('    command:')
-      expect(llm).toContain('uvicorn services.model_service:app')
-      expect(llm).toContain('uvicorn main:app')
-      // The command itself must not re-run migrations (the entrypoint does that).
+      expect(llm).toContain('    command: ["bash", "scripts/serve.sh"]')
+      expect(llm).not.toContain('uvicorn services.model_service:app')
+      // The command itself must not inline migrations (the entrypoint does that;
+      // serve.sh's own alembic run is idempotent).
       expect(llm).not.toContain('command: ["sh", "-c", "python -m alembic')
     })
 
