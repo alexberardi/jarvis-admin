@@ -165,15 +165,18 @@ export default function ReconcilePage() {
   // Regenerate the compose from the current install + selections and hand the
   // files back for the operator to review, drop in, and `docker compose up -d`.
   // Never touches the running stack — the safe alternative to "Sync now".
-  async function handleDownload(extra?: { mqttAllowAnon?: boolean }) {
+  async function handleDownload(opts?: { mqttAllowAnon?: boolean; latest?: boolean }) {
     setDownloading(true)
     setError(null)
     setRegenFiles(null)
     try {
-      const res = await fetch('/api/install/regenerate-download', {
+      // `latest` is a query flag (refresh digests from GHCR), not a body override.
+      const { latest, ...bodyExtra } = opts ?? {}
+      const url = `/api/install/regenerate-download${latest ? '?latest=true' : ''}`
+      const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...currentOverrides(), ...extra }),
+        body: JSON.stringify({ ...currentOverrides(), ...bodyExtra }),
       })
       if (!res.ok) {
         const body = await res.text()
@@ -216,6 +219,7 @@ export default function ReconcilePage() {
           secrets. <strong className="text-[var(--color-text)]">Sync now</strong> applies it to the running stack;
           <strong className="text-[var(--color-text)]"> Download</strong> hands you the files to review and apply
           by hand (<code className="rounded bg-[var(--color-surface)] px-1 text-xs">docker compose up -d</code>).
+          {' '}<strong className="text-[var(--color-text)]">Update stack to latest</strong> downloads the same, pinned to the newest published images.
         </p>
       </div>
 
@@ -467,6 +471,17 @@ export default function ReconcilePage() {
           >
             {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             Download updated compose
+          </button>
+        )}
+        {phase === 'options' && (
+          <button
+            onClick={() => handleDownload({ latest: true })}
+            disabled={downloading}
+            title="Download a compose pinned to the LATEST published images (digests refreshed from the registry). Apply it yourself on the host — docker compose pull && docker compose up -d — which also updates jarvis-admin."
+            className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-medium text-[var(--color-text)] hover:bg-[var(--color-surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            Update stack to latest
           </button>
         )}
         {phase === 'options' && (

@@ -73,6 +73,38 @@ describe('POST /api/install/regenerate-download', () => {
     expect(readFileSync(join(composePath, '.env'), 'utf-8')).toBe(originalEnv)
   })
 
+  it('with ?latest=true, refreshes image digests from GHCR into the downloaded compose', async () => {
+    seedInstall(composePath)
+    const FRESH = 'sha256:' + '9'.repeat(64)
+    // Route auth to the /me check, and every GHCR token/manifest call to FRESH.
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown) => {
+      const u = String(input)
+      if (u.includes('fake-auth')) return meResponse(true)
+      if (u.includes('/token')) {
+        return new Response(JSON.stringify({ token: 't' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }
+      if (u.includes('/manifests/')) {
+        return new Response(null, { status: 200, headers: { 'docker-content-digest': FRESH } })
+      }
+      return new Response('', { status: 404 })
+    })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/install/regenerate-download?latest=true',
+      headers: { authorization: 'Bearer good' },
+      payload: {},
+    })
+
+    expect(res.statusCode).toBe(200)
+    // A first-party service (command-center is always present) is pinned to the
+    // freshly-resolved digest, not the frozen bundled one.
+    expect(res.json().compose).toContain('ghcr.io/alexberardi/jarvis-command-center@' + FRESH)
+  })
+
   it('rejects a non-superuser with 403', async () => {
     seedInstall(composePath)
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(meResponse(false))
