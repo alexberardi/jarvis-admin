@@ -1,5 +1,5 @@
 import { arch, totalmem } from 'node:os'
-import type { HardwareInfo, WizardState } from '../../types/wizard.js'
+import type { HardwareInfo, TtsBackend, WhisperBackend, WizardState } from '../../types/wizard.js'
 import type { ServiceRegistry } from '../../types/service-registry.js'
 import { serviceIdToPortVar } from '../generators/port-utils.js'
 import { SECRET_KEYS } from '../generators/secret-generator.js'
@@ -62,6 +62,18 @@ export function reconstructWizardState(
     ? nativeServicesRaw.split(',').map((s) => s.trim()).filter(Boolean)
     : []
 
+  // Whisper backend: which image variant (cpu/cuda/vulkan/rocm) the compose
+  // emits for jarvis-whisper-api. Persisted in .env by env-generator because
+  // the digest-pinned compose is the only other place the choice is visible.
+  // Unrecognized/missing values degrade to cpu — never fail a reconcile on it.
+  const WHISPER_BACKENDS: ReadonlySet<string> = new Set(['cpu', 'cuda', 'vulkan', 'rocm'])
+  const whisperBackend: WhisperBackend = WHISPER_BACKENDS.has(existingEnv.WHISPER_BACKEND ?? '')
+    ? (existingEnv.WHISPER_BACKEND as WhisperBackend)
+    : 'cpu'
+
+  // TTS device — same persistence contract as whisperBackend (see above).
+  const ttsBackend: TtsBackend = existingEnv.TTS_BACKEND === 'cuda' ? 'cuda' : 'cpu'
+
   // Detect relay
   const relayEnabled = !!existingEnv.JARVIS_RELAY_URL
   const relayUrl = existingEnv.JARVIS_RELAY_URL || ''
@@ -102,6 +114,8 @@ export function reconstructWizardState(
     remoteWhisperUrl: existingEnv.JARVIS_WHISPER_URL ?? '',
     whisperModel: 'base.en',
     whisperModelPath: existingEnv.WHISPER_MODEL ?? '/whisper-models/ggml-base.en.bin',
+    whisperBackend,
+    ttsBackend,
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
     releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,

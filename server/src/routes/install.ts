@@ -819,6 +819,8 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       relayEnabled: state.relayEnabled,
       relayUrl: state.relayUrl || 'https://relay.jarvisautomation.io',
       whisperModelPath: state.whisperModelPath || '/whisper-models/ggml-base.en.bin',
+      whisperBackend: state.whisperBackend ?? 'cpu',
+      ttsBackend: state.ttsBackend ?? 'cpu',
       releaseTrack: state.releaseTrack ?? 'stable',
     })
   })
