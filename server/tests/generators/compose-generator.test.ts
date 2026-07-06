@@ -353,6 +353,40 @@ describe('compose-generator', () => {
     })
   })
 
+  describe('tts backend (explicit GPU toggle, no image variant)', () => {
+    // TTS's stock image ships CUDA-capable torch, so unlike whisper the
+    // toggle only controls device passthrough — never an image suffix.
+    // The reservation pins ONE gpu (TTS_GPU_DEVICE, default 0): `count: all`
+    // invites OOM on hosts whose GPU0 is already full of LLM + whisper
+    // (prod 2026-07-05: kokoro warmup OOM'd next to a 20GB LLM).
+    function ttsState(ttsBackend?: 'cpu' | 'cuda') {
+      return makeState({ platform: 'linux', ttsBackend, enabledModules: ['jarvis-tts'] })
+    }
+    function ttsBlock(output: string): string {
+      const block = output.slice(output.indexOf('jarvis-tts:'))
+      const end = block.search(/\n {2}[a-z][a-z0-9-]*:\n/)
+      return end > 0 ? block.slice(0, end) : block
+    }
+
+    it('cpu (default): no GPU passthrough', () => {
+      const t = ttsBlock(generateCompose(ttsState(), registry))
+      expect(t).not.toContain('driver: nvidia')
+      expect(t).not.toContain('TTS_KOKORO_DEVICE')
+    })
+
+    it('cuda: single-GPU reservation via TTS_GPU_DEVICE + kokoro device env, no image suffix', () => {
+      const t = ttsBlock(generateCompose(ttsState('cuda'), registry))
+      expect(t).toContain("device_ids: ['${TTS_GPU_DEVICE:-0}']")
+      expect(t).toContain('driver: nvidia')
+      expect(t).not.toContain('count: all')
+      // env_fallback for a fresh install whose settings DB has no
+      // tts.kokoro_device row yet — DB value wins once set.
+      expect(t).toContain('TTS_KOKORO_DEVICE: ${TTS_BACKEND:-cpu}')
+      expect(t).not.toContain('jarvis-tts-cuda')
+      expect(t).not.toContain('jarvis-tts:latest-cuda')
+    })
+  })
+
   describe('remote-llm mode', () => {
     it('adds remote LLM URL to command-center env', () => {
       const state = makeState({

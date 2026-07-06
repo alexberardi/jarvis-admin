@@ -136,6 +136,25 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   lines.push(`JARVIS_IMAGE_TAG=${state.releaseTrack === 'dev' ? 'dev' : 'latest'}`)
   lines.push('')
 
+  // Whisper backend (image variant: cpu default, or cuda/vulkan/rocm). The
+  // compose pins the whisper image by digest, so this env key is the ONLY
+  // durable record of the selection — state-reconstructor reads it back on
+  // reconcile. Without it, a regenerate silently swaps a GPU whisper for the
+  // CPU image (prod 2026-07-04: STT went ~90ms → ~16s).
+  lines.push('# --- Whisper Backend ---')
+  lines.push(`WHISPER_BACKEND=${state.whisperBackend ?? 'cpu'}`)
+  lines.push('')
+
+  // TTS device — same persistence rationale as WHISPER_BACKEND. TTS_GPU_DEVICE
+  // pins the single GPU the container may reserve (operators re-pin when GPU0
+  // is already full of LLM+whisper — prod 2026-07-05); compose defaults to 0.
+  lines.push('# --- TTS Backend ---')
+  lines.push(`TTS_BACKEND=${state.ttsBackend ?? 'cpu'}`)
+  if ((state.ttsBackend ?? 'cpu') === 'cuda') {
+    lines.push('TTS_GPU_DEVICE=0')
+  }
+  lines.push('')
+
   // MQTT broker lock. Fresh installs lock the broker from the first boot
   // (allow_anonymous=false): the command-center reads MQTT_PASSWORD from its
   // env and every node fetches broker creds over authenticated HTTP *before* it

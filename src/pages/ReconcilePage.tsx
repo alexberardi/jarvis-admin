@@ -18,6 +18,8 @@ interface ReconcileOptions {
   relayEnabled: boolean
   relayUrl: string
   whisperModelPath: string
+  whisperBackend?: 'cpu' | 'cuda' | 'vulkan' | 'rocm'
+  ttsBackend?: 'cpu' | 'cuda'
   releaseTrack: 'stable' | 'dev'
 }
 
@@ -48,6 +50,7 @@ export default function ReconcilePage() {
   const [relayUrl, setRelayUrl] = useState('https://relay.jarvisautomation.io')
   const [whisperModelPath, setWhisperModelPath] = useState('/whisper-models/ggml-base.en.bin')
   const [whisperBackend, setWhisperBackend] = useState<'cpu' | 'cuda' | 'vulkan' | 'rocm'>('cpu')
+  const [ttsBackend, setTtsBackend] = useState<'cpu' | 'cuda'>('cpu')
   const [releaseTrack, setReleaseTrack] = useState<'stable' | 'dev'>('stable')
 
   // Download-instead-of-apply: regenerated files the operator swaps in by hand.
@@ -77,6 +80,10 @@ export default function ReconcilePage() {
         setRelayEnabled(data.relayEnabled)
         setRelayUrl(data.relayUrl || 'https://relay.jarvisautomation.io')
         setWhisperModelPath(data.whisperModelPath || '/whisper-models/ggml-base.en.bin')
+        // Hydrate from the persisted install — leaving these at the useState
+        // default ('cpu') silently downgrades a CUDA whisper/TTS on reconcile.
+        setWhisperBackend(data.whisperBackend ?? 'cpu')
+        setTtsBackend(data.ttsBackend ?? 'cpu')
         setReleaseTrack(data.releaseTrack ?? 'stable')
         setPhase('options')
       } catch (err) {
@@ -107,7 +114,7 @@ export default function ReconcilePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, releaseTrack }),
+        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, ttsBackend, releaseTrack }),
       })
 
       if (!res.ok || !res.body) {
@@ -158,6 +165,7 @@ export default function ReconcilePage() {
       relayUrl,
       whisperModelPath,
       whisperBackend,
+      ttsBackend,
       releaseTrack,
     }
   }
@@ -350,6 +358,28 @@ export default function ReconcilePage() {
                 </select>
                 <p className="mt-1 text-xs text-[var(--color-text-muted)]">
                   Where speech-to-text runs. CPU leaves the GPU for the LLM; pick a GPU backend to run Whisper on the GPU.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {serviceOptions.some((s) => s.id === 'jarvis-tts' && s.enabled) && (
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+              <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Text-to-speech</h2>
+              <div className="px-3">
+                <label className="text-xs font-medium text-[var(--color-text-muted)]">Inference device</label>
+                <select
+                  value={ttsBackend}
+                  onChange={(e) => setTtsBackend(e.target.value as 'cpu' | 'cuda')}
+                  className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm text-[var(--color-text)]"
+                >
+                  <option value="cpu">CPU (default)</option>
+                  <option value="cuda">NVIDIA (CUDA)</option>
+                </select>
+                <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                  Where Kokoro synthesis runs. CPU is fine for most installs; CUDA gives the fastest
+                  first-audio. On multi-GPU hosts set <code className="rounded bg-[var(--color-bg)] px-1">TTS_GPU_DEVICE</code> in
+                  .env to pick which GPU (default 0).
                 </p>
               </div>
             </div>

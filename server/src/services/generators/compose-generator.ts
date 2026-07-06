@@ -392,6 +392,26 @@ function pushGpuConfig(
   service: ServiceDefinition,
   state: WizardState,
 ): void {
+  // TTS: device passthrough follows the EXPLICIT ttsBackend selection (cpu
+  // default). No image variant — the stock image's torch is CUDA-capable —
+  // so this only emits a device reservation, pinned to a SINGLE gpu
+  // (TTS_GPU_DEVICE, default 0). `count: all` invites OOM on hosts whose
+  // GPU0 is already full of LLM+whisper (prod 2026-07-05: kokoro warmup
+  // OOM'd next to a 20GB LLM until pinned to GPU1). Checked before the
+  // service.gpu gate because jarvis-tts is not a gpu-flagged service.
+  if (service.id === 'jarvis-tts') {
+    if ((state.ttsBackend ?? 'cpu') === 'cuda') {
+      lines.push('    deploy:')
+      lines.push('      resources:')
+      lines.push('        reservations:')
+      lines.push('          devices:')
+      lines.push('            - driver: nvidia')
+      lines.push("              device_ids: ['${TTS_GPU_DEVICE:-0}']")
+      lines.push('              capabilities: [gpu]')
+    }
+    return
+  }
+
   if (!service.gpu) return
 
   // Whisper: device passthrough follows the EXPLICIT whisperBackend selection
@@ -499,6 +519,14 @@ function generateServiceBlock(
   const defaultWhisperPath = '/whisper-models/ggml-base.en.bin'
   if (isWhisper && whisperPath !== defaultWhisperPath) {
     lines.push(`      WHISPER_MODEL: ${whisperPath}`)
+  }
+
+  // TTS → kokoro device: env_fallback for a fresh install whose settings DB
+  // has no tts.kokoro_device row yet (a DB value wins once set). Backend
+  // values ('cpu'/'cuda') are valid kokoro device names, so TTS_BACKEND is
+  // reused directly.
+  if (service.id === 'jarvis-tts' && (state.ttsBackend ?? 'cpu') === 'cuda') {
+    lines.push('      TTS_KOKORO_DEVICE: ${TTS_BACKEND:-cpu}')
   }
 
   // LLM interface seed for command-center
