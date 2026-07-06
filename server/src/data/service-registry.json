@@ -227,7 +227,8 @@
       "dependsOn": ["jarvis-auth", "jarvis-config-service"],
       "envVars": [
         { "name": "JARVIS_CONFIG_URL", "description": "Config service URL", "required": false, "default": "http://jarvis-config-service:7700" },
-        { "name": "JARVIS_COMPOSE_PATH", "description": "Where the host's docker-compose.yml + .env live (mounted into the container)", "required": false, "default": "/host/compose" }
+        { "name": "JARVIS_COMPOSE_PATH", "description": "Where the host's docker-compose.yml + .env live (mounted into the container)", "required": false, "default": "/host/compose" },
+        { "name": "COMMAND_CENTER_ADMIN_KEY", "description": "Admin API key for command-center admin endpoints (traces, node detail); shares the ADMIN_API_KEY secret", "required": true, "secret": true, "secretRef": "ADMIN_API_KEY" }
       ],
       "volumes": [
         "/var/run/docker.sock:/var/run/docker.sock",

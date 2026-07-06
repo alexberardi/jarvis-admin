@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
 import { proxyRequest } from '../services/proxy.js'
+import { requireCommandCenterAdminKey } from '../services/commandCenter.js'
 
 async function resolveCcUrl(app: FastifyInstance, reply: FastifyReply): Promise<string | null> {
   try {
@@ -17,6 +18,8 @@ export async function tracesRoutes(app: FastifyInstance): Promise<void> {
 
   // List recent traces (proxy to command-center)
   app.get('/', async (request, reply) => {
+    const adminKey = requireCommandCenterAdminKey(app, reply)
+    if (!adminKey) return
     const ccUrl = await resolveCcUrl(app, reply)
     if (!ccUrl) return
     const qs = new URLSearchParams(request.query as Record<string, string>).toString()
@@ -24,7 +27,7 @@ export async function tracesRoutes(app: FastifyInstance): Promise<void> {
     const result = await proxyRequest({
       method: 'GET',
       url,
-      headers: { 'X-API-Key': app.config.commandCenterAdminKey },
+      headers: { 'X-API-Key': adminKey },
       timeout: 10_000,
     })
     reply.code(result.status).send(result.data)
@@ -34,13 +37,15 @@ export async function tracesRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { traceId: string } }>(
     '/:traceId',
     async (request, reply) => {
+      const adminKey = requireCommandCenterAdminKey(app, reply)
+      if (!adminKey) return
       const ccUrl = await resolveCcUrl(app, reply)
       if (!ccUrl) return
       const { traceId } = request.params
       const result = await proxyRequest({
         method: 'GET',
         url: `${ccUrl}/api/v0/admin/traces/${traceId}`,
-        headers: { 'X-API-Key': app.config.commandCenterAdminKey },
+        headers: { 'X-API-Key': adminKey },
         timeout: 10_000,
       })
       reply.code(result.status).send(result.data)

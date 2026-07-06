@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
 import { proxyRequest } from '../services/proxy.js'
+import { requireCommandCenterAdminKey } from '../services/commandCenter.js'
 
 export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   app.addHook('preHandler', requireSuperuser)
@@ -35,11 +36,13 @@ export async function nodesRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Params: { nodeId: string } }>(
     '/:nodeId/train-adapter',
     async (request, reply) => {
+      const adminKey = requireCommandCenterAdminKey(app, reply)
+      if (!adminKey) return
       const { nodeId } = request.params
       const result = await proxyRequest({
         method: 'POST',
         url: `${app.config.commandCenterUrl}/api/v0/nodes/${nodeId}/commands`,
-        headers: { 'X-API-Key': app.config.commandCenterAdminKey },
+        headers: { 'X-API-Key': adminKey },
         body: { command: 'train_adapter', details: {} },
         timeout: 10_000,
       })
