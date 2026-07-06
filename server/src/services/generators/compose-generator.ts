@@ -623,11 +623,15 @@ function generateServiceBlock(
 
   // Overriding `entrypoint` (above) CLEARS the image's CMD, so the migrate
   // wrapper's `exec "$@"` has nothing to run unless we supply a command. llm-proxy
-  // needs its dual-uvicorn start; every other migrate service serves app.main:app.
+  // uses its image's supervised launcher (scripts/serve.sh): API in the foreground
+  // plus the model service respawned with backoff — the old raw dual-uvicorn
+  // `model_service & exec main` left the model service unsupervised, so a native
+  // crash (llama.cpp) meant no respawn and the API 503'd forever (2026-07-02
+  // outage; roadmap #59). Every other migrate service serves app.main:app.
   // Without this, command-center/whisper/notifications exec "" and exit right
   // after migrating (restart-loop, no server) — the bug that 500'd the fleet.
   if (service.id === 'jarvis-llm-proxy-api') {
-    lines.push(`    command: ["sh", "-c", "python -m uvicorn services.model_service:app --host 0.0.0.0 --port 7705 & exec python -m uvicorn main:app --host 0.0.0.0 --port 7704"]`)
+    lines.push('    command: ["bash", "scripts/serve.sh"]')
   } else if (service.id === 'jarvis-auth') {
     // jarvis-auth is the one migrate service whose app is NOT at top-level
     // `app.main` — its image packages it under `jarvis_auth.app.main`. Using the
