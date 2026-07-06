@@ -3,11 +3,12 @@ import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { ServiceRegistry } from '../../types/service-registry.js'
 import type { WhisperBackend } from '../../types/wizard.js'
-import { generateCompose, getAllEnabledServices } from '../generators/compose-generator.js'
+import { generateCompose, getAllEnabledServices, type ImageDigestMap } from '../generators/compose-generator.js'
 import { generateEnv } from '../generators/env-generator.js'
 import { generateInitDbScript } from '../generators/init-db-generator.js'
 import { parseRegistry } from '../generators/service-registry.js'
 import { reconstructWizardState } from './state-reconstructor.js'
+import { refreshDigestsForTrack } from './image-digest-resolver.js'
 import { mergeEnv } from './env-merger.js'
 import { VERSION } from '../../version.js'
 import { getComposePath } from '../compose-path.js'
@@ -64,6 +65,7 @@ export function buildUpgradedComposeFiles(
   registry: ServiceRegistry,
   overrides?: UpgradeOverrides,
   hostComposePath?: string,
+  digests?: ImageDigestMap,
 ): UpgradedComposeFiles {
   const state = reconstructWizardState(existingEnv, registry)
   if (overrides?.enabledModules) {
@@ -88,7 +90,7 @@ export function buildUpgradedComposeFiles(
     state.hostComposePath = hostComposePath
   }
 
-  const compose = generateCompose(state, registry)
+  const compose = generateCompose(state, registry, digests)
   const newEnvTemplate = generateEnv(state, registry)
   let env = mergeEnv(existingEnv, newEnvTemplate)
 
@@ -181,6 +183,20 @@ export async function upgradeCompose(
   // Step 2: Load existing env
   const existingEnv = loadEnvFile(composePath)
 
+  // Refresh the pinned image digests from GHCR so the regenerated compose points
+  // at the newest published build and `docker compose pull` actually fetches it
+  // (the bundled digest map is frozen at admin-build time, which otherwise makes
+  // pull a no-op and deadlocks updates). Only the stable track pins — dev floats
+  // — and a resolver failure degrades to the bundled map, so this never blocks
+  // an upgrade.
+  const track =
+    overrides?.releaseTrack === 'dev' ||
+    (overrides?.releaseTrack === undefined && existingEnv.JARVIS_IMAGE_TAG === 'dev')
+      ? 'dev'
+      : 'latest'
+  const digests: ImageDigestMap | undefined =
+    track === 'latest' ? await refreshDigestsForTrack('latest') : undefined
+
   // Step 3-6: Reconstruct + regenerate via the shared pure core.
   //
   // When admin runs in docker, fetch the absolute host path of the compose
@@ -194,6 +210,7 @@ export async function upgradeCompose(
     registry,
     overrides,
     hostPath || undefined,
+    digests,
   )
 
   writeFileSync(join(composePath, 'docker-compose.yml'), compose)

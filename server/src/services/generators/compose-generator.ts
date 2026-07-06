@@ -15,7 +15,7 @@ import {
 import imageDigests from '../../data/image-digests.json' with { type: 'json' }
 
 /** repo name -> full tag (track+variant suffix, e.g. "latest-cuda") -> "sha256:…" */
-type ImageDigestMap = Record<string, Record<string, string>>
+export type ImageDigestMap = Record<string, Record<string, string>>
 
 /**
  * Pin a first-party image by `@sha256` digest when one is recorded for this
@@ -158,7 +158,11 @@ function getInfraForServices(
   return infra
 }
 
-export function generateCompose(state: WizardState, registry: ServiceRegistry): string {
+export function generateCompose(
+  state: WizardState,
+  registry: ServiceRegistry,
+  digests?: ImageDigestMap,
+): string {
   const composeServices = getComposeServices(state, registry)
   const enabledIds = composeServices.map((s) => s.id)
   const infra = getInfraForServices(enabledIds, registry)
@@ -185,11 +189,11 @@ export function generateCompose(state: WizardState, registry: ServiceRegistry): 
   // Application services (and any sibling workers)
   for (const service of composeServices) {
     lines.push('')
-    lines.push(...generateServiceBlock(service, state, registry))
+    lines.push(...generateServiceBlock(service, state, registry, digests))
     if (service.workers) {
       for (const worker of service.workers) {
         lines.push('')
-        lines.push(...generateWorkerBlock(worker, service, state, registry))
+        lines.push(...generateWorkerBlock(worker, service, state, registry, digests))
       }
     }
   }
@@ -330,7 +334,11 @@ function generateInfraBlock(
   return lines
 }
 
-function getServiceImage(service: ServiceDefinition, state: WizardState): string {
+function getServiceImage(
+  service: ServiceDefinition,
+  state: WizardState,
+  digests?: ImageDigestMap,
+): string {
   const raw = service.ghcrImage ?? service.image
 
   // Third-party images (e.g. go2rtc) keep their original tag
@@ -353,7 +361,7 @@ function getServiceImage(service: ServiceDefinition, state: WizardState): string
   }
 
   const track = state.releaseTrack === 'dev' ? 'dev' : 'latest'
-  return pinnedOrTaggedImage(baseImage, track, suffix)
+  return pinnedOrTaggedImage(baseImage, track, suffix, digests)
 }
 
 function pushGpuDevices(lines: string[], gpuType: string): void {
@@ -417,6 +425,7 @@ function generateServiceBlock(
   service: ServiceDefinition,
   state: WizardState,
   registry: ServiceRegistry,
+  digests?: ImageDigestMap,
 ): string[] {
   const lines: string[] = []
   const portVar = serviceIdToPortVar(service.id)
@@ -428,7 +437,7 @@ function generateServiceBlock(
   // serve + publish + health-check admin on 7711.
   const effectivePort = service.id === 'jarvis-admin' ? 7711 : service.port
   const hostPort = state.portOverrides[service.id] ?? effectivePort
-  const image = getServiceImage(service, state)
+  const image = getServiceImage(service, state, digests)
 
   lines.push(`  ${service.id}:`)
   lines.push(`    image: ${image}`)
@@ -691,9 +700,10 @@ function generateWorkerBlock(
   parent: ServiceDefinition,
   state: WizardState,
   registry: ServiceRegistry,
+  digests?: ImageDigestMap,
 ): string[] {
   const lines: string[] = []
-  const image = getServiceImage(parent, state)
+  const image = getServiceImage(parent, state, digests)
   const overrides = worker.envOverrides ?? {}
   const overrideKeys = new Set(Object.keys(overrides))
 
