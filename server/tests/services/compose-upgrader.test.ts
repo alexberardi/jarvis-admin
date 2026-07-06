@@ -225,6 +225,47 @@ describe('regenerateComposeFiles (non-destructive)', () => {
     expect(result.env).toContain('JARVIS_RELAY_URL=https://relay.example.com')
   })
 
+  it('preserves the whisper CUDA backend across a plain regen (no override)', () => {
+    // The compose pins images by digest, so the backend choice lives only in
+    // .env — losing it is a silent GPU→CPU downgrade on the next reconcile
+    // (prod 2026-07-04: STT went ~90ms → ~16s when a regen swapped -cuda
+    // for the CPU image).
+    writeFakeInstall(composePath, { WHISPER_API_PORT: '7706', WHISPER_BACKEND: 'cuda' })
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toContain('WHISPER_BACKEND=cuda')
+    const whisperBlock = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(result.compose)?.[0]
+    expect(whisperBlock).toBeDefined()
+    expect(whisperBlock).toContain('driver: nvidia')
+  })
+
+  it('degrades an unrecognized WHISPER_BACKEND value to a cpu compose', () => {
+    writeFakeInstall(composePath, { WHISPER_API_PORT: '7706', WHISPER_BACKEND: 'metal' })
+
+    const result = regenerateComposeFiles(composePath)
+
+    // The merger's "existing non-empty values win" invariant keeps the raw
+    // .env value, but the reconstructed state — and thus the compose — must
+    // degrade to the cpu variant rather than fail or emit a bogus image tag.
+    const whisperBlock = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(result.compose)?.[0]
+    expect(whisperBlock).toBeDefined()
+    expect(whisperBlock).not.toContain('driver: nvidia')
+    expect(whisperBlock).not.toContain('-metal')
+  })
+
+  it('preserves the TTS cuda backend and GPU pin across a plain regen', () => {
+    writeFakeInstall(composePath, { TTS_BACKEND: 'cuda', TTS_GPU_DEVICE: '1' })
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toContain('TTS_BACKEND=cuda')
+    expect(result.env).toContain('TTS_GPU_DEVICE=1')
+    const ttsBlock = /\n {2}jarvis-tts:[\s\S]*?(?=\n {2}\S|$)/.exec(result.compose)?.[0]
+    expect(ttsBlock).toBeDefined()
+    expect(ttsBlock).toContain("device_ids: ['${TTS_GPU_DEVICE:-0}']")
+  })
+
   it('preserves the existing MQTT_PASSWORD across regen (nodes hold this password)', () => {
     // Re-minting the broker password on regen would silently orphan every node
     // (they carry the old password in their config) once the broker locks down.

@@ -7,6 +7,14 @@ export type GpuType = 'nvidia' | 'amd' | 'amd-rocm' | 'apple' | 'none'
  */
 export type WhisperBackend = 'cpu' | 'cuda' | 'vulkan' | 'rocm'
 
+/**
+ * TTS (Kokoro) inference device, chosen explicitly. Default "cpu" — Kokoro is
+ * an 82M-param model and CPU synth is sub-second per sentence. Unlike whisper
+ * this controls device passthrough only: the stock jarvis-tts image ships
+ * CUDA-capable torch, so no image variant exists or is needed.
+ */
+export type TtsBackend = 'cpu' | 'cuda'
+
 export interface HardwareInfo {
   platform: 'darwin' | 'linux'
   arch: string
@@ -34,6 +42,8 @@ export interface WizardState {
   whisperModelPath: string
   /** Explicit Whisper GPU backend (default "cpu" when unset). Independent of hardware.gpuType. */
   whisperBackend?: WhisperBackend
+  /** Explicit TTS (Kokoro) device (default "cpu"). Device passthrough only — no image variant. */
+  ttsBackend?: TtsBackend
   llmInterface: string
 
   // New: deployment mode

@@ -262,6 +262,42 @@ describe('env-generator', () => {
     })
   })
 
+  describe('Whisper backend', () => {
+    // The backend selection exists nowhere else in the install: the compose
+    // pins the image by digest, so without this env key a reconcile
+    // reconstructs whisperBackend as undefined -> cpu and silently swaps a
+    // GPU whisper for the CPU image (prod, 2026-07-04: STT 90ms -> 16s).
+    it('persists the selected backend', () => {
+      const state = makeState({ whisperBackend: 'cuda' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('WHISPER_BACKEND=cuda')
+    })
+
+    it('defaults to cpu when unset', () => {
+      const state = makeState()
+      const output = generateEnv(state, registry)
+      expect(output).toContain('WHISPER_BACKEND=cpu')
+    })
+  })
+
+  describe('TTS backend', () => {
+    it('persists the selected backend and a default GPU index', () => {
+      const state = makeState({ ttsBackend: 'cuda' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('TTS_BACKEND=cuda')
+      // Surfaced so operators can re-pin (e.g. TTS_GPU_DEVICE=1 when GPU0
+      // is full of LLM+whisper); compose falls back to 0 if absent.
+      expect(output).toContain('TTS_GPU_DEVICE=0')
+    })
+
+    it('defaults to cpu with no GPU index line', () => {
+      const state = makeState()
+      const output = generateEnv(state, registry)
+      expect(output).toContain('TTS_BACKEND=cpu')
+      expect(output).not.toContain('TTS_GPU_DEVICE')
+    })
+  })
+
   describe('Host platform', () => {
     it('writes HOST_OS=darwin for Mac installs', () => {
       const state = makeState({ platform: 'darwin' })

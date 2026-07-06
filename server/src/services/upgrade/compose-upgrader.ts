@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, cpSync } from 'node
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { ServiceRegistry } from '../../types/service-registry.js'
-import type { WhisperBackend } from '../../types/wizard.js'
+import type { TtsBackend, WhisperBackend } from '../../types/wizard.js'
 import { generateCompose, getAllEnabledServices, type ImageDigestMap } from '../generators/compose-generator.js'
 import { generateEnv } from '../generators/env-generator.js'
 import { generateInitDbScript } from '../generators/init-db-generator.js'
@@ -82,6 +82,9 @@ export function buildUpgradedComposeFiles(
   }
   if (overrides?.whisperBackend) {
     state.whisperBackend = overrides.whisperBackend
+  }
+  if (overrides?.ttsBackend) {
+    state.ttsBackend = overrides.ttsBackend
   }
   if (overrides?.releaseTrack) {
     state.releaseTrack = overrides.releaseTrack
@@ -177,6 +180,7 @@ export interface UpgradeOverrides {
   relayUrl?: string
   whisperModelPath?: string
   whisperBackend?: WhisperBackend
+  ttsBackend?: TtsBackend
   releaseTrack?: 'stable' | 'dev'
   /**
    * Flip the MQTT broker's ``allow_anonymous`` (the transition→lockdown control).
