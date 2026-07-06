@@ -73,15 +73,24 @@ export async function refreshDigestsForTrack(
   fetchImpl: typeof fetch = fetch,
 ): Promise<ImageDigestMap> {
   const result: ImageDigestMap = {}
+  const jobs: Promise<void>[] = []
   for (const [repo, tags] of Object.entries(base)) {
     result[repo] = { ...tags }
     for (const tag of Object.keys(tags)) {
       // Only the active track is used by the generator (the other track's pins
       // are dead weight), so don't spend network calls resolving it.
       if (tag !== track && !tag.startsWith(`${track}-`)) continue
-      const fresh = await resolveManifestDigest(repo, tag, fetchImpl)
-      if (fresh) result[repo][tag] = fresh
+      // Resolve concurrently. Sequential await-per-tag made a refresh cost the
+      // SUM of ~17 round-trips — seconds per upgrade, and it blew unit-test
+      // timeouts under load. resolveManifestDigest self-contains its errors +
+      // timeout (returns null), so Promise.all never rejects.
+      jobs.push(
+        resolveManifestDigest(repo, tag, fetchImpl).then((fresh) => {
+          if (fresh) result[repo][tag] = fresh
+        }),
+      )
     }
   }
+  await Promise.all(jobs)
   return result
 }

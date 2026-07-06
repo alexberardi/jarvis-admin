@@ -135,6 +135,32 @@ export function regenerateComposeFiles(
 }
 
 /**
+ * Like {@link regenerateComposeFiles}, but first refreshes the pinned image
+ * digests from GHCR so the downloaded compose points at the NEWEST published
+ * build (the bundled map is frozen at admin-build time). Async — the refresh is
+ * a network round-trip; a resolver failure degrades to the bundled map and never
+ * throws. Backs the "Update stack to latest" download: the operator applies it
+ * themselves with `docker compose pull && docker compose up -d` (so it can also
+ * update jarvis-admin, which the in-place reconcile can't recreate from itself).
+ */
+export async function regenerateComposeFilesLatest(
+  composePath: string,
+  overrides?: UpgradeOverrides,
+  hostComposePath?: string,
+): Promise<UpgradedComposeFiles> {
+  const registry: ServiceRegistry = parseRegistry(registryData)
+  const existingEnv = loadEnvFile(composePath)
+  // dev floats (no digest pins), so only the stable track needs a refresh.
+  const track =
+    overrides?.releaseTrack === 'dev' ||
+    (overrides?.releaseTrack === undefined && existingEnv.JARVIS_IMAGE_TAG === 'dev')
+      ? 'dev'
+      : 'latest'
+  const digests = track === 'latest' ? await refreshDigestsForTrack('latest') : undefined
+  return buildUpgradedComposeFiles(existingEnv, registry, overrides, hostComposePath, digests)
+}
+
+/**
  * Upgrade the compose + env files in place, preserving secrets and user config.
  *
  * Steps:

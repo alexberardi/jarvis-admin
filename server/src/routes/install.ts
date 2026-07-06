@@ -842,11 +842,18 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       | import('../services/upgrade/compose-upgrader.js').UpgradeOverrides
       | undefined
 
-    const { regenerateComposeFiles } = await import('../services/upgrade/compose-upgrader.js')
+    // ?latest=true refreshes the pinned image digests from GHCR first, so the
+    // downloaded compose targets the newest published builds ("Update stack to
+    // latest"). Default keeps the current pins (config-only regeneration).
+    const latest = (request.query as { latest?: string } | undefined)?.latest === 'true'
+
+    const { regenerateComposeFiles, regenerateComposeFilesLatest } = await import('../services/upgrade/compose-upgrader.js')
     const { getHostComposePath } = await import('../services/host-paths.js')
     const hostPath = await getHostComposePath()
 
-    const files = regenerateComposeFiles(composePath, overrides, hostPath || undefined)
+    const files = latest
+      ? await regenerateComposeFilesLatest(composePath, overrides, hostPath || undefined)
+      : regenerateComposeFiles(composePath, overrides, hostPath || undefined)
     return reply.send(files)
   })
 
