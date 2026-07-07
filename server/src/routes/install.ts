@@ -821,6 +821,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       whisperModelPath: state.whisperModelPath || '/whisper-models/ggml-base.en.bin',
       whisperBackend: state.whisperBackend ?? 'cpu',
       ttsBackend: state.ttsBackend ?? 'cpu',
+      pinImages: state.pinImages ?? false,
       releaseTrack: state.releaseTrack ?? 'stable',
     })
   })

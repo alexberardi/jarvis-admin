@@ -44,6 +44,8 @@ export interface WizardState {
   whisperBackend?: WhisperBackend
   /** Explicit TTS (Kokoro) device (default "cpu"). Device passthrough only — no image variant. */
   ttsBackend?: TtsBackend
+  /** Opt-in digest pinning (PIN_IMAGES). Default false: floating tags so `docker compose pull` updates. */
+  pinImages?: boolean
   llmInterface: string
 
   // New: deployment mode

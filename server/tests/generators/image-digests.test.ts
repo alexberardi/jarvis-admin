@@ -12,17 +12,17 @@ describe('pinnedOrTaggedImage', () => {
   const whisper = 'ghcr.io/alexberardi/jarvis-whisper-api'
 
   it('pins by @digest when one exists for (repo, track+suffix)', () => {
-    expect(pinnedOrTaggedImage(cc, 'latest', '', digests)).toBe(`${cc}@sha256:aaaa`)
+    expect(pinnedOrTaggedImage(cc, 'latest', '', digests, true)).toBe(`${cc}@sha256:aaaa`)
   })
 
   it('NEVER pins the dev track — dev exists to run the freshest CI-built images', () => {
     // mirrors jarvis-installer#17: even with a recorded dev digest, dev floats
-    expect(pinnedOrTaggedImage(cc, 'dev', '', digests)).toBe(`${cc}:\${JARVIS_IMAGE_TAG:-latest}`)
+    expect(pinnedOrTaggedImage(cc, 'dev', '', digests, true)).toBe(`${cc}:\${JARVIS_IMAGE_TAG:-latest}`)
   })
 
   it('pins the variant digest via the suffix, and whisper-cpu via the plain tag', () => {
-    expect(pinnedOrTaggedImage(whisper, 'latest', '-cuda', digests)).toBe(`${whisper}@sha256:dddd`)
-    expect(pinnedOrTaggedImage(whisper, 'latest', '', digests)).toBe(`${whisper}@sha256:cccc`)
+    expect(pinnedOrTaggedImage(whisper, 'latest', '-cuda', digests, true)).toBe(`${whisper}@sha256:dddd`)
+    expect(pinnedOrTaggedImage(whisper, 'latest', '', digests, true)).toBe(`${whisper}@sha256:cccc`)
   })
 
   it('falls back to the floating tag when no digest is recorded', () => {
