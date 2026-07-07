@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { buildUpgradedComposeFiles } from '../../src/services/upgrade/compose-upgrader.js'
@@ -57,21 +57,41 @@ function envKeys(env: string): Map<string, string> {
 // Vars legitimately resolved by the runtime environment, not the .env file.
 const RUNTIME_PROVIDED = new Set(['HOME'])
 
+// Secret-shaped keys where an EMPTY ${VAR:-} fallback is correct: genuinely
+// optional integrations, not auth material. Anything added here needs a reason.
+const OPTIONAL_SECRETS = new Set([
+  'HUGGINGFACE_HUB_TOKEN', // only needed for gated HF model downloads
+])
+
+// The contract must hold for the FULL linux compose (llm-proxy included).
+// reconstructWizardState detects the host platform from process.env.HOST_OS;
+// without forcing it, a darwin dev machine silently tests a smaller compose
+// than CI does (that split shipped a green-local/red-CI test on 2026-07-07).
+let savedHostOs: string | undefined
+beforeAll(() => {
+  savedHostOs = process.env.HOST_OS
+  process.env.HOST_OS = 'linux'
+})
+afterAll(() => {
+  if (savedHostOs === undefined) delete process.env.HOST_OS
+  else process.env.HOST_OS = savedHostOs
+})
+
 function generate(existingEnv: Record<string, string>) {
   const registry = loadRegistry()
-  const state = reconstructWizardState(existingEnv, registry)
-  state.platform = 'linux'
-  state.hardware = {
-    platform: 'linux', arch: 'x86_64', totalMemoryGb: 64,
-    gpuName: 'NVIDIA GeForce RTX 3090', gpuVramMb: 24576, gpuType: 'nvidia',
-    recommendedBackends: ['gguf'], recommendedBackend: 'gguf',
-  }
+  // buildUpgradedComposeFiles reconstructs state internally (platform via
+  // HOST_OS, forced to linux above) — exactly the reconcile code path.
   return buildUpgradedComposeFiles(existingEnv, registry, undefined, '/home/user/.jarvis/compose')
 }
 
 describe('compose ↔ env contract', () => {
-  const { compose, env } = generate(maximalEnv())
-  const defined = envKeys(env)
+  let compose: string
+  let defined: Map<string, string>
+  beforeAll(() => {
+    const out = generate(maximalEnv())
+    compose = out.compose
+    defined = envKeys(out.env)
+  })
 
   it('every ${VAR} without a default that the compose references is defined NON-EMPTY in the generated .env', () => {
     // ${VAR} (bare) must resolve; ${VAR:-default} is self-protecting.
@@ -89,11 +109,13 @@ describe('compose ↔ env contract', () => {
 
   it('no service ever receives a literally-empty secret from a ${VAR:-} fallback for known secret keys', () => {
     // A `${SECRET:-}` (empty default) on a secret key silently disables auth.
-    const emptyDefaultSecrets = [...compose.matchAll(/\$\{([A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|KEY)[A-Z0-9_]*):-\}/g)]
-      .map((m) => m[1])
+    const emptyDefaultSecrets = [...new Set(
+      [...compose.matchAll(/\$\{([A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|KEY)[A-Z0-9_]*):-\}/g)].map((m) => m[1]),
+    )]
       // App-to-app credentials are intentionally empty until service
       // registration fills them post-install.
       .filter((v) => !v.startsWith('JARVIS_APP_ID_') && !v.startsWith('JARVIS_APP_KEY_'))
+      .filter((v) => !OPTIONAL_SECRETS.has(v))
     expect(emptyDefaultSecrets).toEqual([])
   })
 })
