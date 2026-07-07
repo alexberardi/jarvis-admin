@@ -20,6 +20,7 @@ interface ReconcileOptions {
   whisperModelPath: string
   whisperBackend?: 'cpu' | 'cuda' | 'vulkan' | 'rocm'
   ttsBackend?: 'cpu' | 'cuda'
+  pinImages?: boolean
   releaseTrack: 'stable' | 'dev'
 }
 
@@ -51,6 +52,7 @@ export default function ReconcilePage() {
   const [whisperModelPath, setWhisperModelPath] = useState('/whisper-models/ggml-base.en.bin')
   const [whisperBackend, setWhisperBackend] = useState<'cpu' | 'cuda' | 'vulkan' | 'rocm'>('cpu')
   const [ttsBackend, setTtsBackend] = useState<'cpu' | 'cuda'>('cpu')
+  const [pinImages, setPinImages] = useState(false)
   const [releaseTrack, setReleaseTrack] = useState<'stable' | 'dev'>('stable')
 
   // Download-instead-of-apply: regenerated files the operator swaps in by hand.
@@ -84,6 +86,7 @@ export default function ReconcilePage() {
         // default ('cpu') silently downgrades a CUDA whisper/TTS on reconcile.
         setWhisperBackend(data.whisperBackend ?? 'cpu')
         setTtsBackend(data.ttsBackend ?? 'cpu')
+        setPinImages(data.pinImages ?? false)
         setReleaseTrack(data.releaseTrack ?? 'stable')
         setPhase('options')
       } catch (err) {
@@ -114,7 +117,7 @@ export default function ReconcilePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, ttsBackend, releaseTrack }),
+        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, ttsBackend, pinImages, releaseTrack }),
       })
 
       if (!res.ok || !res.body) {
@@ -166,6 +169,7 @@ export default function ReconcilePage() {
       whisperModelPath,
       whisperBackend,
       ttsBackend,
+      pinImages,
       releaseTrack,
     }
   }
@@ -384,6 +388,26 @@ export default function ReconcilePage() {
               </div>
             </div>
           )}
+
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={pinImages}
+                onChange={(e) => setPinImages(e.target.checked)}
+                className="mt-0.5"
+                data-testid="pin-images-checkbox"
+              />
+              <span>
+                <span className="font-medium text-[var(--color-text)]">Pin images by digest</span>
+                <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+                  Advanced supply-chain hardening: locks every image to an exact build.
+                  Leave OFF for normal use — with pinning on, <code className="rounded bg-[var(--color-bg)] px-1">docker compose pull</code> will
+                  never update anything and services only change via this page.
+                </span>
+              </span>
+            </label>
+          </div>
         </div>
       )}
 

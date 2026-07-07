@@ -86,6 +86,9 @@ export function buildUpgradedComposeFiles(
   if (overrides?.ttsBackend) {
     state.ttsBackend = overrides.ttsBackend
   }
+  if (overrides?.pinImages !== undefined) {
+    state.pinImages = overrides.pinImages
+  }
   if (overrides?.releaseTrack) {
     state.releaseTrack = overrides.releaseTrack
   }
@@ -181,6 +184,7 @@ export interface UpgradeOverrides {
   whisperModelPath?: string
   whisperBackend?: WhisperBackend
   ttsBackend?: TtsBackend
+  pinImages?: boolean
   releaseTrack?: 'stable' | 'dev'
   /**
    * Flip the MQTT broker's ``allow_anonymous`` (the transition→lockdown control).
