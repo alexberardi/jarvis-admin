@@ -309,3 +309,99 @@ describe('regenerateComposeFiles (non-destructive)', () => {
     expect(result.env).not.toContain('MQTT_ALLOW_ANON=false')
   })
 })
+
+describe('operational-state stickiness (2026-07-06: "buttons must respect each other")', () => {
+  let composePath: string
+  const fakeApp = {} as unknown as import('fastify').FastifyInstance
+
+  beforeEach(() => {
+    composePath = mkdtempSync(join(tmpdir(), 'jarvis-sticky-'))
+    process.env.JARVIS_COMPOSE_PATH = composePath
+  })
+
+  afterEach(() => {
+    delete process.env.JARVIS_COMPOSE_PATH
+    rmSync(composePath, { recursive: true, force: true })
+  })
+
+  it('preserves an UNLOCKED broker (MQTT_ALLOW_ANON=true) across a plain regen', () => {
+    // The exact 2026-07-06 complaint: the user unlocks the broker, then a
+    // later Update/reconcile must not silently re-lock it.
+    writeFakeInstall(composePath, { MQTT_ALLOW_ANON: 'true' })
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toMatch(/^MQTT_ALLOW_ANON=true$/m)
+  })
+
+  it('an explicit unlock via upgradeCompose stays unlocked on the NEXT plain regen', async () => {
+    // Button-respects-button across two separate operations: unlock once,
+    // then a later regen with no overrides keeps the unlock.
+    writeFakeInstall(composePath, { MQTT_ALLOW_ANON: 'false' })
+
+    await upgradeCompose(fakeApp, { mqttAllowAnon: true })
+    expect(readFileSync(join(composePath, '.env'), 'utf-8')).toMatch(/^MQTT_ALLOW_ANON=true$/m)
+
+    const later = regenerateComposeFiles(composePath)
+    expect(later.env).toMatch(/^MQTT_ALLOW_ANON=true$/m)
+  })
+
+  it('an explicit lock stays locked on the NEXT plain regen', async () => {
+    writeFakeInstall(composePath, { MQTT_ALLOW_ANON: 'true' })
+
+    await upgradeCompose(fakeApp, { mqttAllowAnon: false })
+    const later = regenerateComposeFiles(composePath)
+    expect(later.env).toMatch(/^MQTT_ALLOW_ANON=false$/m)
+  })
+
+  it('backend/pin selections applied once stick through the NEXT plain regen', async () => {
+    writeFakeInstall(composePath, { WHISPER_API_PORT: '7706' })
+
+    await upgradeCompose(fakeApp, { whisperBackend: 'cuda', ttsBackend: 'cuda', pinImages: false })
+
+    const later = regenerateComposeFiles(composePath)
+    expect(later.env).toMatch(/^WHISPER_BACKEND=cuda$/m)
+    expect(later.env).toMatch(/^TTS_BACKEND=cuda$/m)
+    expect(later.env).toMatch(/^PIN_IMAGES=false$/m)
+    const whisper = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(later.compose)?.[0]
+    expect(whisper).toContain('-cuda')
+    expect(whisper).toContain('driver: nvidia')
+  })
+
+  it('PIN_IMAGES=true is preserved across a plain regen (pins stay pinned when chosen)', () => {
+    writeFakeInstall(composePath, { PIN_IMAGES: 'true' })
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toMatch(/^PIN_IMAGES=true$/m)
+  })
+
+  it('a legacy pinned install with no PIN_IMAGES key heals to floating tags', () => {
+    writeFakeInstall(composePath)
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toMatch(/^PIN_IMAGES=false$/m)
+    expect(result.compose).not.toContain('@sha256:')
+  })
+
+  it('the "Update stack to latest" flow preserves broker state + backends (offline digest refresh degrades gracefully)', async () => {
+    writeFakeInstall(composePath, {
+      MQTT_ALLOW_ANON: 'true',
+      WHISPER_API_PORT: '7706',
+      WHISPER_BACKEND: 'cuda',
+      TTS_BACKEND: 'cuda',
+      TTS_GPU_DEVICE: '1',
+    })
+
+    const { regenerateComposeFilesLatest } = await import('../../src/services/upgrade/compose-upgrader.js')
+    const result = await regenerateComposeFilesLatest(composePath)
+
+    expect(result.env).toMatch(/^MQTT_ALLOW_ANON=true$/m)
+    expect(result.env).toMatch(/^WHISPER_BACKEND=cuda$/m)
+    expect(result.env).toMatch(/^TTS_BACKEND=cuda$/m)
+    expect(result.env).toMatch(/^TTS_GPU_DEVICE=1$/m)
+    const whisper = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(result.compose)?.[0]
+    expect(whisper).toContain('-cuda')
+  })
+})
