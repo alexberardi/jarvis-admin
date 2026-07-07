@@ -1,6 +1,6 @@
 {
   "version": "3.0.0",
-  "platformVersion": "0.1.68",
+  "platformVersion": "0.1.69",
   "services": [
     {
       "id": "jarvis-config-service",
