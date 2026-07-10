@@ -70,8 +70,14 @@ describe('jarvis-admin → command-center admin key wiring', () => {
     expect(block).toContain('COMMAND_CENTER_ADMIN_KEY: ${ADMIN_API_KEY}')
   })
 
-  it('scopes the key to jarvis-admin — absent when it is not enabled', () => {
+  it('scopes the key to the jarvis-admin block only — never leaked into other services', () => {
+    // jarvis-admin is core, so it's always present (even with no optional
+    // modules) and always gets the key; the guarantee that matters is that
+    // COMMAND_CENTER_ADMIN_KEY appears in NO other service's block.
     const output = generateCompose(makeState({ enabledModules: [] }), registry)
-    expect(output).not.toContain('COMMAND_CENTER_ADMIN_KEY')
+    expect(serviceBlock(output, 'jarvis-admin')).toContain('COMMAND_CENTER_ADMIN_KEY')
+    for (const id of ['jarvis-command-center', 'jarvis-auth', 'jarvis-config-service', 'jarvis-logs']) {
+      expect(serviceBlock(output, id)).not.toContain('COMMAND_CENTER_ADMIN_KEY')
+    }
   })
 })
