@@ -123,6 +123,24 @@ describe('compose-generator', () => {
       const ids = all.map((s) => s.id)
       expect(ids).toContain('jarvis-llm-proxy-api')
     })
+
+    it('excludes jarvis-admin from the compose on darwin (runs native, never containerized)', () => {
+      // A containerized admin on Docker Desktop resolves bind paths against
+      // its /host/compose mount, which Docker Desktop refuses to share —
+      // postgres then can't start and the DB services crash-loop (2026-07-10).
+      const services = getComposeServices(makeState({ platform: 'darwin' }), registry)
+      expect(services.map((s) => s.id)).not.toContain('jarvis-admin')
+    })
+
+    it('includes jarvis-admin in the compose on linux (containerized there)', () => {
+      const services = getComposeServices(makeState({ platform: 'linux' }), registry)
+      expect(services.map((s) => s.id)).toContain('jarvis-admin')
+    })
+
+    it('keeps jarvis-admin in the enabled (core) list on darwin — it is still installed, just native', () => {
+      const all = getAllEnabledServices(makeState({ platform: 'darwin' }), registry)
+      expect(all.map((s) => s.id)).toContain('jarvis-admin')
+    })
   })
 
   describe('GPU service config', () => {
