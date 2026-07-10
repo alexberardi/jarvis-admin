@@ -326,6 +326,52 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // 7. Python >=3.11 for native services (macOS only). llm-proxy / whisper /
+    // tts run natively on macOS and build a venv that requires Python >=3.11.
+    // The macOS system python3 is usually 3.9, and `brew install python@3.11`
+    // installs `python3.11` (not a bare `python3`) — so verify an explicitly
+    // versioned interpreter (or a new-enough python3) exists. Without this the
+    // native services install but crash-loop on pip's "requires a different
+    // Python" error, which is invisible from the Docker side.
+    if (platform() === 'darwin' && enabledServices.some((s) => s.nativeCapable)) {
+      const versioned = ['python3.13', 'python3.12', 'python3.11'].find((bin) => {
+        try {
+          execSync(`command -v ${bin}`, { timeout: 3000, stdio: 'pipe' })
+          return true
+        } catch {
+          return false
+        }
+      })
+      let bareOk: string | null = null
+      if (!versioned) {
+        try {
+          const v = execSync(`python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])'`, {
+            encoding: 'utf-8',
+            timeout: 3000,
+            stdio: 'pipe',
+          }).trim()
+          const [maj, min] = v.split('.').map((n) => parseInt(n, 10))
+          if (maj > 3 || (maj === 3 && min >= 11)) bareOk = v
+        } catch {
+          // no usable python3 at all
+        }
+      }
+      if (versioned || bareOk) {
+        checks.push({
+          name: 'Python (native services)',
+          status: 'pass',
+          message: `Python >=3.11 available (${versioned ?? `python3 ${bareOk}`}) for native llm-proxy / whisper / tts`,
+        })
+      } else {
+        checks.push({
+          name: 'Python (native services)',
+          status: 'fail',
+          message: 'Python >=3.11 is required for the native llm-proxy / whisper / tts services on macOS',
+          details: "Install it with 'brew install python@3.11' (macOS ships python3 3.9), then retry.",
+        })
+      }
+    }
+
     const canProceed = !checks.some((c) => c.status === 'fail')
     const result: PreflightResult = { checks, canProceed }
     return reply.send(result)
