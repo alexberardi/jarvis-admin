@@ -1,27 +1,38 @@
 import { execFile, execSync } from 'node:child_process'
-import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
-import { getComposePath } from '../services/compose-path.js'
 import { getHostPlatform } from '../services/host-platform.js'
+import { upsertEnvVar } from '../services/env-file.js'
 
 /**
- * Upsert a KEY=value line in ~/.jarvis/compose/.env (the file native services
- * source). Returns false if the .env doesn't exist yet.
+ * Download a single file straight from HuggingFace with curl — no
+ * huggingface_hub / venv python needed. Native macOS services build their venvs
+ * asynchronously after install, so the venv python isn't available when the
+ * Models step runs; curl always is. Gated repos use the Bearer token.
  */
-function upsertEnvVar(key: string, value: string): boolean {
-  const envPath = join(getComposePath(), '.env')
-  if (!existsSync(envPath)) return false
-  let content = readFileSync(envPath, 'utf-8')
-  const line = `${key}=${value}`
-  const re = new RegExp(`^${key}=.*$`, 'm')
-  content = re.test(content)
-    ? content.replace(re, line)
-    : `${content.replace(/\n?$/, '\n')}${line}\n`
-  writeFileSync(envPath, content)
-  return true
+function downloadFileDirect(
+  modelsDir: string,
+  repo: string,
+  filename: string,
+  token: string | undefined,
+): Promise<string> {
+  const dest = join(modelsDir, filename)
+  const url = `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`
+  const args = ['-fL', '--retry', '3', '--retry-delay', '2', '-o', dest, url]
+  if (token) args.push('-H', `Authorization: Bearer ${token}`)
+  return new Promise((resolve, reject) => {
+    execFile('curl', args, { timeout: 1_800_000, maxBuffer: 1024 * 1024 }, (err, _stdout, stderr) => {
+      if (err) {
+        try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
+        reject(new Error(stderr || err.message))
+      } else {
+        resolve(dest)
+      }
+    })
+  })
 }
 
 /**
@@ -161,6 +172,9 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(400).send({ error: 'Invalid filename format' })
     }
 
+    // Persist the token so the service can pull gated models at runtime too.
+    if (token) upsertEnvVar('HUGGINGFACE_HUB_TOKEN', token)
+
     // Try Docker first
     const container = await findLlmContainer(app)
     if (container) {
@@ -199,8 +213,12 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
     }
 
     try {
-      const output = await runLocalPython(modelsDir, repo, filename, token)
-      return reply.send({ success: true, output: output.trim(), message: 'Download complete' })
+      // Single GGUF file → direct curl (no venv). Full-repo snapshot (VLLM, no
+      // filename) still needs huggingface_hub via the local venv python.
+      const output = filename
+        ? await downloadFileDirect(modelsDir, repo, filename, token)
+        : (await runLocalPython(modelsDir, repo, filename, token)).trim()
+      return reply.send({ success: true, output, message: 'Download complete' })
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[models] Local download failed:', msg)
