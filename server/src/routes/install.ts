@@ -14,6 +14,7 @@ import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
 import { savePersistedConfig } from '../config.js'
 import { getHostPlatform } from '../services/host-platform.js'
+import { shouldSelfTerminateAfterInstall } from '../services/admin-lifecycle.js'
 import type { WizardState, HardwareInfo, InstallState, PreflightCheck, PreflightResult } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
 import registryData from '../data/service-registry.json' with { type: 'json' }
@@ -633,24 +634,37 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         emit({ phase: 'serviceHealth', serviceHealth: result.serviceHealth })
       }
 
-      // Build redirect URL to the containerized admin dashboard
+      // Redirect target for the admin dashboard. On Linux the containerized
+      // admin takes over on ADMIN_PORT; on macOS there is no container — this
+      // native binary keeps serving the dashboard on its own port.
+      const hostPlatform = getHostPlatform()
+      const isNativeMac = hostPlatform === 'darwin'
       let redirect: string | undefined
       if (result.success) {
-        const adminPort = envVars.ADMIN_PORT ?? '7710'
+        const adminPort = isNativeMac ? String(app.config.port) : (envVars.ADMIN_PORT ?? '7710')
         const requestHost = request.hostname.split(':')[0] ?? 'localhost'
         redirect = `http://${requestHost}:${adminPort}`
       }
 
       emit({ done: true, code: result.success ? 0 : 1, error: result.error, serviceHealth: result.serviceHealth, redirect })
 
-      // Mark install complete, disable boot autostart, and self-terminate
+      // Mark install complete. On Linux the containerized admin takes over the
+      // same port, so the installer disables its launchd/systemd autostart and
+      // self-terminates to free the port for the container. On macOS there is
+      // NO container: this native binary IS the permanent admin, so it must
+      // stay alive (and keep its autostart) to serve the dashboard AND the
+      // native-services install step that runs immediately after this.
       if (result.success && redirect) {
         savePersistedConfig({ installed: true })
-        disableAutostart()
-        setTimeout(() => {
-          console.log(`[jarvis-admin] Installer complete. Admin dashboard running at ${redirect}. Shutting down installer.`)
-          process.exit(0)
-        }, 5000)
+        if (shouldSelfTerminateAfterInstall(hostPlatform)) {
+          disableAutostart()
+          setTimeout(() => {
+            console.log(`[jarvis-admin] Installer complete. Admin dashboard running at ${redirect}. Shutting down installer.`)
+            process.exit(0)
+          }, 5000)
+        } else {
+          console.log(`[jarvis-admin] Install complete. Native macOS admin staying up on port ${app.config.port} to serve the dashboard + native services.`)
+        }
       }
     } catch (err) {
       emit({ done: true, code: 1, error: err instanceof Error ? err.message : String(err) })

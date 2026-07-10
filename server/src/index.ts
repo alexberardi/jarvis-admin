@@ -10,6 +10,7 @@ import { createDockerService } from './services/docker.js'
 import { createComposeService } from './services/compose.js'
 import { createRegistryService } from './services/registry.js'
 import { ensureDockerOnPath } from './services/docker-path.js'
+import { shouldRedirectWhenInstalled } from './services/admin-lifecycle.js'
 
 const REPO = 'alexberardi/jarvis-admin'
 
@@ -101,7 +102,12 @@ async function main(): Promise<void> {
 
   const config = loadConfig()
 
-  if (isInstalled() && !process.env.JARVIS_FORCE_INSTALL) {
+  // On Linux the containerized admin serves the dashboard on the same port,
+  // so this throwaway installer binary just redirects to it once installed.
+  // On macOS there is no container — this native binary IS the admin — so it
+  // must serve the full app itself (the SPA renders the dashboard once
+  // installed) instead of redirecting to a port nothing listens on.
+  if (isInstalled() && !process.env.JARVIS_FORCE_INSTALL && shouldRedirectWhenInstalled(process.platform)) {
     await startRedirectServer(config.port)
     return
   }

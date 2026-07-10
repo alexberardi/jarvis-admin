@@ -268,7 +268,7 @@ print_success() {
   printf "${GREEN}${BOLD}Jarvis Admin installer is running!${NC}\n"
   printf "\n"
   printf "  1. Open ${BLUE}http://localhost:7711${NC} to run the first-time setup wizard.\n"
-  printf "  2. After setup completes, your admin dashboard will be at ${BLUE}http://localhost:7710${NC}.\n"
+  printf "  2. After setup completes, your admin dashboard stays at the same ${BLUE}http://localhost:7711${NC}.\n"
   printf "\n"
   printf "  Re-run setup:     ${BOLD}JARVIS_FORCE_INSTALL=1 jarvis-admin${NC}\n"
   printf "  Check containers: ${BOLD}docker compose ls${NC}\n"
