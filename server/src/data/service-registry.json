@@ -477,7 +477,7 @@
       "id": "jarvis-admin",
       "name": "Admin Dashboard",
       "description": "Web admin dashboard for managing Jarvis services and settings",
-      "category": "optional",
+      "category": "core",
       "port": 7710,
       "image": "ghcr.io/alexberardi/jarvis-admin:latest",
       "healthCheck": "/health",

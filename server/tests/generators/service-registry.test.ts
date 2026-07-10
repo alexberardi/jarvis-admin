@@ -34,6 +34,7 @@ describe('service-registry', () => {
     expect(ids).toContain('jarvis-auth')
     expect(ids).toContain('jarvis-logs')
     expect(ids).toContain('jarvis-command-center')
+    expect(ids).toContain('jarvis-admin')
   })
 
   it('identifies recommended services', () => {
@@ -50,7 +51,8 @@ describe('service-registry', () => {
     const optional = getOptionalServices(registry)
     const ids = optional.map((s) => s.id)
     expect(ids).toContain('jarvis-web')
-    expect(ids).toContain('jarvis-admin')
+    // jarvis-admin is now core (always installed), not optional
+    expect(ids).not.toContain('jarvis-admin')
   })
 
   it('finds services by ID', () => {
