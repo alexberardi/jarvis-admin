@@ -1,6 +1,16 @@
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
 import { proxyRequest } from '../services/proxy.js'
+import { getHostPlatform } from '../services/host-platform.js'
+import { upsertEnvVar } from '../services/env-file.js'
+
+/** LLM setting key → the env-fallback var native services read at seed time. */
+const MODEL_ENV_FALLBACK: Record<string, string> = {
+  'model.main.name': 'JARVIS_MODEL_NAME',
+  'model.main.backend': 'JARVIS_MODEL_BACKEND',
+  'model.main.chat_format': 'JARVIS_MODEL_CHAT_FORMAT',
+  'model.main.context_window': 'JARVIS_MODEL_CONTEXT_WINDOW',
+}
 
 interface LlmStatusResponse {
   configured: boolean
@@ -117,7 +127,18 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
     const llmProxySettings = { ...settings }
     delete llmProxySettings['llm.interface']
 
-    // Write LLM proxy settings
+    // On macOS native the llm-proxy builds its venv asynchronously after install
+    // and usually isn't reachable when the wizard's Models step runs. Persist
+    // the model choice to .env — its seed reads these env-fallbacks on first
+    // start — so the config sticks regardless of whether the HTTP write lands.
+    const isNativeMac = getHostPlatform() === 'darwin'
+    if (isNativeMac) {
+      for (const [key, envVar] of Object.entries(MODEL_ENV_FALLBACK)) {
+        if (settings[key] !== undefined) upsertEnvVar(envVar, String(settings[key]))
+      }
+    }
+
+    // Write LLM proxy settings over HTTP (authoritative when it's up).
     let settingsResult = { status: 200, data: {} as unknown }
     if (Object.keys(llmProxySettings).length > 0) {
       settingsResult = await proxyRequest({
@@ -128,7 +149,9 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
         timeout: 10_000,
       })
 
-      if (settingsResult.status !== 200) {
+      // On darwin a failure here is expected while llm-proxy is still building —
+      // the .env write above is the durable source of truth, so don't fail.
+      if (settingsResult.status !== 200 && !isNativeMac) {
         return reply.code(settingsResult.status).send(settingsResult.data)
       }
     }
