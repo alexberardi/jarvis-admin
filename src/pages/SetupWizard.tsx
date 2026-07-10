@@ -17,7 +17,7 @@ const STEPS = [
   { label: 'Review', component: ReviewStep },
   { label: 'Install', component: InstallStep },
   { label: 'Account', component: AccountStep },
-  { label: 'LLM', component: LlmStep },
+  { label: 'Models', component: LlmStep },
 ]
 
 const ACCOUNT_STEP = 5
