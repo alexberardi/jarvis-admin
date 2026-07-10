@@ -5,19 +5,17 @@ import { useWizard } from '@/context/WizardContext'
 import { LLM_MODELS, type LlmModel } from '@/data/models'
 import { useConfigureLlm } from '@/hooks/useLlmSetup'
 import { useDownloadModel } from '@/hooks/useModels'
-import { useUpdateSetting } from '@/hooks/useSettings'
+import { enableWhisperAutodownload } from '@/api/models'
 import { useStartNativeService } from '@/hooks/useNativeServices'
 
 type Phase = 'select' | 'token' | 'whisper' | 'downloading' | 'configuring' | 'done'
 
-const WHISPER_SERVICE = 'jarvis-whisper-api'
 const LLM_SERVICE = 'jarvis-llm-proxy-api'
 
 export default function LlmStep() {
   const { state, dispatch } = useWizard()
   const configureMutation = useConfigureLlm()
   const downloadMutation = useDownloadModel()
-  const updateSettingMutation = useUpdateSetting()
   const restartNativeMutation = useStartNativeService()
 
   const isNative = state.platform === 'darwin'
@@ -52,19 +50,6 @@ export default function LlmStep() {
     )
   }
 
-  const applyWhisperAutodownload = async () => {
-    // Enable autodownload in the whisper settings DB, then restart the native
-    // service so it fetches ggml-base.en on the next (fatal-on-missing) model load.
-    await updateSettingMutation.mutateAsync({
-      serviceName: WHISPER_SERVICE,
-      key: 'whisper.allow_model_autodownload',
-      value: true,
-    })
-    if (isNative) {
-      await restartNativeMutation.mutateAsync(WHISPER_SERVICE)
-    }
-  }
-
   const handleModelSelect = (model: LlmModel) => {
     setSelectedModel(model)
     setError(null)
@@ -90,33 +75,39 @@ export default function LlmStep() {
   const handleApply = async (model: LlmModel, token: string) => {
     setError(null)
 
-    // 1. Whisper STT model (opt-in) — do this first so voice is ready even if
-    //    the larger LLM download is still going.
-    if (whisperAutodownload) {
-      setPhase('whisper')
-      try {
-        await applyWhisperAutodownload()
-      } catch (err) {
-        setError(`Whisper model setup failed: ${(err as Error).message}`)
-        setPhase('select')
-        return
-      }
-    }
-
-    // 2. Download the chosen LLM GGUF.
+    // 1. Download the chosen LLM GGUF (the main event — must succeed).
     setPhase('downloading')
     const repo = backend === 'GGUF' ? model.hfRepoGguf : model.hfRepoVllm
     const filename = backend === 'GGUF' ? model.ggufFilename : undefined
     try {
       await downloadMutation.mutateAsync({ repo, filename, token: token || undefined })
-      await handleConfigure(model)
     } catch (err) {
       setError(`Download failed: ${(err as Error).message}`)
       setPhase('select')
+      return
     }
+
+    // 2. Configure llm-proxy to use it (+ restart on native).
+    const configured = await handleConfigure(model)
+    if (!configured) return
+
+    // 3. Whisper STT model (opt-in) — best-effort; a hiccup here must NOT undo
+    //    the LLM that's already downloaded + configured.
+    if (whisperAutodownload) {
+      setPhase('whisper')
+      try {
+        await enableWhisperAutodownload(true)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[models] whisper auto-download setup failed:', err)
+      }
+    }
+
+    setPhase('done')
   }
 
-  const handleConfigure = async (model: LlmModel) => {
+  /** Writes the LLM settings + restarts native llm-proxy. Returns success. */
+  const handleConfigure = async (model: LlmModel): Promise<boolean> => {
     setPhase('configuring')
 
     const modelPath = backend === 'GGUF'
@@ -141,16 +132,23 @@ export default function LlmStep() {
     try {
       await configureMutation.mutateAsync(settings)
       // On native macOS there's no container for /configure to restart, so
-      // kickstart the launchd service to reload with the new model.
+      // kickstart the launchd service to reload with the new model. Best-effort:
+      // if the kickstart is transiently rejected, KeepAlive restarts it anyway.
       if (isNative) {
-        await restartNativeMutation.mutateAsync(LLM_SERVICE)
+        try {
+          await restartNativeMutation.mutateAsync(LLM_SERVICE)
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn('[models] llm-proxy restart failed (KeepAlive will retry):', err)
+        }
       }
       // Update wizard state so ReviewStep knows the interface
       dispatch({ type: 'SET_LLM_INTERFACE', interfaceId: model.promptProvider })
-      setPhase('done')
+      return true
     } catch (err) {
       setError(`Configuration failed: ${(err as Error).message}`)
       setPhase('select')
+      return false
     }
   }
 
