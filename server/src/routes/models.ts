@@ -1,9 +1,34 @@
 import { execFile } from 'node:child_process'
-import { existsSync, readdirSync, statSync, unlinkSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
+
+/**
+ * The native macOS llm-proxy runs from ~/.jarvis/native/jarvis-llm-proxy-api and
+ * loads models from a `.models/` dir relative to that checkout. Returns that dir
+ * (creating it) when the native checkout exists, else null.
+ */
+function nativeLlmModelsDir(): string | null {
+  const checkout = join(homedir(), '.jarvis', 'native', 'jarvis-llm-proxy-api')
+  if (!existsSync(checkout)) return null
+  const dir = join(checkout, '.models')
+  if (!existsSync(dir)) {
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch {
+      return null
+    }
+  }
+  return dir
+}
+
+/** The native llm-proxy venv python (has huggingface_hub), or null if absent. */
+function nativeVenvPython(): string | null {
+  const py = join(homedir(), '.jarvis', 'native', 'jarvis-llm-proxy-api', '.venv', 'bin', 'python')
+  return existsSync(py) ? py : null
+}
 
 interface ModelInfo {
   name: string
@@ -22,6 +47,11 @@ function findLocalModelsDir(): string | null {
   // Explicit env var takes priority (set in docker-compose for dev)
   const envDir = process.env.MODELS_DIR
   if (envDir && existsSync(envDir)) return envDir
+
+  // Native macOS install: the llm-proxy runs from ~/.jarvis/native/... — its
+  // .models dir (created on demand) is where GGUFs must land.
+  const native = nativeLlmModelsDir()
+  if (native) return native
 
   const candidates = [
     join(homedir(), 'jarvis', 'jarvis-llm-proxy-api', '.models'),
@@ -218,9 +248,12 @@ function runLocalPython(
     ? `import sys, os; from huggingface_hub import hf_hub_download; print(hf_hub_download(repo_id=sys.argv[1], filename=sys.argv[2], local_dir=sys.argv[3], token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))`
     : `import sys, os; from huggingface_hub import snapshot_download; print(snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[3] + "/" + sys.argv[1].split("/")[-1], token=os.environ.get("HUGGINGFACE_HUB_TOKEN") or None))`
 
+  // Prefer the native llm-proxy venv python — it has huggingface_hub installed.
+  // The macOS system python3 is 3.9 without it, so a bare python3 would fail.
+  const python = nativeVenvPython() ?? 'python3'
   const args = filename
-    ? ['python3', '-c', pyCode, repo, filename, modelsDir]
-    : ['python3', '-c', pyCode, repo, '', modelsDir]
+    ? [python, '-c', pyCode, repo, filename, modelsDir]
+    : [python, '-c', pyCode, repo, '', modelsDir]
 
   const env = { ...process.env }
   if (token) env.HUGGINGFACE_HUB_TOKEN = token
