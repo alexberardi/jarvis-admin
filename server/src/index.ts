@@ -9,6 +9,7 @@ import { VERSION } from './version.js'
 import { createDockerService } from './services/docker.js'
 import { createComposeService } from './services/compose.js'
 import { createRegistryService } from './services/registry.js'
+import { ensureDockerOnPath } from './services/docker-path.js'
 
 const REPO = 'alexberardi/jarvis-admin'
 
@@ -93,6 +94,11 @@ async function startRedirectServer(port: number): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Make Docker Desktop's `docker` CLI resolvable before any docker call —
+  // a launchd-started admin on macOS otherwise has a PATH without it, which
+  // shows up as a false "Docker not found" in the install wizard.
+  ensureDockerOnPath()
+
   const config = loadConfig()
 
   if (isInstalled() && !process.env.JARVIS_FORCE_INSTALL) {

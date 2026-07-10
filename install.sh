@@ -229,6 +229,11 @@ UNIT
     <string>7711</string>
     <key>STATIC_DIR</key>
     <string>${INSTALL_DIR}/public</string>
+    <!-- launchd's default PATH omits Docker Desktop's docker CLI; include the
+         standard Homebrew + Docker.app locations so 'docker' resolves. The
+         admin also self-heals its PATH at startup, but set it here too. -->
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
