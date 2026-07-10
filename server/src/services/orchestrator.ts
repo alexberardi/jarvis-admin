@@ -16,6 +16,35 @@ const TIER_ORDER = [
 ] as const
 
 /**
+ * Choose which services to `docker compose up` in the final startup step.
+ *
+ * Two filters, both load-bearing:
+ *  - skip services already brought up in earlier tiers (config/auth) or already
+ *    healthy on a re-run;
+ *  - skip services NOT defined in the generated compose. On macOS the native
+ *    GPU services (llm-proxy, whisper, ocr) run outside Docker and are excluded
+ *    from the compose; passing one to `docker compose up` aborts the ENTIRE
+ *    batch with "no such service: …", which left macOS installs with only
+ *    config + auth running (2026-07). `composeServiceIds === null` means
+ *    introspection failed — don't filter, so a valid install is never blocked.
+ */
+export function selectRemainingToStart(
+  services: ServiceDefinition[],
+  alreadyRunning: Set<string>,
+  composeServiceIds: Set<string> | null,
+): string[] {
+  const inCompose = (id: string): boolean =>
+    composeServiceIds === null || composeServiceIds.has(id)
+  const remainingServices = services
+    .filter((s) => !alreadyRunning.has(s.id) && inCompose(s.id))
+    .map((s) => s.id)
+  const workerIds = services
+    .flatMap((s) => (s.workers ?? []).map((w) => w.id))
+    .filter(inCompose)
+  return [...remainingServices, ...workerIds]
+}
+
+/**
  * Poll health endpoints for all enabled services, tier by tier.
  */
 export async function pollServiceHealth(
@@ -383,9 +412,29 @@ export async function tieredStartup(
   // Workers are always included — they're new containers that may not exist yet
   // even when the parent service is healthy (e.g. registry added a worker).
   const alreadyRunning = new Set(['jarvis-config-service', 'jarvis-auth', ...skipSet])
-  const remainingServices = services.filter((s) => !alreadyRunning.has(s.id)).map((s) => s.id)
-  const workerIds = services.flatMap((s) => (s.workers ?? []).map((w) => w.id))
-  const remaining = [...remainingServices, ...workerIds]
+
+  // The generated compose may not contain every enabled service: on macOS the
+  // native GPU services (llm-proxy, whisper, ocr) run outside Docker and are
+  // excluded from the compose. `docker compose up -d svcA svcB missingSvc`
+  // validates ALL names first and aborts the whole batch with "no such
+  // service: …" if one is absent — which left macOS installs with only
+  // config + auth up (2026-07). Ask compose for the services it ACTUALLY
+  // defines and only ever `up` those.
+  let composeServiceIds: Set<string> | null = null
+  try {
+    const out = execSync(`docker compose -f "${composeFile}" config --services`, {
+      cwd: composePath,
+      env,
+      encoding: 'utf-8',
+      timeout: 15000,
+      stdio: 'pipe',
+    })
+    composeServiceIds = new Set(out.split('\n').map((s) => s.trim()).filter(Boolean))
+  } catch {
+    // Couldn't introspect — don't over-filter and block a valid install.
+    composeServiceIds = null
+  }
+  const remaining = selectRemainingToStart(services, alreadyRunning, composeServiceIds)
 
   if (remaining.length > 0) {
     emit({ phase: 'services', message: `Starting ${remaining.length} remaining services...` })
