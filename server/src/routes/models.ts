@@ -227,23 +227,37 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
   })
 
   /**
-   * Enable/disable whisper STT model auto-download by writing the
-   * WHISPER_ALLOW_MODEL_AUTODOWNLOAD env var (whisper reads it as the settings
-   * fallback), then restarting the native whisper service so it fetches
-   * ggml-base.en on the next model load. This is the reliable native path — the
-   * settings-DB gateway can't reach whisper while it's crash-looping on the
-   * missing model.
+   * Fetch the whisper STT model so the native service can start. whisper won't
+   * egress on its own (outbound is opt-in) and its autodownload gate reads a DB
+   * setting, not the env var — and its settings table may not exist natively.
+   * So we curl ggml-base.en straight to whisper's default model_path; whisper
+   * then simply finds a local file. Also flips the env flag for good measure and
+   * restarts the native service.
    */
   app.post<{ Body: { enabled: boolean } }>('/whisper-autodownload', async (request, reply) => {
     const enabled = (request.body as { enabled?: boolean })?.enabled ?? true
-    const wrote = upsertEnvVar('WHISPER_ALLOW_MODEL_AUTODOWNLOAD', enabled ? 'true' : 'false')
-    if (!wrote) {
-      return reply.code(503).send({ error: 'No .env found — install services first.' })
+    upsertEnvVar('WHISPER_ALLOW_MODEL_AUTODOWNLOAD', enabled ? 'true' : 'false')
+    if (!enabled) {
+      return reply.send({ success: true, enabled: false, downloaded: false })
     }
+
+    const modelDir = join(homedir(), 'whisper.cpp', 'models')
+    const dest = join(modelDir, 'ggml-base.en.bin')
+    try {
+      if (!existsSync(dest)) {
+        mkdirSync(modelDir, { recursive: true })
+        await downloadFileDirect(modelDir, 'ggerganov/whisper.cpp', 'ggml-base.en.bin', undefined)
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[models] whisper model download failed:', msg)
+      return reply.code(500).send({ error: `Whisper model download failed: ${msg}` })
+    }
+
     const restarted = getHostPlatform() === 'darwin'
       ? tryKickstartNative('com.jarvis.whisper-api')
       : false
-    return reply.send({ success: true, enabled, restarted })
+    return reply.send({ success: true, enabled: true, downloaded: existsSync(dest), restarted })
   })
 
   /** Delete a model file */
