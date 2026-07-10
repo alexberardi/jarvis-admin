@@ -24,10 +24,15 @@ export default function InstallStep() {
   const [currentNativeId, setCurrentNativeId] = useState<string | null>(null)
   const [nativeResults, setNativeResults] = useState<Record<string, { ok: boolean; error?: string }>>({})
 
-  // Auto-redirect to the containerized admin dashboard after install
+  // Auto-redirect to the containerized admin dashboard after install.
+  // On macOS native there is no container to hand off to — THIS process keeps
+  // serving the wizard. A full-page redirect would reload the app into the
+  // "deployed-needs-account" path and skip the remaining in-session steps
+  // (Account, Models). So on darwin we stay put and let the user click Next.
   useEffect(() => {
     const redirectUrl = startStream.redirect
     if (phase !== 'done' || !redirectUrl) return
+    if (state.platform === 'darwin') return
 
     setRedirectCountdown(5)
     const interval = setInterval(() => {
@@ -237,9 +242,9 @@ export default function InstallStep() {
           {phase === 'idle'
             ? 'Ready to install. This will pull Docker images and start all services.'
             : phase === 'done'
-              ? startStream.redirect
+              ? startStream.redirect && state.platform !== 'darwin'
                 ? `Installation complete! Redirecting to your admin dashboard in ${redirectCountdown ?? '...'}s...`
-                : 'Installation complete! All services are running.'
+                : 'Installation complete! Click Next to create your account and choose your models.'
               : phase === 'error'
                 ? 'Installation encountered an error.'
                 : 'Installing...'}
