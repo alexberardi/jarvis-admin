@@ -1,22 +1,34 @@
 import { useState } from 'react'
-import { Download, CheckCircle2, AlertTriangle, Loader2, Lock, RotateCcw } from 'lucide-react'
+import { Download, CheckCircle2, AlertTriangle, Loader2, Lock, RotateCcw, Mic } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useWizard } from '@/context/WizardContext'
 import { LLM_MODELS, type LlmModel } from '@/data/models'
 import { useConfigureLlm } from '@/hooks/useLlmSetup'
 import { useDownloadModel } from '@/hooks/useModels'
+import { useUpdateSetting } from '@/hooks/useSettings'
+import { useStartNativeService } from '@/hooks/useNativeServices'
 
-type Phase = 'select' | 'token' | 'downloading' | 'configuring' | 'done'
+type Phase = 'select' | 'token' | 'whisper' | 'downloading' | 'configuring' | 'done'
+
+const WHISPER_SERVICE = 'jarvis-whisper-api'
+const LLM_SERVICE = 'jarvis-llm-proxy-api'
 
 export default function LlmStep() {
   const { state, dispatch } = useWizard()
   const configureMutation = useConfigureLlm()
   const downloadMutation = useDownloadModel()
+  const updateSettingMutation = useUpdateSetting()
+  const restartNativeMutation = useStartNativeService()
+
+  const isNative = state.platform === 'darwin'
 
   const [phase, setPhase] = useState<Phase>('select')
   const [selectedModel, setSelectedModel] = useState<LlmModel | null>(null)
+  // vLLM is Linux+CUDA only; native macOS uses Metal-accelerated GGUF.
   const [backend, setBackend] = useState<'GGUF' | 'VLLM'>('GGUF')
   const [hfToken, setHfToken] = useState('')
+  // Whisper STT model is small and always needed for voice; default to fetching it.
+  const [whisperAutodownload, setWhisperAutodownload] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // Remote LLM mode — already configured
@@ -24,7 +36,7 @@ export default function LlmStep() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold text-[var(--color-text)]">LLM Configuration</h2>
+          <h2 className="text-xl font-bold text-[var(--color-text)]">Models</h2>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
             Your LLM is configured to use a remote server.
           </p>
@@ -40,23 +52,17 @@ export default function LlmStep() {
     )
   }
 
-  // macOS native — can't download into Docker, skip
-  if (state.platform === 'darwin') {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-bold text-[var(--color-text)]">LLM Configuration</h2>
-          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            On macOS, the LLM proxy runs natively to access Metal/MLX. Configure it from the
-            dashboard after setup, or run it directly from the jarvis-llm-proxy-api directory.
-          </p>
-        </div>
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-500">
-          macOS native LLM proxy is not yet available as a pip package. Model download through
-          this wizard requires the LLM proxy running in Docker.
-        </div>
-      </div>
-    )
+  const applyWhisperAutodownload = async () => {
+    // Enable autodownload in the whisper settings DB, then restart the native
+    // service so it fetches ggml-base.en on the next (fatal-on-missing) model load.
+    await updateSettingMutation.mutateAsync({
+      serviceName: WHISPER_SERVICE,
+      key: 'whisper.allow_model_autodownload',
+      value: true,
+    })
+    if (isNative) {
+      await restartNativeMutation.mutateAsync(WHISPER_SERVICE)
+    }
   }
 
   const handleModelSelect = (model: LlmModel) => {
@@ -67,7 +73,7 @@ export default function LlmStep() {
       setPhase('token')
     } else {
       // Non-gated or token already provided — download directly
-      handleDownload(model, hfToken.trim())
+      handleApply(model, hfToken.trim())
     }
   }
 
@@ -77,17 +83,30 @@ export default function LlmStep() {
       return
     }
     if (selectedModel) {
-      handleDownload(selectedModel, hfToken)
+      handleApply(selectedModel, hfToken)
     }
   }
 
-  const handleDownload = async (model: LlmModel, token: string) => {
-    setPhase('downloading')
+  const handleApply = async (model: LlmModel, token: string) => {
     setError(null)
 
+    // 1. Whisper STT model (opt-in) — do this first so voice is ready even if
+    //    the larger LLM download is still going.
+    if (whisperAutodownload) {
+      setPhase('whisper')
+      try {
+        await applyWhisperAutodownload()
+      } catch (err) {
+        setError(`Whisper model setup failed: ${(err as Error).message}`)
+        setPhase('select')
+        return
+      }
+    }
+
+    // 2. Download the chosen LLM GGUF.
+    setPhase('downloading')
     const repo = backend === 'GGUF' ? model.hfRepoGguf : model.hfRepoVllm
     const filename = backend === 'GGUF' ? model.ggufFilename : undefined
-
     try {
       await downloadMutation.mutateAsync({ repo, filename, token: token || undefined })
       await handleConfigure(model)
@@ -121,6 +140,11 @@ export default function LlmStep() {
 
     try {
       await configureMutation.mutateAsync(settings)
+      // On native macOS there's no container for /configure to restart, so
+      // kickstart the launchd service to reload with the new model.
+      if (isNative) {
+        await restartNativeMutation.mutateAsync(LLM_SERVICE)
+      }
       // Update wizard state so ReviewStep knows the interface
       dispatch({ type: 'SET_LLM_INTERFACE', interfaceId: model.promptProvider })
       setPhase('done')
@@ -130,7 +154,7 @@ export default function LlmStep() {
     }
   }
 
-  // Filter models by available VRAM
+  // Filter models by available VRAM / unified memory
   const vram = state.hardware?.gpuVramMb
   const filteredModels = vram
     ? LLM_MODELS.filter((m) => m.vramMb <= vram)
@@ -139,11 +163,11 @@ export default function LlmStep() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-bold text-[var(--color-text)]">LLM Setup</h2>
+        <h2 className="text-xl font-bold text-[var(--color-text)]">Models</h2>
         <p className="mt-1 text-sm text-[var(--color-text-muted)]">
           {phase === 'done'
-            ? 'Model configured. The LLM proxy is restarting with the new model.'
-            : 'Select and download a language model for Jarvis.'}
+            ? 'Models configured. Services are restarting to load them.'
+            : 'Choose a language model, and optionally fetch the speech-to-text model.'}
         </p>
       </div>
 
@@ -156,14 +180,14 @@ export default function LlmStep() {
           {selectedModel && (
             <button
               type="button"
-              onClick={() => handleDownload(selectedModel, hfToken)}
+              onClick={() => handleApply(selectedModel, hfToken)}
               className={cn(
                 'flex w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm',
                 'hover:bg-[var(--color-surface-alt)] transition-colors',
               )}
             >
               <RotateCcw size={14} />
-              Retry Download
+              Retry
             </button>
           )}
         </div>
@@ -172,28 +196,57 @@ export default function LlmStep() {
       {/* Select model */}
       {phase === 'select' && (
         <>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-[var(--color-text)]">Backend</span>
-            <div className="flex gap-2">
-              {(['GGUF', 'VLLM'] as const).map((b) => (
-                <button
-                  key={b}
-                  type="button"
-                  onClick={() => setBackend(b)}
-                  className={cn(
-                    'rounded-md px-3 py-1 text-xs font-medium transition-colors',
-                    backend === b
-                      ? 'bg-[var(--color-primary)] text-white'
-                      : 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]',
-                  )}
-                >
-                  {b === 'VLLM' ? 'vLLM' : b}
-                </button>
-              ))}
+          {/* Backend — vLLM is Linux+CUDA only, so hide it on macOS native */}
+          {!isNative && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-[var(--color-text)]">Backend</span>
+              <div className="flex gap-2">
+                {(['GGUF', 'VLLM'] as const).map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setBackend(b)}
+                    className={cn(
+                      'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                      backend === b
+                        ? 'bg-[var(--color-primary)] text-white'
+                        : 'bg-[var(--color-surface-alt)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]',
+                    )}
+                  >
+                    {b === 'VLLM' ? 'vLLM' : b}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Optional HF token for authenticated downloads */}
+          {/* Whisper STT model auto-download */}
+          <label
+            className={cn(
+              'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
+              whisperAutodownload
+                ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'border-[var(--color-border)]',
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={whisperAutodownload}
+              onChange={(e) => setWhisperAutodownload(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="flex items-center gap-2 text-sm text-[var(--color-text)]">
+              <Mic size={15} className="shrink-0 text-[var(--color-primary)]" />
+              <span>
+                Auto-download the speech-to-text model
+                <span className="block text-xs text-[var(--color-text-muted)]">
+                  Whisper <code>base.en</code> (~150&nbsp;MB, no token needed). Required for voice.
+                </span>
+              </span>
+            </span>
+          </label>
+
+          {/* Optional HF token for authenticated / gated downloads */}
           <div>
             <label htmlFor="hf-token" className="mb-1 block text-xs text-[var(--color-text-muted)]">
               HuggingFace Token (optional — speeds up downloads, required for gated models)
@@ -213,6 +266,7 @@ export default function LlmStep() {
           </div>
 
           <div className="space-y-2">
+            <span className="text-sm font-medium text-[var(--color-text)]">Language model</span>
             {filteredModels.map((model) => (
               <button
                 key={model.id}
@@ -247,14 +301,13 @@ export default function LlmStep() {
 
             {filteredModels.length === 0 && (
               <p className="py-4 text-center text-sm text-[var(--color-text-muted)]">
-                No models fit your available VRAM ({vram ? Math.round(vram / 1024) + ' GB' : 'unknown'}).
-                Consider using Remote LLM mode.
+                No models fit your available memory ({vram ? Math.round(vram / 1024) + ' GB' : 'unknown'}).
               </p>
             )}
 
             {vram && filteredModels.length < LLM_MODELS.length && (
               <p className="text-xs text-[var(--color-text-muted)]">
-                Showing {filteredModels.length} of {LLM_MODELS.length} models that fit your {Math.round(vram / 1024)} GB VRAM.
+                Showing {filteredModels.length} of {LLM_MODELS.length} models that fit your {Math.round(vram / 1024)} GB.
               </p>
             )}
           </div>
@@ -298,6 +351,19 @@ export default function LlmStep() {
         </div>
       )}
 
+      {/* Whisper setup */}
+      {phase === 'whisper' && (
+        <div className="flex flex-col items-center py-8">
+          <Mic className="mb-4 animate-pulse text-[var(--color-primary)]" size={32} />
+          <p className="text-sm font-medium text-[var(--color-text)]">
+            Enabling speech-to-text model download...
+          </p>
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            Whisper will fetch ggml-base.en on restart
+          </p>
+        </div>
+      )}
+
       {/* Downloading */}
       {phase === 'downloading' && (
         <div className="flex flex-col items-center py-8">
@@ -332,13 +398,14 @@ export default function LlmStep() {
               </p>
               <p className="text-xs text-[var(--color-text-muted)]">
                 Backend: {backend} &middot; Prompt provider: {selectedModel.promptProvider}
+                {whisperAutodownload && ' · Whisper auto-download enabled'}
               </p>
             </div>
           </div>
           <p className="text-xs text-[var(--color-text-muted)]">
-            The LLM proxy is restarting with the new model. It may take a minute to load.
-            Command Center will automatically use the <strong>{selectedModel.promptProvider}</strong> prompt
-            provider for optimized command parsing.
+            The LLM proxy is restarting with the new model{whisperAutodownload && ', and whisper is fetching its model'}.
+            This may take a few minutes to finish loading. Command Center will use the{' '}
+            <strong>{selectedModel.promptProvider}</strong> prompt provider.
           </p>
         </div>
       )}
