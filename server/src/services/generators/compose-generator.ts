@@ -69,13 +69,20 @@ export function getAllEnabledServices(
 /**
  * Returns services to include in docker-compose.
  *
- * On macOS the filter has two layers:
+ * On macOS the filter has three layers:
  *   1. GPU-required services without a `cpuFallback` image (e.g. legacy
  *      llm-proxy) are always excluded — Docker on Mac can't reach the GPU,
  *      so the container would be useless.
  *   2. Any service the user explicitly opted into native mode (via the
  *      wizard's native-services step → WizardState.nativeServices) is also
  *      excluded; it'll be installed as a LaunchAgent instead.
+ *   3. jarvis-admin is ALWAYS excluded on macOS — it runs as the native
+ *      binary (the same process that generated this compose), never as a
+ *      container. A containerized admin on Docker Desktop can't manage the
+ *      compose correctly: it sees the compose at its bind mount (/host/compose)
+ *      and Docker Desktop refuses to share the derived host paths (e.g.
+ *      /host/compose/init-db.sh), so postgres can't start and the DB-backed
+ *      services crash-loop. (2026-07-10 regression from moving admin to core.)
  */
 export function getComposeServices(
   state: WizardState,
@@ -85,6 +92,7 @@ export function getComposeServices(
   const nativeIds = new Set(state.nativeServices ?? [])
   if (state.platform === 'darwin') {
     return all.filter((s) => {
+      if (s.id === 'jarvis-admin') return false
       if (nativeIds.has(s.id)) return false
       if (s.gpu && !s.cpuFallback) return false
       return true
