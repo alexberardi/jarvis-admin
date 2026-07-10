@@ -25,3 +25,10 @@ export async function downloadModel(req: DownloadRequest): Promise<{ success: bo
 export async function deleteModel(name: string): Promise<void> {
   await apiClient.delete(`/api/models/${encodeURIComponent(name)}`)
 }
+
+export async function enableWhisperAutodownload(
+  enabled: boolean,
+): Promise<{ success: boolean; enabled: boolean; restarted: boolean }> {
+  const { data } = await apiClient.post('/api/models/whisper-autodownload', { enabled })
+  return data
+}

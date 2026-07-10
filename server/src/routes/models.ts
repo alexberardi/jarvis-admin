@@ -1,9 +1,43 @@
-import { execFile } from 'node:child_process'
-import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'node:fs'
+import { execFile, execSync } from 'node:child_process'
+import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
+import { getComposePath } from '../services/compose-path.js'
+import { getHostPlatform } from '../services/host-platform.js'
+
+/**
+ * Upsert a KEY=value line in ~/.jarvis/compose/.env (the file native services
+ * source). Returns false if the .env doesn't exist yet.
+ */
+function upsertEnvVar(key: string, value: string): boolean {
+  const envPath = join(getComposePath(), '.env')
+  if (!existsSync(envPath)) return false
+  let content = readFileSync(envPath, 'utf-8')
+  const line = `${key}=${value}`
+  const re = new RegExp(`^${key}=.*$`, 'm')
+  content = re.test(content)
+    ? content.replace(re, line)
+    : `${content.replace(/\n?$/, '\n')}${line}\n`
+  writeFileSync(envPath, content)
+  return true
+}
+
+/**
+ * Best-effort `launchctl kickstart -k` for a native service. Failures are
+ * swallowed: a crash-looping job can transiently reject a kickstart, but the
+ * plist's KeepAlive will restart it anyway (picking up new .env values).
+ */
+function tryKickstartNative(label: string): boolean {
+  try {
+    const uid = execSync('id -u', { encoding: 'utf-8' }).trim()
+    execSync(`launchctl kickstart -k gui/${uid}/${label}`, { timeout: 8000, stdio: 'pipe' })
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * The native macOS llm-proxy runs from ~/.jarvis/native/jarvis-llm-proxy-api and
@@ -172,6 +206,26 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
       console.error('[models] Local download failed:', msg)
       return reply.code(500).send({ error: `Download failed: ${msg}` })
     }
+  })
+
+  /**
+   * Enable/disable whisper STT model auto-download by writing the
+   * WHISPER_ALLOW_MODEL_AUTODOWNLOAD env var (whisper reads it as the settings
+   * fallback), then restarting the native whisper service so it fetches
+   * ggml-base.en on the next model load. This is the reliable native path — the
+   * settings-DB gateway can't reach whisper while it's crash-looping on the
+   * missing model.
+   */
+  app.post<{ Body: { enabled: boolean } }>('/whisper-autodownload', async (request, reply) => {
+    const enabled = (request.body as { enabled?: boolean })?.enabled ?? true
+    const wrote = upsertEnvVar('WHISPER_ALLOW_MODEL_AUTODOWNLOAD', enabled ? 'true' : 'false')
+    if (!wrote) {
+      return reply.code(503).send({ error: 'No .env found — install services first.' })
+    }
+    const restarted = getHostPlatform() === 'darwin'
+      ? tryKickstartNative('com.jarvis.whisper-api')
+      : false
+    return reply.send({ success: true, enabled, restarted })
   })
 
   /** Delete a model file */
