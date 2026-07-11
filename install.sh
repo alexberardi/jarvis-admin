@@ -229,6 +229,18 @@ UNIT
     <string>7711</string>
     <key>STATIC_DIR</key>
     <string>${INSTALL_DIR}/public</string>
+    <!-- The native macOS admin runs on the host, outside Docker, so it must
+         discover peers via config-service and reach them on published localhost
+         ports. Point at config-service and request the "external" URL style
+         (localhost, not host.docker.internal). Without these, startup URL
+         resolution fails and the dashboard health + traces proxy silently break
+         (auth=/config=/llm=/cc= all empty). NOTE: resolution runs once at
+         startup, so on a truly fresh box the admin still needs one restart after
+         the stack is up — KeepAlive + a mini reboot handle that. -->
+    <key>JARVIS_CONFIG_URL</key>
+    <string>http://localhost:7700</string>
+    <key>JARVIS_CONFIG_URL_STYLE</key>
+    <string>external</string>
     <!-- launchd's default PATH omits Docker Desktop's docker CLI; include the
          standard Homebrew + Docker.app locations so 'docker' resolves. The
          admin also self-heals its PATH at startup, but set it here too. -->
