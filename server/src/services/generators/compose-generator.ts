@@ -112,10 +112,16 @@ const FIRST_PARTY_PREFIX = 'ghcr.io/alexberardi/'
 // Data-plane infra that holds persistent state/secrets and should NOT be
 // reachable off-host by default. Their published ports bind to 127.0.0.1 (other
 // containers still reach them over the internal `jarvis` network). Opt back out
-// via JARVIS_INFRA_BIND_HOST=0.0.0.0. Infra that legitimately serves external
-// clients — mosquitto (remote nodes), grafana/loki (dashboards) — is excluded;
-// grafana is instead protected by a generated admin password (not a default).
-const DATA_PLANE_INFRA = new Set<string>(['postgres', 'redis', 'minio'])
+// via JARVIS_INFRA_BIND_HOST=0.0.0.0.
+//
+// Loki belongs here: it ships NO authentication of its own, and it stores voice
+// transcripts. Grafana is the dashboard (and is protected by a generated admin
+// password); Loki is the raw log API behind it, reached over the internal
+// network by grafana and jarvis-logs — nothing needs it published off-host.
+//
+// Infra that legitimately serves external clients — mosquitto (remote nodes)
+// and grafana (browser dashboards) — stays on all interfaces.
+const DATA_PLANE_INFRA = new Set<string>(['postgres', 'redis', 'minio', 'loki'])
 
 function infraBindPrefix(infraId: string): string {
   return DATA_PLANE_INFRA.has(infraId) ? '${JARVIS_INFRA_BIND_HOST:-127.0.0.1}:' : ''

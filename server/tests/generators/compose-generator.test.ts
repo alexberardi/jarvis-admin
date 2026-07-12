@@ -880,6 +880,20 @@ describe('P1.4 — data-plane loopback bind + Grafana password', () => {
     expect(block(generateCompose(makeState(), registry), 'mosquitto')).not.toContain('JARVIS_INFRA_BIND_HOST')
   })
 
+  // Loki ships no auth of its own and stores voice transcripts. It was
+  // previously excluded from DATA_PLANE_INFRA alongside grafana ("dashboards"),
+  // which published the raw log API on 0.0.0.0:3100 — readable by anyone on the
+  // LAN/VPS. grafana + jarvis-logs reach it over the internal network.
+  it('loopback-binds loki — the log store has no auth and holds transcripts', () => {
+    expect(block(generateCompose(makeState(), registry), 'loki')).toContain(
+      '- "${JARVIS_INFRA_BIND_HOST:-127.0.0.1}:',
+    )
+  })
+
+  it('still exposes grafana (browser dashboards), protected by its generated password', () => {
+    expect(block(generateCompose(makeState(), registry), 'grafana')).not.toContain('JARVIS_INFRA_BIND_HOST')
+  })
+
   it('Grafana uses a generated admin password, never the literal "jarvis"', () => {
     const g = block(generateCompose(makeState(), registry), 'grafana')
     expect(g).toContain('GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}')
