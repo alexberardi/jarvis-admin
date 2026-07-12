@@ -64,10 +64,10 @@ export default function LlmSetupWizard() {
       : `.models/${model.hfRepoVllm.split('/').pop()}`
 
     const settings: Record<string, unknown> = {
-      'model.main.name': modelPath,
-      'model.main.backend': backend,
-      'model.main.chat_format': model.chatFormat,
-      'model.main.context_window': model.contextWindow,
+      'model.live.name': modelPath,
+      'model.live.backend': backend,
+      'model.live.chat_format': model.chatFormat,
+      'model.live.context_window': model.contextWindow,
     }
 
     if (backend === 'GGUF') {

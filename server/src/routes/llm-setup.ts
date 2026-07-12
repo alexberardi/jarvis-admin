@@ -6,10 +6,10 @@ import { upsertEnvVar } from '../services/env-file.js'
 
 /** LLM setting key → the env-fallback var native services read at seed time. */
 const MODEL_ENV_FALLBACK: Record<string, string> = {
-  'model.main.name': 'JARVIS_MODEL_NAME',
-  'model.main.backend': 'JARVIS_MODEL_BACKEND',
-  'model.main.chat_format': 'JARVIS_MODEL_CHAT_FORMAT',
-  'model.main.context_window': 'JARVIS_MODEL_CONTEXT_WINDOW',
+  'model.live.name': 'JARVIS_LIVE_MODEL_NAME',
+  'model.live.backend': 'JARVIS_LIVE_MODEL_BACKEND',
+  'model.live.chat_format': 'JARVIS_LIVE_MODEL_CHAT_FORMAT',
+  'model.live.context_window': 'JARVIS_LIVE_MODEL_CONTEXT_WINDOW',
 }
 
 interface LlmStatusResponse {
@@ -67,7 +67,7 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
       // Try reading the setting directly
       const settingResult = await proxyRequest({
         method: 'GET',
-        url: `${llmUrl}/settings/model.main.name`,
+        url: `${llmUrl}/settings/model.live.name`,
         headers: { Authorization: request.headers.authorization! },
         timeout: 5_000,
       })
@@ -102,10 +102,10 @@ export async function llmSetupRoutes(app: FastifyInstance): Promise<void> {
 
     // Only allow known LLM settings keys
     const ALLOWED_KEYS = new Set([
-      'model.main.name',
-      'model.main.backend',
-      'model.main.chat_format',
-      'model.main.context_window',
+      'model.live.name',
+      'model.live.backend',
+      'model.live.chat_format',
+      'model.live.context_window',
       'inference.gguf.n_gpu_layers',
       'inference.gguf.n_threads',
       'inference.vllm.quantization',
