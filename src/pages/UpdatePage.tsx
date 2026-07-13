@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { useUpdateCheck } from '@/hooks/useUpdateCheck'
 import { setUpdatesEnabled, getUpgradeStatus } from '@/api/update'
 
-type Phase = 'idle' | 'preflight' | 'download' | 'binary' | 'restarting' | 'compose' | 'pull' | 'restart' | 'verify' | 'done' | 'error'
+type Phase = 'idle' | 'preflight' | 'download' | 'binary' | 'restarting' | 'compose' | 'pull' | 'restart' | 'native' | 'verify' | 'done' | 'error'
 
 interface LogLine {
   text: string
@@ -21,6 +21,10 @@ const PHASE_LABELS: Record<string, string> = {
   compose: 'Updating configuration',
   pull: 'Pulling images',
   restart: 'Restarting services',
+  // macOS only: whisper / tts / llm-proxy run as launchd agents from git
+  // checkouts, so `docker compose pull` never touched them. The step no-ops on
+  // Linux, where everything is a container.
+  native: 'Updating native services',
   verify: 'Verifying health',
   done: 'Complete',
 }
@@ -33,6 +37,11 @@ export default function UpdatePage() {
   const [logs, setLogs] = useState<LogLine[]>([])
   const [error, setError] = useState<string | null>(null)
   const [isTogglingUpdates, setIsTogglingUpdates] = useState(false)
+  // The native-services step only exists on macOS. Don't render the row (and
+  // don't let the index-based completedPhases paint it green) on a box that has
+  // no native services — that's the same "tick a step that never ran" bug this
+  // page just got fixed for.
+  const [sawNativePhase, setSawNativePhase] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
 
   const updatesEnabled = updateInfo?.updatesEnabled
@@ -116,6 +125,7 @@ export default function UpdatePage() {
           if (label) addLog({ text: `${label}...` })
           // 'binary-updated' is the marker's own bookkeeping, not a UI phase;
           // the work it precedes is the compose step.
+          if (status.phase === 'native') setSawNativePhase(true)
           setPhase(status.phase === 'binary-updated' ? 'compose' : (status.phase as Phase))
         }
       } catch {
@@ -167,6 +177,7 @@ export default function UpdatePage() {
           try {
             const data = JSON.parse(line.slice(6))
 
+            if (data.phase === 'native') setSawNativePhase(true)
             if (data.phase) setPhase(data.phase as Phase)
             if (data.message) addLog({ text: data.message, phase: data.phase })
             if (data.stream && data.text) addLog({ text: data.text.trim() })
@@ -296,7 +307,9 @@ export default function UpdatePage() {
       {/* Phase progress */}
       {phase !== 'idle' && (
         <div className="space-y-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-          {Object.entries(PHASE_LABELS).map(([key, label]) => {
+          {Object.entries(PHASE_LABELS)
+            .filter(([key]) => key !== 'native' || sawNativePhase)
+            .map(([key, label]) => {
             const isActive = key === phase
             const isComplete = completedPhases.includes(key)
             const isError = key === phase && phase === 'error'
