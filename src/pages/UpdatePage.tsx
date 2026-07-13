@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ArrowUpCircle, CheckCircle2, Loader2, AlertTriangle, RefreshCw, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUpdateCheck } from '@/hooks/useUpdateCheck'
-import { setUpdatesEnabled } from '@/api/update'
+import { setUpdatesEnabled, getUpgradeStatus } from '@/api/update'
 
 type Phase = 'idle' | 'preflight' | 'download' | 'binary' | 'restarting' | 'compose' | 'pull' | 'restart' | 'verify' | 'done' | 'error'
 
@@ -74,6 +74,61 @@ export default function UpdatePage() {
     }
   }, [logs])
 
+  /**
+   * Follow the server-side tail of the upgrade.
+   *
+   * Swapping the binary restarts the admin process, which kills the SSE stream —
+   * so compose regen, image pull, service restart and health verify all run in
+   * the NEW process with no client attached. The page used to simply assert
+   * "Upgrade complete!" at that point, while docker was still pulling images.
+   *
+   * The server tracks the real state in ~/.jarvis/upgrade-in-progress.json and
+   * exposes it at /api/update/status; it clears the marker only once the upgrade
+   * genuinely finishes. So: poll until it's gone.
+   */
+  const followServerUpgrade = useCallback(async () => {
+    const DEADLINE = Date.now() + 20 * 60 * 1000 // pulls can be slow, but not endless
+    let lastPhase = ''
+
+    while (Date.now() < DEADLINE) {
+      try {
+        const status = await getUpgradeStatus()
+
+        if (status.phase === 'error') {
+          const msg = status.error ?? 'Upgrade failed after restart'
+          setError(msg)
+          setPhase('error')
+          addLog({ text: `Error: ${msg}` })
+          return
+        }
+
+        // Marker gone → the server finished and recorded the new version.
+        if (!status.inProgress) {
+          setPhase('done')
+          addLog({ text: 'Upgrade complete!' })
+          await queryClient.invalidateQueries({ queryKey: ['update-check'] })
+          return
+        }
+
+        if (status.phase && status.phase !== lastPhase) {
+          lastPhase = status.phase
+          const label = PHASE_LABELS[status.phase]
+          if (label) addLog({ text: `${label}...` })
+          // 'binary-updated' is the marker's own bookkeeping, not a UI phase;
+          // the work it precedes is the compose step.
+          setPhase(status.phase === 'binary-updated' ? 'compose' : (status.phase as Phase))
+        }
+      } catch {
+        // Admin may still be bouncing — keep polling rather than declaring failure.
+      }
+
+      await new Promise((r) => setTimeout(r, 3000))
+    }
+
+    setError('Upgrade is taking longer than expected — check the admin logs.')
+    setPhase('error')
+  }, [addLog, queryClient])
+
   async function handleUpdate() {
     setPhase('preflight')
     setLogs([])
@@ -120,9 +175,17 @@ export default function UpdatePage() {
               setPhase('restarting')
               addLog({ text: 'Admin server restarting with new version...' })
               await waitForRestart(updateInfo?.latestVersion ?? '')
-              // After restart, check if upgrade continued
-              setPhase('done')
-              addLog({ text: 'Upgrade complete!' })
+
+              // The binary swap kills this SSE stream, so the rest of the
+              // upgrade (compose → pull → restart → verify) runs server-side in
+              // the NEW process with nobody listening. We used to just declare
+              // "Upgrade complete!" here — while docker was still pulling images
+              // — and the phase list rendered every remaining step as a green
+              // tick, because completedPhases is derived from the phase index.
+              // Follow the real work instead: poll /api/update/status until the
+              // server clears its upgrade marker.
+              addLog({ text: 'Admin back up. Finishing upgrade (configuration, images, services)...' })
+              await followServerUpgrade()
               return
             }
 
@@ -187,40 +250,43 @@ export default function UpdatePage() {
       {/* Update opt-in. Jarvis makes no outbound calls unless you allow it, so
           this is off by default — but it used to be reachable only by editing a
           launchd plist / compose .env and restarting, which put updates out of
-          reach for most self-hosters. */}
-      {phase === 'idle' && (
-        <div className="flex items-start justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Download size={16} className="text-[var(--color-text-muted)]" />
-              <span className="text-sm font-medium text-[var(--color-text)]">Check for updates</span>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              Lets Jarvis contact GitHub to see if a new release is available. This is the only
-              outbound connection it makes — turn it off to stay fully offline.
-            </p>
-          </div>
+          reach for most self-hosters.
 
-          <button
-            role="switch"
-            aria-checked={updatesEnabled === true}
-            aria-label="Check for updates"
-            disabled={isTogglingUpdates || updatesEnabled === undefined}
-            onClick={() => toggleUpdates(!updatesEnabled)}
-            className={cn(
-              'relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
-              updatesEnabled ? 'bg-green-600' : 'bg-[var(--color-border)]',
-            )}
-          >
-            <span
-              className={cn(
-                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
-                updatesEnabled ? 'translate-x-[22px]' : 'translate-x-0.5',
-              )}
-            />
-          </button>
+          ALWAYS rendered. It's a settings control, not a step in the upgrade: you
+          might well want to switch checks back off the moment an update finishes.
+          An earlier cut hid it unless phase === 'idle', which meant that running
+          a single update made the toggle disappear for the rest of the session. */}
+      <div className="flex items-start justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Download size={16} className="text-[var(--color-text-muted)]" />
+            <span className="text-sm font-medium text-[var(--color-text)]">Check for updates</span>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            Lets Jarvis contact GitHub to see if a new release is available. This is the only
+            outbound connection it makes — turn it off to stay fully offline.
+          </p>
         </div>
-      )}
+
+        <button
+          role="switch"
+          aria-checked={updatesEnabled === true}
+          aria-label="Check for updates"
+          disabled={isTogglingUpdates || updatesEnabled === undefined}
+          onClick={() => toggleUpdates(!updatesEnabled)}
+          className={cn(
+            'relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
+            updatesEnabled ? 'bg-green-600' : 'bg-[var(--color-border)]',
+          )}
+        >
+          <span
+            className={cn(
+              'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+              updatesEnabled ? 'translate-x-[22px]' : 'translate-x-0.5',
+            )}
+          />
+        </button>
+      </div>
 
       {/* Phase progress */}
       {phase !== 'idle' && (

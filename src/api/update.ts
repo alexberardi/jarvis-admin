@@ -23,6 +23,8 @@ export interface UpgradeStatus {
   phase?: string
   version?: string
   startedAt?: string
+  /** Set when the server-side resume failed; `phase` is then "error". */
+  error?: string
 }
 
 export async function getUpdateInfo(): Promise<UpdateInfo> {

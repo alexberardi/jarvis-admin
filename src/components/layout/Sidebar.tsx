@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Settings, Server, Cpu, Box, Zap, Activity, Boxes, Users } from 'lucide-react'
+import { LayoutDashboard, Settings, Server, Cpu, Box, Zap, Activity, Boxes, Users, ArrowUpCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import SystemInfoBar from './SystemInfoBar'
 import type { LucideIcon } from 'lucide-react'
@@ -20,6 +20,13 @@ const navItems: NavItem[] = [
   { label: 'Nodes', icon: Cpu, path: '/nodes' },
   { label: 'Users', icon: Users, path: '/users' },
   { label: 'Native', icon: Boxes, path: '/native-services' },
+  // /update used to be reachable ONLY via the dashboard's UpdateBanner, which
+  // renders only when an update is available. With update checks off, the server
+  // never contacts GitHub and always reports updateAvailable:false — so the
+  // banner never appeared, so the page was unreachable, so its "Check for
+  // updates" toggle was unreachable. To turn updates ON you had to reach a page
+  // that only existed once updates were already on. It needs a permanent home.
+  { label: 'Updates', icon: ArrowUpCircle, path: '/update' },
 ]
 
 export default function Sidebar() {
