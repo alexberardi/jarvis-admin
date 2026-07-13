@@ -268,6 +268,11 @@ export default function UpdatePage() {
           </p>
         </div>
 
+        {/* Track is 44x24 (w-11/h-6) with a 20px knob (h-5/w-5) inset 2px, so the
+            knob travels exactly 44 - 20 - 2 - 2 = 20px (translate-x-5).
+            `p-0` matters: a <button> carries UA padding, and the knob is
+            positioned `absolute` — without an explicit `left` its origin starts
+            AFTER that padding, which pushed it past the right edge of the track. */}
         <button
           role="switch"
           aria-checked={updatesEnabled === true}
@@ -275,14 +280,14 @@ export default function UpdatePage() {
           disabled={isTogglingUpdates || updatesEnabled === undefined}
           onClick={() => toggleUpdates(!updatesEnabled)}
           className={cn(
-            'relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
+            'relative mt-1 h-6 w-11 shrink-0 rounded-full border-0 p-0 transition-colors disabled:opacity-50',
             updatesEnabled ? 'bg-green-600' : 'bg-[var(--color-border)]',
           )}
         >
           <span
             className={cn(
-              'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
-              updatesEnabled ? 'translate-x-[22px]' : 'translate-x-0.5',
+              'absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform',
+              updatesEnabled ? 'translate-x-5' : 'translate-x-0',
             )}
           />
         </button>
