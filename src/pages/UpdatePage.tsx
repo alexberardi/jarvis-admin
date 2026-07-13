@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowUpCircle, CheckCircle2, Loader2, AlertTriangle, RefreshCw } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ArrowUpCircle, CheckCircle2, Loader2, AlertTriangle, RefreshCw, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useUpdateCheck } from '@/hooks/useUpdateCheck'
+import { setUpdatesEnabled } from '@/api/update'
 
 type Phase = 'idle' | 'preflight' | 'download' | 'binary' | 'restarting' | 'compose' | 'pull' | 'restart' | 'verify' | 'done' | 'error'
 
@@ -25,11 +27,41 @@ const PHASE_LABELS: Record<string, string> = {
 
 export default function UpdatePage() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { data: updateInfo, isLoading } = useUpdateCheck()
   const [phase, setPhase] = useState<Phase>('idle')
   const [logs, setLogs] = useState<LogLine[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [isTogglingUpdates, setIsTogglingUpdates] = useState(false)
   const logRef = useRef<HTMLDivElement>(null)
+
+  const updatesEnabled = updateInfo?.updatesEnabled
+
+  /**
+   * Flip the opt-in, then re-run the check. Enabling it is the first moment the
+   * server is allowed to contact GitHub, so the freshly-invalidated query is
+   * what actually surfaces "an update is available" — without this refetch the
+   * user would flip the switch and still see the stale "no update" answer.
+   */
+  const toggleUpdates = useCallback(
+    async (next: boolean) => {
+      setIsTogglingUpdates(true)
+      setError(null)
+      try {
+        await setUpdatesEnabled(next)
+        await queryClient.invalidateQueries({ queryKey: ['update-check'] })
+      } catch {
+        setError(
+          next
+            ? 'Could not turn on update checks. You need to be signed in as an admin.'
+            : 'Could not turn off update checks.',
+        )
+      } finally {
+        setIsTogglingUpdates(false)
+      }
+    },
+    [queryClient],
+  )
 
   const addLog = useCallback((line: LogLine) => {
     setLogs((prev) => [...prev, line])
@@ -133,7 +165,15 @@ export default function UpdatePage() {
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold text-[var(--color-text)]">Update Jarvis</h1>
-        {updateInfo?.updateAvailable ? (
+        {updatesEnabled === false ? (
+          // Never claim "you're up to date" here: with update checks off, the
+          // server short-circuits to updateAvailable:false WITHOUT contacting
+          // GitHub, so we genuinely don't know. Saying otherwise would tell
+          // someone sitting on a vulnerable release that they're current.
+          <p className="text-sm text-[var(--color-text-muted)]">
+            Update checks are off — currently running v{updateInfo?.currentVersion ?? '?'}
+          </p>
+        ) : updateInfo?.updateAvailable ? (
           <p className="text-sm text-[var(--color-text-muted)]">
             v{updateInfo.currentVersion} → v{updateInfo.latestVersion}
           </p>
@@ -143,6 +183,44 @@ export default function UpdatePage() {
           </p>
         )}
       </div>
+
+      {/* Update opt-in. Jarvis makes no outbound calls unless you allow it, so
+          this is off by default — but it used to be reachable only by editing a
+          launchd plist / compose .env and restarting, which put updates out of
+          reach for most self-hosters. */}
+      {phase === 'idle' && (
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Download size={16} className="text-[var(--color-text-muted)]" />
+              <span className="text-sm font-medium text-[var(--color-text)]">Check for updates</span>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Lets Jarvis contact GitHub to see if a new release is available. This is the only
+              outbound connection it makes — turn it off to stay fully offline.
+            </p>
+          </div>
+
+          <button
+            role="switch"
+            aria-checked={updatesEnabled === true}
+            aria-label="Check for updates"
+            disabled={isTogglingUpdates || updatesEnabled === undefined}
+            onClick={() => toggleUpdates(!updatesEnabled)}
+            className={cn(
+              'relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
+              updatesEnabled ? 'bg-green-600' : 'bg-[var(--color-border)]',
+            )}
+          >
+            <span
+              className={cn(
+                'absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                updatesEnabled ? 'translate-x-[22px]' : 'translate-x-0.5',
+              )}
+            />
+          </button>
+        </div>
+      )}
 
       {/* Phase progress */}
       {phase !== 'idle' && (
