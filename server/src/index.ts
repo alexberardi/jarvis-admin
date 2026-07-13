@@ -10,6 +10,7 @@ import { createDockerService } from './services/docker.js'
 import { createComposeService } from './services/compose.js'
 import { createRegistryService } from './services/registry.js'
 import { ensureDockerOnPath } from './services/docker-path.js'
+import { resumeUpgradeIfPending } from './services/upgrade/resume.js'
 import { shouldRedirectWhenInstalled } from './services/admin-lifecycle.js'
 
 const REPO = 'alexberardi/jarvis-admin'
@@ -128,6 +129,14 @@ async function main(): Promise<void> {
 
   await app.listen({ port: config.port, host: '0.0.0.0' })
   console.log(`jarvis-admin server listening on port ${config.port}`)
+
+  // A standalone upgrade can't finish in one pass: selfUpdate() swaps the binary
+  // and restarts the process, killing the request mid-flight. It leaves a marker
+  // so THIS boot can finish the job (compose regen → pull → restart → verify).
+  // Deliberately not awaited: it pulls images and restarts containers, which
+  // takes minutes, and the UI must be up while it runs — that's where the user
+  // watches /api/update/status.
+  void resumeUpgradeIfPending(app, VERSION)
 
   openBrowser(`http://localhost:${config.port}`)
 }
