@@ -78,6 +78,25 @@ describe('resumeUpgradeIfPending — finishes an upgrade interrupted by the bina
     expect(marker).toMatchObject({ version: '0.1.85', phase: 'binary-updated' })
   })
 
+  it('mirrors live phases into the marker — it is the UI\'s only window into the resume', async () => {
+    writeMarker('0.1.85')
+    // The SSE stream died with the old process during the binary swap, so
+    // /api/update/status (which reads this marker) is all the client has left.
+    resumeUpgrade.mockImplementation(async (_app, _marker, emit) => {
+      emit({ phase: 'pull', message: 'Pulling updated images...' })
+      const mid = JSON.parse(readFileSync(MARKER, 'utf-8')) as { phase: string }
+      expect(mid.phase).toBe('pull')
+
+      emit({ phase: 'native', message: 'Updating native services...' })
+      const later = JSON.parse(readFileSync(MARKER, 'utf-8')) as { phase: string }
+      expect(later.phase).toBe('native')
+    })
+
+    await resumeUpgradeIfPending(fakeApp(), '0.1.85')
+
+    expect(resumeUpgrade).toHaveBeenCalledOnce()
+  })
+
   it('clears the marker after a successful resume', async () => {
     writeMarker('0.1.85')
 
