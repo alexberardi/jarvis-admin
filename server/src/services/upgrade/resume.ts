@@ -79,8 +79,20 @@ export async function resumeUpgradeIfPending(
 
   try {
     const { resumeUpgrade } = await import('./orchestrator.js')
+
+    // Mirror each phase into the marker as it happens. /api/update/status reads
+    // the marker, and it's the ONLY window the UI has into this stage — the SSE
+    // stream died with the old process during the binary swap. Without this the
+    // marker would sit at "binary-updated" for the entire resume and the client
+    // could only report "something is happening" until it finished.
+    let lastPhase = marker.phase
     await resumeUpgrade(app, marker, (data) => {
       app.log.info({ upgrade: data }, 'upgrade progress')
+      const phase = typeof data.phase === 'string' ? data.phase : null
+      if (phase && phase !== lastPhase) {
+        lastPhase = phase
+        writeFileSync(MARKER(), JSON.stringify({ ...marker, phase }))
+      }
     })
 
     unlinkSync(MARKER())
