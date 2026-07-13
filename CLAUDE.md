@@ -95,7 +95,7 @@ cd server && npm test
 | `/api/llm-setup` | `llm-setup.ts` | LLM-specific quickstart (model selection, prompt-provider config) |
 | `/api/quick-sets` | `quick-sets.ts` | Preset configuration bundles (declarative one-click setups) |
 | `/api/models` | `models.ts` | LLM model info from llm-proxy |
-| `/api/update` | `update.ts` | Stack-wide update flow — check + apply |
+| `/api/update` | `update.ts` | Stack-wide update flow — check + apply, plus `GET/POST /settings` (the `allowUpdates` opt-in toggle) |
 | `/api/install` | `install.ts` | Install/reconcile services — invokes compose generation + docker compose up |
 | `/api/traces` | `traces.ts` | Request trace viewer — proxies to CC `/api/v0/admin/traces` |
 | `/api/admin` | `admin.ts` | Cross-household superuser views — households, nodes, users list + temp-password reset. Proxies jarvis-auth `/superuser/*`, forwarding the operator's JWT |
@@ -279,6 +279,10 @@ server/src/
 | `JARVIS_ALLOW_UPDATES` | `false` | **Global, box-level opt-in for outbound update checks + self-update.** Default `false` (fully local; no outbound internet unless opted in). Set to `true`/`1` to allow `/api/update/check` to query `api.github.com` and `/api/update/apply` to run the self-updater (which downloads `public.tar.gz`). When `false`, `/check` returns "no update" with **no network call** and `/apply` returns `403` before any work. |
 
 > **Why env, not a DB setting?** The update *check* call site (`GET /api/update/check`) is unauthenticated/informational — there's no JWT and admin has no household or settings credential at that point in the flow (it runs pre-wizard, first-boot). A box-level env flag is the only credential-free gate available here. Resolution order is `~/.jarvis/admin.json` (`allowUpdates`) → `JARVIS_ALLOW_UPDATES` env → `false`.
+
+> **Set it from the UI, not the plist.** The env var is the *fallback*, not the interface. `POST /api/update/settings {"allowUpdates":true}` (superuser) persists the flag to `~/.jarvis/admin.json` — which outranks the env var — and mutates the live `app.config`, so it takes effect **without a restart**. The Update page renders this as a switch. This exists because the flag was previously reachable only by hand-editing a launchd plist (native macOS) or compose `.env` and then bootout/bootstrapping the service: the *documented* update path was unusable by the non-technical self-hosters it was written for.
+>
+> **Never render "you're up to date" from `updateAvailable` alone.** When the gate is off, `checkForUpdate` short-circuits to `updateAvailable: false` **without contacting GitHub** — indistinguishable from a genuine "latest version" unless you also read `updatesEnabled` (returned by both `/check` routes). The UI said "You're running the latest version" to boxes that had never checked, which is how a stale release can sit unnoticed indefinitely.
 
 Settings are not persisted by this service. Wizard state is persisted to `~/.jarvis/admin.json` (see `config.ts:savePersistedConfig`).
 

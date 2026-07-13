@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
+import { savePersistedConfig } from '../config.js'
 import { checkForUpdate } from '../services/update-checker.js'
 
 const UPGRADE_MARKER = join(homedir(), '.jarvis', 'upgrade-in-progress.json')
@@ -31,16 +32,56 @@ function getUpgradeStatus(): UpgradeStatus {
 }
 
 export async function updateRoutes(app: FastifyInstance): Promise<void> {
+  /**
+   * Read the box-level update opt-in.
+   *
+   * Unauthenticated, like `/check` — it's a single boolean about this box's own
+   * configuration, and the SPA needs it before login to render the update card
+   * honestly.
+   */
+  app.get('/settings', async (_request, reply) => {
+    return reply.send({ allowUpdates: app.config.allowUpdates })
+  })
+
+  /**
+   * Flip the box-level update opt-in (superuser only).
+   *
+   * This exists because the flag used to be reachable ONLY by hand-editing a
+   * launchd plist (or compose .env) and restarting the service — which put the
+   * documented update path out of reach of the non-technical self-hosters it was
+   * written for.
+   *
+   * Persisted to ~/.jarvis/admin.json, which `loadConfig` already prefers over
+   * the `JARVIS_ALLOW_UPDATES` env var, so it survives a restart. We also mutate
+   * the live config so it takes effect immediately — otherwise the user would
+   * flip the switch and nothing would happen until they restarted, which is the
+   * very papercut we're removing.
+   */
+  app.post('/settings', { preHandler: requireSuperuser }, async (request, reply) => {
+    const body = request.body as { allowUpdates?: unknown } | undefined
+    const allowUpdates = body?.allowUpdates
+
+    if (typeof allowUpdates !== 'boolean') {
+      return reply.code(400).send({ error: 'allowUpdates must be a boolean' })
+    }
+
+    savePersistedConfig({ allowUpdates })
+    app.config.allowUpdates = allowUpdates
+
+    app.log.info({ allowUpdates }, 'update opt-in changed')
+    return reply.send({ allowUpdates })
+  })
+
   /** Check for available updates (no auth required — informational) */
   app.get('/check', async (_request, reply) => {
     const info = await checkForUpdate(false, app.config.allowUpdates)
-    return reply.send(info)
+    return reply.send({ ...info, updatesEnabled: app.config.allowUpdates })
   })
 
   /** Force a fresh update check */
   app.post('/check', async (_request, reply) => {
     const info = await checkForUpdate(true, app.config.allowUpdates)
-    return reply.send(info)
+    return reply.send({ ...info, updatesEnabled: app.config.allowUpdates })
   })
 
   /** Get current upgrade status (is an upgrade in progress?) */
@@ -49,10 +90,12 @@ export async function updateRoutes(app: FastifyInstance): Promise<void> {
   })
 
   /** Apply an update — SSE endpoint that orchestrates the full upgrade */
-  app.post('/apply', { preHandler: requireSuperuser }, async (request, reply) => {
+  app.post('/apply', { preHandler: requireSuperuser }, async (_request, reply) => {
     if (!app.config.allowUpdates) {
       return reply.code(403).send({
-        error: 'Updates are disabled. Set JARVIS_ALLOW_UPDATES=true to allow update checks and applies.',
+        error:
+          'Updates are disabled. Turn on "Check for updates" in the admin UI ' +
+          '(or POST /api/update/settings {"allowUpdates":true}).',
       })
     }
     const info = await checkForUpdate(true, app.config.allowUpdates)

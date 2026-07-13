@@ -47,7 +47,11 @@ describe('update routes', () => {
       })
 
       expect(res.statusCode).toBe(403)
-      expect(res.json().error).toContain('JARVIS_ALLOW_UPDATES=true')
+      // The message points at the UI toggle, not the env var: the flag is now
+      // settable from the admin UI (POST /api/update/settings), so telling a
+      // self-hoster to go edit a launchd plist would be actively wrong.
+      expect(res.json().error).toContain('Updates are disabled')
+      expect(res.json().error).toContain('/api/update/settings')
       const githubCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('api.github.com'))
       expect(githubCall).toBeUndefined()
     })
