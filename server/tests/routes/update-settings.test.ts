@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { rmSync, existsSync, readFileSync } from 'node:fs'
+import { rmSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 
@@ -140,6 +140,59 @@ describe('update settings — allowUpdates is togglable at runtime', () => {
 
     expect(res.statusCode).toBe(400)
     expect(app.config.allowUpdates).toBe(false)
+  })
+})
+
+// After a failed resume the marker is deliberately LEFT on disk so the failure
+// stays visible. But the upgrade is over — if /status kept reporting
+// inProgress:true, the UI would poll forever on something that already stopped.
+describe('update status — a failed upgrade is finished, not "in progress"', () => {
+  let app: FastifyInstance
+
+  beforeEach(() => {
+    rmSync(join(TEST_HOME, '.jarvis', 'upgrade-in-progress.json'), { force: true })
+  })
+
+  afterEach(async () => {
+    if (app) await app.close()
+    vi.restoreAllMocks()
+  })
+
+  it('reports inProgress:false and surfaces the error when the resume failed', async () => {
+    mkdirSync(join(TEST_HOME, '.jarvis'), { recursive: true })
+    writeFileSync(
+      join(TEST_HOME, '.jarvis', 'upgrade-in-progress.json'),
+      JSON.stringify({
+        version: '0.1.86',
+        phase: 'error',
+        startedAt: new Date().toISOString(),
+        error: 'docker daemon unreachable',
+      }),
+    )
+
+    app = await build(true)
+    const res = await app.inject({ method: 'GET', url: '/api/update/status' })
+
+    const body = res.json() as { inProgress: boolean; phase: string; error?: string }
+    expect(body.inProgress).toBe(false)
+    expect(body.phase).toBe('error')
+    expect(body.error).toContain('docker daemon unreachable')
+  })
+
+  it('still reports inProgress:true while the resume is genuinely running', async () => {
+    mkdirSync(join(TEST_HOME, '.jarvis'), { recursive: true })
+    writeFileSync(
+      join(TEST_HOME, '.jarvis', 'upgrade-in-progress.json'),
+      JSON.stringify({
+        version: '0.1.86',
+        phase: 'binary-updated',
+        startedAt: new Date().toISOString(),
+      }),
+    )
+
+    app = await build(true)
+    const res = await app.inject({ method: 'GET', url: '/api/update/status' })
+    expect((res.json() as { inProgress: boolean }).inProgress).toBe(true)
   })
 })
 

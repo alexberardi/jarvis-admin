@@ -13,6 +13,8 @@ export interface UpgradeStatus {
   phase?: string
   version?: string
   startedAt?: string
+  /** Set when the startup resume failed; `phase` is then "error". */
+  error?: string
 }
 
 function getUpgradeStatus(): UpgradeStatus {
@@ -24,8 +26,12 @@ function getUpgradeStatus(): UpgradeStatus {
       version: string
       phase: string
       startedAt: string
+      error?: string
     }
-    return { inProgress: true, ...data }
+    // A failed resume leaves the marker behind on purpose (so the failure is
+    // visible), but the upgrade is over — reporting inProgress would leave the
+    // UI spinning forever on something that already stopped.
+    return { inProgress: data.phase !== 'error', ...data }
   } catch {
     return { inProgress: false }
   }
