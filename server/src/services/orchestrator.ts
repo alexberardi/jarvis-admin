@@ -420,7 +420,7 @@ export async function tieredStartup(
   // service: …" if one is absent — which left macOS installs with only
   // config + auth up (2026-07). Ask compose for the services it ACTUALLY
   // defines and only ever `up` those.
-  let composeServiceIds: Set<string> | null = null
+  let composeServiceIds: Set<string> | null
   try {
     const out = execSync(`docker compose -f "${composeFile}" config --services`, {
       cwd: composePath,

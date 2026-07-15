@@ -139,7 +139,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Determine state
-    let state: 'generated' | 'partial' | 'running' | 'complete' = 'generated'
+    let state: 'generated' | 'partial' | 'running' | 'complete'
     if (running.length === 0 && stopped.length === 0) {
       state = 'generated'
     } else if (running.length > 0 && stopped.length === 0) {
