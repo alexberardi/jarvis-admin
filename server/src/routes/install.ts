@@ -493,8 +493,9 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         recommendedBackend = 'remote'
       }
 
-      // ARM without GPU = suggest remote-llm
-      const isArm = archName === 'arm64' || archName === 'aarch64'
+      // ARM without GPU = suggest remote-llm.
+      // os.arch() normalises to 'arm64' (never the uname-style 'aarch64').
+      const isArm = archName === 'arm64'
       if (isArm && plat === 'linux' && gpuType === 'none') {
         recommendedBackend = 'remote'
       }
