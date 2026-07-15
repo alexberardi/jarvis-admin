@@ -35,6 +35,10 @@ export default function WelcomeStep() {
   }
 
   useEffect(() => {
+    // Intentional one-time probe on mount. checking/dockerFailed already
+    // initialise to what checkDocker() resets them to, so the synchronous
+    // setState it does is a no-op here (no cascading render).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkDocker()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

@@ -98,7 +98,6 @@ export default function LlmStep() {
       try {
         await enableWhisperAutodownload(true)
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.warn('[models] whisper auto-download setup failed:', err)
       }
     }
@@ -138,7 +137,6 @@ export default function LlmStep() {
         try {
           await restartNativeMutation.mutateAsync(LLM_SERVICE)
         } catch (err) {
-          // eslint-disable-next-line no-console
           console.warn('[models] llm-proxy restart failed (KeepAlive will retry):', err)
         }
       }
