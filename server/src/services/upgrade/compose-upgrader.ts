@@ -116,6 +116,15 @@ export function buildUpgradedComposeFiles(
     env = upsertEnvVar(env, 'MQTT_ALLOW_ANON', 'true')
   }
 
+  // The compose references images as ${JARVIS_IMAGE_TAG:-latest}, so a release
+  // track switch is only effective if the .env value flips too — and mergeEnv's
+  // "existing value wins" rule would otherwise keep the old tag forever. Only an
+  // explicit override rewrites it: a hand-pinned custom tag survives routine
+  // regens, and the reconstructed track round-trips from this same key.
+  if (overrides?.releaseTrack) {
+    env = upsertEnvVar(env, 'JARVIS_IMAGE_TAG', overrides.releaseTrack === 'dev' ? 'dev' : 'latest')
+  }
+
   const enabledServices = getAllEnabledServices(state, registry)
   const primaryDb = registry.infrastructure.find((i) => i.id === 'postgres')
     ?.envVars.find((e) => e.name === 'POSTGRES_DB')?.default ?? 'jarvis_config'
