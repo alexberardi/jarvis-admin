@@ -308,6 +308,37 @@ describe('regenerateComposeFiles (non-destructive)', () => {
     expect(result.env).toContain('MQTT_ALLOW_ANON=true')
     expect(result.env).not.toContain('MQTT_ALLOW_ANON=false')
   })
+
+  it('switching to the dev track rewrites JARVIS_IMAGE_TAG over an existing latest', () => {
+    // The compose references images as ${JARVIS_IMAGE_TAG:-latest}, so the track
+    // change is ONLY effective if the .env value flips — mergeEnv's "existing
+    // value wins" rule must not eat an explicit track override.
+    writeFakeInstall(composePath, { JARVIS_IMAGE_TAG: 'latest' })
+    const result = regenerateComposeFiles(composePath, { releaseTrack: 'dev' })
+    expect(result.env).toContain('JARVIS_IMAGE_TAG=dev')
+    expect(result.env).not.toContain('JARVIS_IMAGE_TAG=latest')
+  })
+
+  it('switching back to stable rewrites JARVIS_IMAGE_TAG to latest', () => {
+    writeFakeInstall(composePath, { JARVIS_IMAGE_TAG: 'dev' })
+    const result = regenerateComposeFiles(composePath, { releaseTrack: 'stable' })
+    expect(result.env).toContain('JARVIS_IMAGE_TAG=latest')
+    expect(result.env).not.toContain('JARVIS_IMAGE_TAG=dev')
+  })
+
+  it('preserves the dev track across a plain regen (no override)', () => {
+    writeFakeInstall(composePath, { JARVIS_IMAGE_TAG: 'dev' })
+    const result = regenerateComposeFiles(composePath)
+    expect(result.env).toContain('JARVIS_IMAGE_TAG=dev')
+  })
+
+  it('preserves a hand-set custom tag across a plain regen (no override)', () => {
+    // Only an explicit releaseTrack override may rewrite the tag — an operator
+    // who hand-pinned a specific version must keep it through routine regens.
+    writeFakeInstall(composePath, { JARVIS_IMAGE_TAG: 'v0.1.80' })
+    const result = regenerateComposeFiles(composePath)
+    expect(result.env).toContain('JARVIS_IMAGE_TAG=v0.1.80')
+  })
 })
 
 describe('operational-state stickiness (2026-07-06: "buttons must respect each other")', () => {
