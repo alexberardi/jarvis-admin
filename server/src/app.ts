@@ -8,6 +8,7 @@ import { authRoutes } from './routes/auth.js'
 import { settingsRoutes } from './routes/settings.js'
 import { servicesRoutes } from './routes/services.js'
 import { containersRoutes } from './routes/containers.js'
+import { serviceEnvRoutes } from './routes/service-env.js'
 import { systemRoutes } from './routes/system.js'
 import { nodesRoutes } from './routes/nodes.js'
 import { setupRoutes } from './routes/setup.js'
@@ -166,6 +167,7 @@ export async function buildApp(opts: AppOptions = {}): Promise<FastifyInstance> 
   await app.register(nativeServicesRoutes, { prefix: '/api/native-services' })
   await app.register(tracesRoutes, { prefix: '/api/traces' })
   await app.register(adminRoutes, { prefix: '/api/admin' })
+  await app.register(serviceEnvRoutes, { prefix: '/api/service-env' })
 
   // Serve static frontend in production
   if (config.staticDir && existsSync(config.staticDir)) {
