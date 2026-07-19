@@ -330,3 +330,28 @@ describe('env-generator', () => {
     })
   })
 })
+
+describe('Phone gateway (jarvis-phone-gateway)', () => {
+  const registry = loadRegistry()
+
+  it('writes port + empty Twilio placeholders when enabled', () => {
+    const output = generateEnv(
+      makeState({ enabledModules: ['jarvis-phone-gateway'] }),
+      registry,
+    )
+    expect(output).toContain('PHONE_GATEWAY_PORT=7713')
+    expect(output).toContain('# --- Phone Gateway')
+    expect(output).toContain('TWILIO_ACCOUNT_SID=')
+    expect(output).toContain('TWILIO_AUTH_TOKEN=')
+    expect(output).toContain('TWILIO_FROM_NUMBER=')
+    expect(output).toContain('PHONE_GATEWAY_PUBLIC_WSS_URL=')
+    // App-to-app placeholder pair for the gateway
+    expect(output).toContain('JARVIS_APP_ID_PHONE_GATEWAY=')
+  })
+
+  it('writes nothing phone-related when not enabled', () => {
+    const output = generateEnv(makeState({ enabledModules: [] }), registry)
+    expect(output).not.toContain('PHONE_GATEWAY_PORT')
+    expect(output).not.toContain('TWILIO_ACCOUNT_SID')
+  })
+})

@@ -944,3 +944,50 @@ describe('MQTT broker auth', () => {
     expect(cc).toContain('MQTT_PASSWORD: ${MQTT_PASSWORD}')
   })
 })
+
+describe('jarvis-phone-gateway (optional service, phone-calls PRD)', () => {
+  const registry = loadRegistry()
+
+  function gwBlock(output: string): string {
+    const start = output.indexOf('\n  jarvis-phone-gateway:\n')
+    expect(start, 'jarvis-phone-gateway missing from compose').toBeGreaterThanOrEqual(0)
+    const after = output.slice(start + '\n  jarvis-phone-gateway:\n'.length)
+    const next = after.match(/\n {2}[a-z][a-z0-9-]*:\n/)
+    return next ? after.slice(0, next.index) : after
+  }
+
+  it('is excluded unless enabled (optional, default off)', () => {
+    const output = generateCompose(makeState({ enabledModules: [] }), registry)
+    expect(output).not.toContain('jarvis-phone-gateway:')
+  })
+
+  it('emits a standard first-party block when enabled', () => {
+    const output = generateCompose(
+      makeState({ enabledModules: ['jarvis-phone-gateway'] }),
+      registry,
+    )
+    const gw = gwBlock(output)
+    expect(gw).toContain('container_name: jarvis-phone-gateway')
+    expect(gw).toContain('"${PHONE_GATEWAY_PORT:-7713}:7713"')
+    expect(gw).toContain('PORT: "7713"')
+    // Dial queue transport
+    expect(gw).toContain('REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0')
+    // Twilio secrets come from .env placeholders, degrade to empty (fail closed)
+    expect(gw).toContain('TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}')
+    expect(gw).toContain('TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}')
+    expect(gw).toContain('TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}')
+    expect(gw).toContain('PHONE_GATEWAY_PUBLIC_WSS_URL: ${PHONE_GATEWAY_PUBLIC_WSS_URL:-}')
+    // Standard first-party plumbing
+    expect(gw).toContain('JARVIS_APP_ID: ${JARVIS_APP_ID_PHONE_GATEWAY:-}')
+    expect(gw).toContain('JARVIS_AUTH_BASE_URL:')
+    expect(gw).toContain('healthcheck:')
+    expect(gw).toContain("urllib.request.urlopen('http://localhost:7713/health')")
+    expect(gw).toContain('restart: unless-stopped')
+    // No database → no migrate entrypoint, no DATABASE_URL
+    expect(gw).not.toContain('DATABASE_URL')
+    expect(gw).not.toContain('jarvis-migrate')
+    // Startup ordering
+    expect(gw).toContain('depends_on:')
+    expect(gw).toContain('jarvis-command-center:')
+  })
+})

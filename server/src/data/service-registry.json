@@ -512,6 +512,60 @@
       ]
     },
     {
+      "id": "jarvis-phone-gateway",
+      "name": "Phone Calls",
+      "description": "AI phone-call gateway — places user-confirmed outbound calls (reservations, orders) over Twilio using the local whisper/LLM/TTS pipeline",
+      "category": "optional",
+      "port": 7713,
+      "image": "ghcr.io/alexberardi/jarvis-phone-gateway:latest",
+      "healthCheck": "/health",
+      "dependsOn": [
+        "jarvis-auth",
+        "jarvis-config-service",
+        "jarvis-command-center"
+      ],
+      "envVars": [
+        {
+          "name": "JARVIS_CONFIG_URL",
+          "description": "Config service URL",
+          "required": false,
+          "default": "http://jarvis-config-service:7700"
+        },
+        {
+          "name": "REDIS_URL",
+          "description": "Redis connection for the dial queue",
+          "required": false,
+          "default": "redis://:${REDIS_PASSWORD}@redis:6379/0"
+        },
+        {
+          "name": "TWILIO_ACCOUNT_SID",
+          "description": "Twilio account SID (gateway-only secret — paste into .env; never stored in the settings DB)",
+          "required": true,
+          "secret": true,
+          "default": "${TWILIO_ACCOUNT_SID:-}"
+        },
+        {
+          "name": "TWILIO_AUTH_TOKEN",
+          "description": "Twilio auth token (also the media-stream signature verification key — paste into .env)",
+          "required": true,
+          "secret": true,
+          "default": "${TWILIO_AUTH_TOKEN:-}"
+        },
+        {
+          "name": "TWILIO_FROM_NUMBER",
+          "description": "E.164 caller-ID number owned by the Twilio account (paste into .env)",
+          "required": true,
+          "default": "${TWILIO_FROM_NUMBER:-}"
+        },
+        {
+          "name": "PHONE_GATEWAY_PUBLIC_WSS_URL",
+          "description": "Public wss:// URL Twilio Media Streams connects back to (named Cloudflare tunnel hostname, e.g. wss://calls.example.com)",
+          "required": true,
+          "default": "${PHONE_GATEWAY_PUBLIC_WSS_URL:-}"
+        }
+      ]
+    },
+    {
       "id": "go2rtc",
       "name": "Camera Streaming",
       "description": "Live camera/doorbell streaming via go2rtc (Nest cameras)",
