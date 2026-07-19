@@ -24,3 +24,21 @@ export function upsertEnvVar(key: string, value: string): boolean {
   writeFileSync(envPath, content)
   return true
 }
+
+/**
+ * Read the stack .env as a flat key→value map, or null if it doesn't exist
+ * (install hasn't generated it yet). Comments and malformed lines skipped.
+ */
+export function readEnvValues(): Record<string, string> | null {
+  const envPath = join(getComposePath(), '.env')
+  if (!existsSync(envPath)) return null
+  const values: Record<string, string> = {}
+  for (const rawLine of readFileSync(envPath, 'utf-8').split('\n')) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith('#')) continue
+    const eq = line.indexOf('=')
+    if (eq <= 0) continue
+    values[line.slice(0, eq)] = line.slice(eq + 1)
+  }
+  return values
+}
