@@ -9,6 +9,7 @@ import { getComposePath } from '../services/compose-path.js'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
 import { generateEnv } from '../services/generators/env-generator.js'
 import { generateInitDbScript } from '../services/generators/init-db-generator.js'
+import { seedGo2rtcConfig } from '../services/generators/go2rtc-config.js'
 import { generateAllSecrets } from '../services/generators/secret-generator.js'
 import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
@@ -559,10 +560,9 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
     writeFileSync(join(composePath, 'init-db.sh'), initDb)
     chmodSync(join(composePath, 'init-db.sh'), 0o755)
 
-    // go2rtc config — empty streams, CC registers them dynamically
-    if (enabledServices.some((s) => s.id === 'go2rtc')) {
-      writeFileSync(join(composePath, 'go2rtc.yaml'), 'api:\n  listen: ":1984"\n\nstreams: {}\n')
-    }
+    // go2rtc config — shared seed with the reconcile path (never overwrites a
+    // hand-edited file; users add streams to it)
+    seedGo2rtcConfig(composePath, enabledServices.map((s) => s.id))
 
     return reply.send({
       ok: true,

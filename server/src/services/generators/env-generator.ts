@@ -104,6 +104,20 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
     lines.push('')
   }
 
+  // Phone gateway (optional): Twilio credentials are gateway-only env secrets
+  // (never the settings DB — see the phone-calls PRD). Empty placeholders when
+  // first enabled — the user pastes real values; reconcile preserves them via
+  // mergeEnv. The compose references them as ${VAR:-} so an unset var degrades
+  // to empty (gateway fails closed) instead of a compose warning.
+  if (state.enabledModules.includes('jarvis-phone-gateway')) {
+    lines.push('# --- Phone Gateway (Twilio credentials + public wss URL — fill in) ---')
+    lines.push('TWILIO_ACCOUNT_SID=')
+    lines.push('TWILIO_AUTH_TOKEN=')
+    lines.push('TWILIO_FROM_NUMBER=')
+    lines.push('PHONE_GATEWAY_PUBLIC_WSS_URL=')
+    lines.push('')
+  }
+
   // Models directory (absolute HOST path, for admin-in-docker reconciles).
   // Without this, the compose's `${MODELS_DIR:-./.models}` resolves relative
   // to the admin container's working dir (/host/compose/.models), which the

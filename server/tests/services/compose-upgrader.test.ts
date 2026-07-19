@@ -436,3 +436,100 @@ describe('operational-state stickiness (2026-07-06: "buttons must respect each o
     expect(whisper).toContain('-cuda')
   })
 })
+
+describe('reconcile seeds go2rtc.yaml (post-install add gap)', () => {
+  let composePath: string
+  const fakeApp = {} as unknown as FastifyInstance
+
+  beforeEach(() => {
+    composePath = mkdtempSync(join(tmpdir(), 'jarvis-go2rtc-'))
+    process.env.JARVIS_COMPOSE_PATH = composePath
+  })
+
+  afterEach(() => {
+    delete process.env.JARVIS_COMPOSE_PATH
+    rmSync(composePath, { recursive: true, force: true })
+  })
+
+  it('reconcile that newly enables go2rtc creates go2rtc.yaml', async () => {
+    writeFakeInstall(composePath)
+    expect(existsSync(join(composePath, 'go2rtc.yaml'))).toBe(false)
+
+    await upgradeCompose(fakeApp, {
+      enabledModules: ['jarvis-tts', 'go2rtc'],
+    })
+
+    expect(existsSync(join(composePath, 'go2rtc.yaml'))).toBe(true)
+    const content = readFileSync(join(composePath, 'go2rtc.yaml'), 'utf-8')
+    expect(content).toContain('streams: {}')
+  })
+
+  it('reconcile never overwrites an existing hand-edited go2rtc.yaml', async () => {
+    writeFakeInstall(composePath, { GO2RTC_PORT: '1984' })
+    const handEdited = 'api:\n  listen: ":1984"\n\nstreams:\n  doorbell: rtsp://cam/1\n'
+    writeFileSync(join(composePath, 'go2rtc.yaml'), handEdited)
+
+    await upgradeCompose(fakeApp, {})
+
+    expect(readFileSync(join(composePath, 'go2rtc.yaml'), 'utf-8')).toBe(handEdited)
+  })
+
+  it('reconcile without go2rtc does not create the file', async () => {
+    writeFakeInstall(composePath)
+
+    await upgradeCompose(fakeApp, { enabledModules: ['jarvis-tts'] })
+
+    expect(existsSync(join(composePath, 'go2rtc.yaml'))).toBe(false)
+  })
+})
+
+describe('reconcile can add jarvis-phone-gateway post-install', () => {
+  let composePath: string
+  const fakeApp = {} as unknown as FastifyInstance
+
+  beforeEach(() => {
+    composePath = mkdtempSync(join(tmpdir(), 'jarvis-phonegw-'))
+    process.env.JARVIS_COMPOSE_PATH = composePath
+  })
+
+  afterEach(() => {
+    delete process.env.JARVIS_COMPOSE_PATH
+    rmSync(composePath, { recursive: true, force: true })
+  })
+
+  it('enabling jarvis-phone-gateway emits its compose block + env plumbing', async () => {
+    writeFakeInstall(composePath)
+
+    await upgradeCompose(fakeApp, {
+      enabledModules: ['jarvis-tts', 'jarvis-phone-gateway'],
+    })
+
+    const compose = readFileSync(join(composePath, 'docker-compose.yml'), 'utf-8')
+    expect(compose).toContain('jarvis-phone-gateway:')
+    expect(compose).toContain('${PHONE_GATEWAY_PORT:-7713}:7713')
+
+    const env = readFileSync(join(composePath, '.env'), 'utf-8')
+    expect(env).toContain('PHONE_GATEWAY_PORT=7713')
+    expect(env).toContain('TWILIO_ACCOUNT_SID=')
+    // Selection round-trips: a second reconcile with no overrides keeps it.
+    await upgradeCompose(fakeApp, {})
+    const compose2 = readFileSync(join(composePath, 'docker-compose.yml'), 'utf-8')
+    expect(compose2).toContain('jarvis-phone-gateway:')
+  })
+
+  it('reconcile preserves pasted Twilio credentials (mergeEnv)', async () => {
+    writeFakeInstall(composePath, {
+      PHONE_GATEWAY_PORT: '7713',
+      TWILIO_ACCOUNT_SID: 'ACxxxx',
+      TWILIO_AUTH_TOKEN: 'tok-secret',
+      TWILIO_FROM_NUMBER: '+15550001111',
+    })
+
+    await upgradeCompose(fakeApp, {})
+
+    const env = readFileSync(join(composePath, '.env'), 'utf-8')
+    expect(env).toContain('TWILIO_ACCOUNT_SID=ACxxxx')
+    expect(env).toContain('TWILIO_AUTH_TOKEN=tok-secret')
+    expect(env).toContain('TWILIO_FROM_NUMBER=+15550001111')
+  })
+})
