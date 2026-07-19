@@ -48,3 +48,20 @@ export async function updateServiceEnv(
   )
   return data
 }
+
+export interface ServiceEnvApplyResponse {
+  success: boolean
+  /** 'recreated' — stack compose recreated the container (env reloaded).
+   *  'manual' — this container isn't stack-managed; message + command tell
+   *  the operator how to apply (a plain restart never re-reads env_file). */
+  mode: 'recreated' | 'manual'
+  message?: string
+  command?: string
+}
+
+export async function applyServiceEnv(serviceId: string): Promise<ServiceEnvApplyResponse> {
+  const { data } = await apiClient.post<ServiceEnvApplyResponse>(
+    `/api/service-env/${serviceId}/apply`,
+  )
+  return data
+}

@@ -1,8 +1,7 @@
 import { useState, useCallback } from 'react'
 import { ChevronDown, ChevronRight, KeyRound, CheckCircle2, CircleDashed } from 'lucide-react'
 import { toast } from 'sonner'
-import { useUpdateServiceEnv } from '@/hooks/useServiceEnv'
-import { useRestartContainer } from '@/hooks/useContainers'
+import { useApplyServiceEnv, useUpdateServiceEnv } from '@/hooks/useServiceEnv'
 import type { ServiceEnvEntry } from '@/api/serviceEnv'
 
 interface ServiceEnvCardProps {
@@ -12,28 +11,38 @@ interface ServiceEnvCardProps {
 /**
  * Per-service credentials editor: registry-declared, user-supplied env vars
  * written to the stack .env. Secrets are write-only (masked input, set/not-set
- * badge, never echoed). On save, offers a container restart via the same
- * toast-action pattern the settings rows use.
+ * badge, never echoed). On save, offers to APPLY via container recreate —
+ * a plain docker restart never re-reads env_file, so restart-based apply
+ * silently leaves the old environment running (found live with the phone
+ * gateway's Twilio creds). Non-stack containers get the manual command.
  */
 export default function ServiceEnvCard({ entry }: ServiceEnvCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [draft, setDraft] = useState<Record<string, string>>({})
   const mutation = useUpdateServiceEnv()
-  const restartMutation = useRestartContainer()
+  const applyMutation = useApplyServiceEnv()
 
   const editableVars = entry.vars.filter((v) => v.user_supplied)
   const dirty = Object.keys(draft).length > 0
 
-  const handleRestart = useCallback(() => {
-    if (!entry.container_id) {
-      toast.error(`Could not find container for ${entry.service_name}`)
-      return
-    }
-    restartMutation.mutate(entry.container_id, {
-      onSuccess: () => toast.success(`${entry.service_name} is restarting...`),
-      onError: (err) => toast.error(`Restart failed: ${err.message}`),
+  const handleApply = useCallback(() => {
+    applyMutation.mutate(entry.service_id, {
+      onSuccess: (res) => {
+        if (res.mode === 'recreated') {
+          toast.success(`${entry.service_name} is recreating with the new values...`)
+        } else {
+          // Honest fallback: we saved, but this container isn't ours to
+          // recreate (per-repo dev compose). Tell the operator exactly what
+          // to run rather than pretending a restart applied anything.
+          toast.info(res.message ?? 'Saved — recreate the container to apply.', {
+            description: res.command,
+            duration: 12000,
+          })
+        }
+      },
+      onError: (err) => toast.error(`Apply failed: ${err.message}`),
     })
-  }, [entry.container_id, entry.service_name, restartMutation])
+  }, [entry.service_id, entry.service_name, applyMutation])
 
   const handleSave = () => {
     mutation.mutate(
@@ -43,11 +52,11 @@ export default function ServiceEnvCard({ entry }: ServiceEnvCardProps) {
           setDraft({})
           if (res.restart_required) {
             toast.warning(
-              `Credentials saved. ${entry.service_name} requires a restart to apply.`,
+              `Credentials saved. ${entry.service_name} must be recreated to load them — a plain restart won't.`,
               {
                 action: {
-                  label: 'Restart',
-                  onClick: handleRestart,
+                  label: 'Apply',
+                  onClick: handleApply,
                 },
               },
             )
