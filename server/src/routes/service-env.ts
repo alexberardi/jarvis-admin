@@ -1,5 +1,8 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
+import { getComposePath } from '../services/compose-path.js'
 import { readEnvValues, upsertEnvVar } from '../services/env-file.js'
 import type { EnvVar, ServiceDefinition } from '../services/registry.js'
 
@@ -188,6 +191,79 @@ export async function serviceEnvRoutes(app: FastifyInstance): Promise<void> {
         restart_required: container?.state === 'running',
         container_id: container?.id ?? null,
       })
+    },
+  )
+
+  // Apply saved env to the running service. This must RECREATE the container:
+  // `docker restart` never re-reads compose env_file, so restarted services
+  // keep their old environment (found live — the gateway's Twilio creds only
+  // landed after a force-recreate). Recreate runs via the stack compose file;
+  // containers the stack compose doesn't own (per-repo dev composes) get an
+  // honest manual-command response instead of a fake success.
+  app.post<{ Params: { serviceId: string } }>(
+    '/:serviceId/apply',
+    async (request, reply) => {
+      const registry = app.registry
+      if (!registry) {
+        reply.code(503).send({ error: 'Service registry unavailable' })
+        return
+      }
+      const svc = registry.getServiceById(request.params.serviceId)
+      if (!svc) {
+        reply.code(404).send({ error: `Unknown service: ${request.params.serviceId}` })
+        return
+      }
+      // svc.id comes from the registry, but it lands in a shell command —
+      // belt-and-braces beyond the registry allowlist.
+      if (!/^[a-z0-9][a-z0-9_-]*$/.test(svc.id)) {
+        reply.code(400).send({ error: `Unsafe service id: ${svc.id}` })
+        return
+      }
+
+      const manual = (message: string) =>
+        reply.send({
+          success: false,
+          mode: 'manual' as const,
+          message,
+          command: `docker compose up -d --force-recreate ${svc.id}`,
+        })
+
+      const compose = app.compose
+      const composeFile = join(getComposePath(), 'docker-compose.yml')
+      if (!compose || !existsSync(composeFile)) {
+        manual(
+          `Saved — but no stack compose manages ${svc.name} here. Recreate its container to load the new values (a plain restart won't re-read env).`,
+        )
+        return
+      }
+
+      let stackServices: string[]
+      try {
+        stackServices = await compose.listServices(composeFile)
+      } catch (err) {
+        reply.code(500).send({
+          error: `Could not read the stack compose file: ${(err as Error).message}`,
+        })
+        return
+      }
+      if (!stackServices.includes(svc.id)) {
+        manual(
+          `Saved — but ${svc.name} isn't in the stack compose (dev container?). Recreate it from its own compose project to load the new values (a plain restart won't re-read env).`,
+        )
+        return
+      }
+
+      try {
+        await compose.recreateService(svc.id, composeFile)
+      } catch (err) {
+        reply.code(500).send({
+          error: `Recreate failed for ${svc.id}: ${(err as Error).message}`,
+        })
+        return
+      }
+
+      app.log.info({ service: svc.id }, 'service recreated to apply env changes')
+      reply.send({ success: true, mode: 'recreated' as const })
     },
   )
 }

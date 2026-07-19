@@ -6,6 +6,7 @@ import { buildApp } from '../../src/app.js'
 import type { FastifyInstance } from 'fastify'
 import type { DockerService, ContainerInfo } from '../../src/services/docker.js'
 import type { RegistryService, ServiceRegistry } from '../../src/services/registry.js'
+import type { ComposeService } from '../../src/services/compose.js'
 import { mockSuperuserAuth } from '../helpers.js'
 
 const REGISTRY: ServiceRegistry = {
@@ -91,6 +92,19 @@ function createMockDocker(containers: ContainerInfo[] = []): DockerService {
     restartContainer: vi.fn<(id: string) => Promise<void>>().mockResolvedValue(undefined),
     getContainerStats: vi.fn().mockResolvedValue(null),
   } as unknown as DockerService
+}
+
+function createMockCompose(
+  stackServices: string[] = ['jarvis-phone-gateway'],
+): ComposeService {
+  return {
+    enableModule: vi.fn(),
+    disableModule: vi.fn(),
+    listServices: vi.fn<(f: string) => Promise<string[]>>().mockResolvedValue(stackServices),
+    recreateService: vi
+      .fn<(id: string, f: string) => Promise<{ stdout: string; stderr: string }>>()
+      .mockResolvedValue({ stdout: '', stderr: '' }),
+  } as unknown as ComposeService
 }
 
 const gatewayContainer: ContainerInfo = {
@@ -293,6 +307,104 @@ describe('service-env routes', () => {
         payload: { values: { TWILIO_ACCOUNT_SID: 'AC1' } },
       })
       expect(res.json().restart_required).toBe(false)
+    })
+  })
+
+  describe('POST /api/service-env/:serviceId/apply', () => {
+    const composeFilePath = () => join(composeDir, 'docker-compose.yml')
+    const seedStackCompose = () =>
+      writeFileSync(composeFilePath(), 'services:\n  jarvis-phone-gateway:\n    image: x\n')
+
+    const rebuildWith = async (compose: ComposeService, docker?: DockerService) => {
+      await app.close()
+      app = await buildApp({
+        docker: docker ?? createMockDocker([gatewayContainer]),
+        registry: createMockRegistry(),
+        compose,
+      })
+    }
+
+    it('recreates a stack-owned service (never plain restart)', async () => {
+      const compose = createMockCompose(['jarvis-auth', 'jarvis-phone-gateway'])
+      const docker = createMockDocker([gatewayContainer])
+      await rebuildWith(compose, docker)
+      seedStackCompose()
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/service-env/jarvis-phone-gateway/apply',
+        headers: { authorization: 'Bearer t' },
+      })
+      expect(res.statusCode).toBe(200)
+      expect(res.json()).toEqual({ success: true, mode: 'recreated' })
+      expect(compose.recreateService).toHaveBeenCalledWith(
+        'jarvis-phone-gateway',
+        composeFilePath(),
+      )
+      // The whole point of the fix: docker restart never re-reads env_file.
+      expect(docker.restartContainer).not.toHaveBeenCalled()
+    })
+
+    it('falls back to an honest manual response when the stack compose lacks the service', async () => {
+      const compose = createMockCompose(['jarvis-auth'])
+      await rebuildWith(compose)
+      seedStackCompose()
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/service-env/jarvis-phone-gateway/apply',
+        headers: { authorization: 'Bearer t' },
+      })
+      expect(res.statusCode).toBe(200)
+      const body = res.json()
+      expect(body.mode).toBe('manual')
+      expect(body.command).toContain('--force-recreate jarvis-phone-gateway')
+      expect(compose.recreateService).not.toHaveBeenCalled()
+    })
+
+    it('falls back to manual when no stack compose file exists', async () => {
+      const compose = createMockCompose()
+      await rebuildWith(compose)
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/service-env/jarvis-phone-gateway/apply',
+        headers: { authorization: 'Bearer t' },
+      })
+      expect(res.statusCode).toBe(200)
+      expect(res.json().mode).toBe('manual')
+      expect(compose.listServices).not.toHaveBeenCalled()
+    })
+
+    it('404s for unknown services', async () => {
+      await rebuildWith(createMockCompose())
+      seedStackCompose()
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/service-env/nope/apply',
+        headers: { authorization: 'Bearer t' },
+      })
+      expect(res.statusCode).toBe(404)
+    })
+
+    it('500s with the compose error when recreate fails, leaking no env values', async () => {
+      const compose = createMockCompose(['jarvis-phone-gateway'])
+      ;(compose.recreateService as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('compose exploded'),
+      )
+      await rebuildWith(compose)
+      seedStackCompose()
+      seedEnv('TWILIO_ACCOUNT_SID=AC-super-secret\n')
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/service-env/jarvis-phone-gateway/apply',
+        headers: { authorization: 'Bearer t' },
+      })
+      expect(res.statusCode).toBe(500)
+      expect(res.body).toContain('compose exploded')
+      expect(res.body).not.toContain('AC-super-secret')
     })
   })
 })
