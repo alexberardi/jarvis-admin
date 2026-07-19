@@ -1,11 +1,14 @@
 import { useState, useMemo } from 'react'
 import { RefreshCw, Search } from 'lucide-react'
 import { useAllSettings } from '@/hooks/useSettings'
+import { useServiceEnv } from '@/hooks/useServiceEnv'
 import ServiceCard from '@/components/settings/ServiceCard'
+import ServiceEnvCard from '@/components/settings/ServiceEnvCard'
 import { cn } from '@/lib/utils'
 
 export default function SettingsPage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useAllSettings()
+  const { data: envData } = useServiceEnv()
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
@@ -105,6 +108,23 @@ export default function SettingsPage() {
           </p>
         )}
       </div>
+
+      {envData && envData.services.length > 0 && (
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--color-text)]">
+              Service credentials
+            </h2>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              Third-party keys these services need (stored in the stack .env, never in
+              the settings database — secrets are write-only here).
+            </p>
+          </div>
+          {envData.services.map((entry) => (
+            <ServiceEnvCard key={entry.service_id} entry={entry} />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

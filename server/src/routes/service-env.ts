@@ -1,0 +1,193 @@
+import type { FastifyInstance } from 'fastify'
+import { requireSuperuser } from '../middleware/auth.js'
+import { readEnvValues, upsertEnvVar } from '../services/env-file.js'
+import type { EnvVar, ServiceDefinition } from '../services/registry.js'
+
+/**
+ * Service credentials editor — registry-declared env vars, edited in the
+ * admin panel, written to the stack .env. The phone gateway's Twilio creds
+ * are the first consumer (phone-calls PRD security requirement 5: secrets
+ * are gateway-only ENV, never the settings DB — the Twilio auth token
+ * doubles as the media-stream signature-verification key).
+ *
+ * Scope rules, enforced server-side:
+ * - Only vars DECLARED in the service registry are visible or writable —
+ *   this must never become an arbitrary .env editor.
+ * - Only USER-SUPPLIED vars are writable: declared `secret: true`, or a
+ *   default that is a self-referencing `${NAME:-...}` interpolation (the
+ *   paste-into-.env pattern). Generated wiring (JARVIS_CONFIG_URL,
+ *   REDIS_URL, ...) is read-only here.
+ * - Secret values are WRITE-ONLY: GET reports `is_set`, never the value.
+ * - Audit logging names the vars changed, never the values.
+ */
+
+interface EnvVarView {
+  name: string
+  description: string
+  required: boolean
+  secret: boolean
+  user_supplied: boolean
+  is_set: boolean
+  /** Current .env value — only for non-secret user-supplied vars. */
+  value: string | null
+  /** Registry default — shown for read-only generated vars. */
+  default: string | null
+}
+
+interface ServiceEnvView {
+  service_id: string
+  service_name: string
+  env_file_exists: boolean
+  container_id: string | null
+  container_running: boolean
+  vars: EnvVarView[]
+}
+
+function isUserSupplied(v: EnvVar): boolean {
+  if (v.secret === true) return true
+  const d = v.default ?? ''
+  // Self-referencing interpolation, e.g. "${TWILIO_FROM_NUMBER:-}" — the
+  // generated .env carries a placeholder line the operator fills in.
+  return new RegExp(`^\\$\\{${v.name}(:-.*)?\\}$`).test(d)
+}
+
+function buildView(
+  svc: ServiceDefinition,
+  env: Record<string, string> | null,
+  container: { id: string; state: string } | null,
+): ServiceEnvView {
+  return {
+    service_id: svc.id,
+    service_name: svc.name,
+    env_file_exists: env !== null,
+    container_id: container?.id ?? null,
+    container_running: container?.state === 'running',
+    vars: svc.envVars.map((v) => {
+      const userSupplied = isUserSupplied(v)
+      const raw = env?.[v.name]
+      const isSet = raw !== undefined && raw !== ''
+      return {
+        name: v.name,
+        description: v.description,
+        required: v.required,
+        secret: v.secret === true,
+        user_supplied: userSupplied,
+        is_set: isSet,
+        value: userSupplied && !v.secret && isSet ? (raw as string) : null,
+        default: userSupplied ? null : (v.default ?? null),
+      }
+    }),
+  }
+}
+
+export async function serviceEnvRoutes(app: FastifyInstance): Promise<void> {
+  app.addHook('preHandler', requireSuperuser)
+
+  async function findContainer(serviceId: string): Promise<{ id: string; state: string } | null> {
+    const docker = app.docker
+    if (!docker) return null
+    try {
+      const containers = await docker.listJarvisContainers()
+      const c = containers.find(
+        (x) => x.name === serviceId || x.name === serviceId.replace(/^jarvis-/, ''),
+      )
+      return c ? { id: c.id, state: c.state } : null
+    } catch {
+      return null
+    }
+  }
+
+  // Index: every registry service that declares at least one user-supplied
+  // env var, with per-var set/not-set state. Secret values never included.
+  app.get('/', async (_request, reply) => {
+    const registry = app.registry
+    if (!registry) {
+      reply.code(503).send({ error: 'Service registry unavailable', services: [] })
+      return
+    }
+    const env = readEnvValues()
+    const services: ServiceEnvView[] = []
+    for (const svc of registry.getRegistry().services) {
+      if (!svc.envVars.some(isUserSupplied)) continue
+      services.push(buildView(svc, env, await findContainer(svc.id)))
+    }
+    reply.send({ services })
+  })
+
+  // Write user-supplied vars for one service into the stack .env.
+  app.put<{ Params: { serviceId: string }; Body: { values?: Record<string, unknown> } }>(
+    '/:serviceId',
+    async (request, reply) => {
+      const registry = app.registry
+      if (!registry) {
+        reply.code(503).send({ error: 'Service registry unavailable' })
+        return
+      }
+      const svc = registry.getServiceById(request.params.serviceId)
+      if (!svc) {
+        reply.code(404).send({ error: `Unknown service: ${request.params.serviceId}` })
+        return
+      }
+
+      const values = request.body?.values
+      if (!values || typeof values !== 'object' || Object.keys(values).length === 0) {
+        reply.code(400).send({ error: 'Body must include a non-empty "values" object' })
+        return
+      }
+
+      const editable = new Map(
+        svc.envVars.filter(isUserSupplied).map((v) => [v.name, v]),
+      )
+      const updates: Array<[string, string]> = []
+      for (const [name, value] of Object.entries(values)) {
+        if (!editable.has(name)) {
+          // Allowlist violation: undeclared var, or declared-but-generated
+          // wiring. Refuse the whole request — no partial writes.
+          reply.code(400).send({
+            error: `${name} is not an editable env var for ${svc.id}`,
+          })
+          return
+        }
+        if (typeof value !== 'string') {
+          reply.code(400).send({ error: `${name} must be a string` })
+          return
+        }
+        if (/[\r\n]/.test(value)) {
+          // A newline would let one value inject arbitrary extra env lines.
+          reply.code(400).send({ error: `${name} must not contain newlines` })
+          return
+        }
+        updates.push([name, value.trim()])
+      }
+
+      // upsertEnvVar returns false when the stack .env doesn't exist yet
+      // (nothing installed) — probe with the first key before writing any.
+      const env = readEnvValues()
+      if (env === null) {
+        reply.code(409).send({
+          error:
+            'No stack .env found — install the service first (wizard or Sync Compose), then set its credentials here.',
+        })
+        return
+      }
+
+      for (const [name, value] of updates) {
+        upsertEnvVar(name, value)
+      }
+
+      // Audit: names only, never values.
+      app.log.info(
+        { service: svc.id, vars: updates.map(([n]) => n) },
+        'service env vars updated via admin secrets editor',
+      )
+
+      const container = await findContainer(svc.id)
+      reply.send({
+        success: true,
+        updated: updates.map(([n]) => n),
+        restart_required: container?.state === 'running',
+        container_id: container?.id ?? null,
+      })
+    },
+  )
+}
