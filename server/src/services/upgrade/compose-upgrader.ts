@@ -5,6 +5,7 @@ import type { ServiceRegistry } from '../../types/service-registry.js'
 import type { TtsBackend, WhisperBackend } from '../../types/wizard.js'
 import { generateCompose, getAllEnabledServices, type ImageDigestMap } from '../generators/compose-generator.js'
 import { generateEnv } from '../generators/env-generator.js'
+import { seedGo2rtcConfig } from '../generators/go2rtc-config.js'
 import { generateInitDbScript } from '../generators/init-db-generator.js'
 import { parseRegistry } from '../generators/service-registry.js'
 import { reconstructWizardState } from './state-reconstructor.js'
@@ -46,6 +47,9 @@ export interface UpgradedComposeFiles {
   compose: string
   env: string
   initDb: string
+  /** Ids of every enabled service (core + selected recommended/optional) — lets
+   * writers run enable-conditional side effects (e.g. seeding go2rtc.yaml). */
+  enabledServiceIds: string[]
 }
 
 /**
@@ -130,7 +134,7 @@ export function buildUpgradedComposeFiles(
     ?.envVars.find((e) => e.name === 'POSTGRES_DB')?.default ?? 'jarvis_config'
   const initDb = generateInitDbScript(enabledServices, primaryDb)
 
-  return { compose, env, initDb }
+  return { compose, env, initDb, enabledServiceIds: enabledServices.map((s) => s.id) }
 }
 
 /**
@@ -248,7 +252,7 @@ export async function upgradeCompose(
   // they resolve to /host/compose/.models — a path that exists in the admin
   // container but not on the host, so the daemon binds an empty directory).
   const hostPath = await getHostComposePath()
-  const { compose, env, initDb } = buildUpgradedComposeFiles(
+  const { compose, env, initDb, enabledServiceIds } = buildUpgradedComposeFiles(
     existingEnv,
     registry,
     overrides,
@@ -259,4 +263,8 @@ export async function upgradeCompose(
   writeFileSync(join(composePath, 'docker-compose.yml'), compose)
   writeFileSync(join(composePath, '.env'), env)
   writeFileSync(join(composePath, 'init-db.sh'), initDb, { mode: 0o755 })
+  // go2rtc's compose bind needs its config file on disk — a reconcile that
+  // enables go2rtc post-install must seed it exactly like a fresh install
+  // (never overwriting a hand-edited one).
+  seedGo2rtcConfig(composePath, enabledServiceIds)
 }
