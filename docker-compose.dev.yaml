@@ -18,6 +18,7 @@ services:
       - ./server/tsconfig.json:/app/server/tsconfig.json
       - ./.env:/app/.env
       - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.jarvis/compose:/host/compose
       - ${MODELS_DIR:-../jarvis-llm-proxy-api/.models}:/models
     env_file:
       - .env
@@ -25,5 +26,9 @@ services:
       - PORT=7711
       - DOCKER_SOCKET=/var/run/docker.sock
       - MODELS_DIR=/models
+      # Stack env managed by the ./jarvis CLI on dev machines — the service
+      # credentials panel reads/writes it. Registry drives the panel content.
+      - JARVIS_COMPOSE_PATH=/host/compose
+      - REGISTRY_PATH=/app/server/src/data/service-registry.json
     extra_hosts:
       - "${DOCKER_HOST_ALIAS:-host.docker.internal}:host-gateway"
