@@ -144,7 +144,7 @@ describe('service-env routes', () => {
 
   describe('GET /api/service-env', () => {
     it('lists only services with user-supplied vars', async () => {
-      seedEnv('TWILIO_ACCOUNT_SID=AC123\nTWILIO_FROM_NUMBER=+19082781811\nOTHER=x\n')
+      seedEnv('TWILIO_ACCOUNT_SID=AC123\nTWILIO_FROM_NUMBER=+15555550123\nOTHER=x\n')
       mockSuperuserAuth()
       const res = await app.inject({ method: 'GET', url: '/api/service-env', headers: { authorization: 'Bearer t' } })
       expect(res.statusCode).toBe(200)
@@ -168,13 +168,13 @@ describe('service-env routes', () => {
     })
 
     it('echoes non-secret user-supplied values and marks generated vars read-only', async () => {
-      seedEnv('TWILIO_FROM_NUMBER=+19082781811\n')
+      seedEnv('TWILIO_FROM_NUMBER=+15555550123\n')
       mockSuperuserAuth()
       const res = await app.inject({ method: 'GET', url: '/api/service-env', headers: { authorization: 'Bearer t' } })
       const vars = res.json().services[0].vars
       const from = vars.find((v: { name: string }) => v.name === 'TWILIO_FROM_NUMBER')
       expect(from.user_supplied).toBe(true)
-      expect(from.value).toBe('+19082781811')
+      expect(from.value).toBe('+15555550123')
       const config = vars.find((v: { name: string }) => v.name === 'JARVIS_CONFIG_URL')
       expect(config.user_supplied).toBe(false)
       expect(config.default).toBe('http://jarvis-config-service:7700')
@@ -196,7 +196,7 @@ describe('service-env routes', () => {
         url: '/api/service-env/jarvis-phone-gateway',
         headers: { authorization: 'Bearer t' },
         payload: {
-          values: { TWILIO_ACCOUNT_SID: 'AC999', TWILIO_FROM_NUMBER: '+19082781811' },
+          values: { TWILIO_ACCOUNT_SID: 'AC999', TWILIO_FROM_NUMBER: '+15555550123' },
         },
       })
       expect(res.statusCode).toBe(200)
@@ -209,7 +209,7 @@ describe('service-env routes', () => {
       expect(env).toContain('POSTGRES_PASSWORD=keepme')
       expect(env).toContain('# stack env')
       expect(env).toContain('TWILIO_ACCOUNT_SID=AC999')
-      expect(env).toContain('TWILIO_FROM_NUMBER=+19082781811')
+      expect(env).toContain('TWILIO_FROM_NUMBER=+15555550123')
     })
 
     it('rejects undeclared vars (allowlist), writing nothing', async () => {
