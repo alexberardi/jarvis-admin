@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { join } from 'node:path'
 
 vi.mock('node:os', () => ({
   homedir: () => '/mock-home',
@@ -36,6 +37,19 @@ describe('loadConfig', () => {
     expect(config.dockerSocket).toBe('/var/run/docker.sock')
     expect(config.registryPath).toBeNull()
     expect(config.staticDir).toBeNull()
+  })
+
+  it('defaults registryPath to the bundled registry JSON when REGISTRY_PATH is unset but the file exists', () => {
+    // Prod ships dist/data/service-registry.json but the generated compose
+    // never sets REGISTRY_PATH — the default must find the bundled file so
+    // app.registry isn't null (which 503s /api/service-env and hides the
+    // Service Credentials panel). Simulate the bundled file being present.
+    mockExistsSync.mockImplementation((p: unknown) =>
+      String(p).endsWith(join('data', 'service-registry.json')),
+    )
+    const config = loadConfig({})
+    expect(config.registryPath).not.toBeNull()
+    expect(config.registryPath).toContain(join('data', 'service-registry.json'))
   })
 
   it('reads env vars', () => {

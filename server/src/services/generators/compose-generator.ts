@@ -109,6 +109,12 @@ const CPU_FALLBACK_GPU_VARIANTS = new Set<string>(['nvidia', 'amd-rocm'])
 
 const FIRST_PARTY_PREFIX = 'ghcr.io/alexberardi/'
 
+// Node-based first-party images (no python in the image). The default python
+// urllib healthcheck can't run in these, so we omit it and let each image's own
+// Dockerfile HEALTHCHECK (wget) apply instead — otherwise the container is
+// pinned "unhealthy" with `exec: "python": executable file not found`.
+const NODE_HEALTHCHECK_SERVICES = new Set<string>(['jarvis-web', 'jarvis-admin'])
+
 // Data-plane infra that holds persistent state/secrets and should NOT be
 // reachable off-host by default. Their published ports bind to 127.0.0.1 (other
 // containers still reach them over the internal `jarvis` network). Opt back out
@@ -725,9 +731,12 @@ function generateServiceBlock(
   // Healthcheck. Default to python urllib since most service images are
   // python:slim-based and don't ship curl — using curl made auth/config-service/
   // logs/notifications all report unhealthy despite the endpoint working.
-  // jarvis-web is Next.js (Node), no python — skip the healthcheck for it
-  // rather than emit one that always fails.
-  if (service.id !== 'jarvis-web') {
+  // Node-based first-party images have no python, so a python healthcheck
+  // always fails with `exec: "python": executable file not found` and pins the
+  // container "unhealthy" forever. jarvis-web (Next.js) and jarvis-admin
+  // (Fastify) are Node — skip them here; each ships its own wget HEALTHCHECK in
+  // its Dockerfile, which Docker uses when the compose omits one.
+  if (!NODE_HEALTHCHECK_SERVICES.has(service.id)) {
     lines.push('    healthcheck:')
     lines.push(`      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:${containerPort}${service.healthCheck}')"]`)
     lines.push('      interval: 30s')
