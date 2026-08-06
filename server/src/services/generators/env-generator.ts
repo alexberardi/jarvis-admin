@@ -159,6 +159,19 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   lines.push(`WHISPER_BACKEND=${state.whisperBackend ?? 'cpu'}`)
   lines.push('')
 
+  // Whisper model — same durability rationale as WHISPER_BACKEND. The chosen
+  // model path is written into the whisper service's compose `environment:`
+  // block (and only when non-default), so before this key existed .env was the
+  // one place a reconcile could NOT recover it from. state-reconstructor read
+  // an absent WHISPER_MODEL as base.en, so a plain regenerate silently
+  // downgraded a small/medium/large model back to base.en. Persist it here so
+  // the selection round-trips.
+  const whisperModelPath =
+    state.whisperModelPath || `/whisper-models/ggml-${state.whisperModel || 'base.en'}.bin`
+  lines.push('# --- Whisper Model ---')
+  lines.push(`WHISPER_MODEL=${whisperModelPath}`)
+  lines.push('')
+
   // TTS device — same persistence rationale as WHISPER_BACKEND. TTS_GPU_DEVICE
   // pins the single GPU the container may reserve (operators re-pin when GPU0
   // is already full of LLM+whisper — prod 2026-07-05); compose defaults to 0.

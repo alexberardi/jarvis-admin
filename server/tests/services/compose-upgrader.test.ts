@@ -399,6 +399,51 @@ describe('operational-state stickiness (2026-07-06: "buttons must respect each o
     expect(whisper).toContain('driver: nvidia')
   })
 
+  it('a whisper-model override is written to .env + compose and sticks through the NEXT plain regen', async () => {
+    writeFakeInstall(composePath, { WHISPER_API_PORT: '7706' })
+
+    await upgradeCompose(fakeApp, { whisperModelPath: '/whisper-models/ggml-small.en.bin' })
+
+    const later = regenerateComposeFiles(composePath)
+    expect(later.env).toMatch(/^WHISPER_MODEL=\/whisper-models\/ggml-small\.en\.bin$/m)
+    const whisper = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(later.compose)?.[0]
+    expect(whisper).toContain('WHISPER_MODEL: /whisper-models/ggml-small.en.bin')
+  })
+
+  it('recovers a non-base WHISPER_MODEL from the running compose when .env lacks it (legacy stack)', () => {
+    writeFakeInstall(composePath, { WHISPER_API_PORT: '7706' })
+    // Pre-persistence install: the model lives only in the compose environment
+    // block, never in .env — a naive reconstruct would reset it to base.en.
+    writeFileSync(
+      join(composePath, 'docker-compose.yml'),
+      [
+        'services:',
+        '  jarvis-whisper-api:',
+        '    environment:',
+        '      WHISPER_MODEL: /whisper-models/ggml-medium.en.bin',
+        '',
+      ].join('\n'),
+    )
+
+    const result = regenerateComposeFiles(composePath)
+
+    expect(result.env).toMatch(/^WHISPER_MODEL=\/whisper-models\/ggml-medium\.en\.bin$/m)
+    const whisper = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(result.compose)?.[0]
+    expect(whisper).toContain('WHISPER_MODEL: /whisper-models/ggml-medium.en.bin')
+  })
+
+  it('a default base.en install records the model in .env but omits it from the whisper service', () => {
+    writeFakeInstall(composePath, { WHISPER_API_PORT: '7706' })
+
+    const result = regenerateComposeFiles(composePath)
+
+    // .env carries the model for durable reconstruct...
+    expect(result.env).toMatch(/^WHISPER_MODEL=\/whisper-models\/ggml-base\.en\.bin$/m)
+    // ...but the compose omits it (whisper's built-in default is base.en).
+    const whisper = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(result.compose)?.[0]
+    expect(whisper).not.toContain('WHISPER_MODEL:')
+  })
+
   it('PIN_IMAGES=true is preserved across a plain regen (pins stay pinned when chosen)', () => {
     writeFakeInstall(composePath, { PIN_IMAGES: 'true' })
 
