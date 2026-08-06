@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 
 export interface Config {
@@ -58,6 +59,25 @@ export function savePersistedConfig(urls: PersistedConfig): void {
   writeFileSync(CONFIG_FILE, JSON.stringify(merged, null, 2) + '\n')
 }
 
+/**
+ * The service registry JSON ships next to the compiled server at
+ * `dist/data/service-registry.json`. Default to it when REGISTRY_PATH is
+ * unset so a production container has a working registry out of the box.
+ *
+ * Why this exists: the production compose-generator never emitted
+ * REGISTRY_PATH — only the dev compose did, and it points at the src copy.
+ * So every prod admin ran with `app.registry === null`, which made every
+ * registry-backed route fail. Most visibly, GET /api/service-env returned
+ * 503, so the Service Credentials panel's fetch errored and the whole
+ * section silently vanished from the settings page. Defaulting to the
+ * bundled file fixes existing installs on the next image pull, with no
+ * compose regeneration required.
+ */
+function bundledRegistryPath(): string | null {
+  const bundled = join(dirname(fileURLToPath(import.meta.url)), 'data', 'service-registry.json')
+  return existsSync(bundled) ? bundled : null
+}
+
 export function loadConfig(env: Record<string, string | undefined> = process.env): Config {
   const persisted = loadPersistedConfig()
 
@@ -70,7 +90,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     commandCenterUrl: persisted.commandCenterUrl ?? env.JARVIS_COMMAND_CENTER_URL ?? env.COMMAND_CENTER_URL ?? '',
     commandCenterAdminKey: env.COMMAND_CENTER_ADMIN_KEY ?? '',
     dockerSocket: env.DOCKER_SOCKET ?? (process.platform === 'win32' ? '//./pipe/docker_engine' : '/var/run/docker.sock'),
-    registryPath: env.REGISTRY_PATH ?? null,
+    registryPath: env.REGISTRY_PATH ?? bundledRegistryPath(),
     staticDir: env.STATIC_DIR ?? null,
     corsOrigins: (env.JARVIS_ADMIN_CORS_ORIGINS ?? '')
       .split(',')

@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { buildApp } from '../../src/app.js'
 import type { FastifyInstance } from 'fastify'
 import type { DockerService, ContainerInfo } from '../../src/services/docker.js'
+import { createRegistryService } from '../../src/services/registry.js'
 import type { RegistryService, ServiceRegistry } from '../../src/services/registry.js'
 import type { ComposeService } from '../../src/services/compose.js'
 import { mockSuperuserAuth } from '../helpers.js'
@@ -66,6 +68,37 @@ const REGISTRY: ServiceRegistry = {
           description: 'generated',
           required: true,
           default: 'postgresql://x',
+        },
+      ],
+    },
+    {
+      // A core service whose only secrets are INSTALLER-GENERATED wiring
+      // (empty default, `secret: true`). These must never surface in the
+      // credentials panel — they aren't operator-editable, and listing them
+      // once turned this panel into "every service". Regression guard for
+      // the isUserSupplied scope fix.
+      id: 'jarvis-auth',
+      name: 'Auth Service',
+      description: 'installer-generated secrets only',
+      category: 'core',
+      port: 7701,
+      image: 'ghcr.io/alexberardi/jarvis-auth:latest',
+      healthCheck: '/health',
+      dependsOn: [],
+      envVars: [
+        {
+          name: 'AUTH_SECRET_KEY',
+          description: 'JWT signing key (generated at install)',
+          required: true,
+          secret: true,
+          default: '',
+        },
+        {
+          name: 'JARVIS_AUTH_ADMIN_TOKEN',
+          description: 'master admin token (generated at install)',
+          required: true,
+          secret: true,
+          default: '',
         },
       ],
     },
@@ -151,6 +184,32 @@ describe('service-env routes', () => {
       const body = res.json()
       expect(body.services).toHaveLength(1)
       expect(body.services[0].service_id).toBe('jarvis-phone-gateway')
+    })
+
+    it('excludes services whose only secrets are installer-generated (bare secret, empty default)', async () => {
+      seedEnv('AUTH_SECRET_KEY=generated123\nJARVIS_AUTH_ADMIN_TOKEN=generated456\nTWILIO_ACCOUNT_SID=AC1\n')
+      mockSuperuserAuth()
+      const res = await app.inject({ method: 'GET', url: '/api/service-env', headers: { authorization: 'Bearer t' } })
+      expect(res.statusCode).toBe(200)
+      const ids = res.json().services.map((s: { service_id: string }) => s.service_id)
+      // jarvis-auth declares AUTH_SECRET_KEY / *_ADMIN_TOKEN as secrets, but
+      // they're generated at install with no `${NAME:-}` placeholder default —
+      // they must not appear as editable credentials.
+      expect(ids).not.toContain('jarvis-auth')
+      expect(ids).toEqual(['jarvis-phone-gateway'])
+    })
+
+    it('refuses to write an installer-generated secret even for a listed service', async () => {
+      seedEnv('AUTH_SECRET_KEY=generated123\n')
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/service-env/jarvis-auth',
+        headers: { authorization: 'Bearer t' },
+        payload: { values: { AUTH_SECRET_KEY: 'attacker-controlled' } },
+      })
+      expect(res.statusCode).toBe(400)
+      expect(readFileSync(envPath(), 'utf-8')).not.toContain('attacker-controlled')
     })
 
     it('never returns secret values, only is_set', async () => {
@@ -307,6 +366,46 @@ describe('service-env routes', () => {
         payload: { values: { TWILIO_ACCOUNT_SID: 'AC1' } },
       })
       expect(res.json().restart_required).toBe(false)
+    })
+  })
+
+  // Integration guard against the actual prod bug: with the REAL bundled
+  // service-registry.json wired in (as index.ts does when app.registry is
+  // populated), the endpoint must return 200 — not 503 — and, after the
+  // scope fix, list ONLY the phone gateway. This is the end-to-end shape the
+  // prod admin failed to produce: its registry was null (503) and, even when
+  // populated, its heuristic listed every core service.
+  describe('GET /api/service-env against the real bundled registry', () => {
+    const realRegistryPath = join(
+      dirname(fileURLToPath(import.meta.url)),
+      '../../src/data/service-registry.json',
+    )
+
+    it('returns 200 and lists exactly [jarvis-phone-gateway], excluding every core service', async () => {
+      await app.close()
+      app = await buildApp({
+        docker: createMockDocker([]),
+        registry: createRegistryService(realRegistryPath),
+      })
+      seedEnv('TWILIO_ACCOUNT_SID=AC1\n')
+      mockSuperuserAuth()
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/service-env',
+        headers: { authorization: 'Bearer t' },
+      })
+      expect(res.statusCode).toBe(200)
+      const ids = res.json().services.map((s: { service_id: string }) => s.service_id)
+      expect(ids).toEqual(['jarvis-phone-gateway'])
+      for (const core of [
+        'jarvis-config-service',
+        'jarvis-auth',
+        'jarvis-command-center',
+        'jarvis-notifications',
+        'jarvis-admin',
+      ]) {
+        expect(ids).not.toContain(core)
+      }
     })
   })
 
