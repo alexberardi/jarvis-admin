@@ -16,10 +16,15 @@ import type { EnvVar, ServiceDefinition } from '../services/registry.js'
  * Scope rules, enforced server-side:
  * - Only vars DECLARED in the service registry are visible or writable —
  *   this must never become an arbitrary .env editor.
- * - Only USER-SUPPLIED vars are writable: declared `secret: true`, or a
- *   default that is a self-referencing `${NAME:-...}` interpolation (the
- *   paste-into-.env pattern). Generated wiring (JARVIS_CONFIG_URL,
- *   REDIS_URL, ...) is read-only here.
+ * - Only USER-SUPPLIED vars are visible or writable, and the SOLE marker of
+ *   one is a self-referencing `${NAME:-...}` default — the paste-into-.env
+ *   placeholder the installer writes for third-party keys the operator must
+ *   fill in. A bare `secret: true` alone does NOT qualify: every core service
+ *   declares installer-generated wiring secrets (AUTH_SECRET_KEY,
+ *   ADMIN_API_KEY, MQTT_PASSWORD, *_ADMIN_TOKEN) that the operator must never
+ *   touch here. Generated wiring (JARVIS_CONFIG_URL, REDIS_URL, ...) is
+ *   read-only too. Today the phone gateway's Twilio creds are the only
+ *   user-supplied set, so it's the only service this panel lists.
  * - Secret values are WRITE-ONLY: GET reports `is_set`, never the value.
  * - Audit logging names the vars changed, never the values.
  */
@@ -47,10 +52,15 @@ interface ServiceEnvView {
 }
 
 function isUserSupplied(v: EnvVar): boolean {
-  if (v.secret === true) return true
+  // The ONE marker of a genuinely user-supplied credential is a
+  // self-referencing "${NAME:-...}" placeholder default — the paste-into-.env
+  // pattern the installer writes for third-party keys the operator fills in
+  // (Twilio SID/token, caller ID, tunnel URL). A bare `secret: true` with no
+  // such default is an INSTALLER-GENERATED wiring secret (AUTH_SECRET_KEY,
+  // ADMIN_API_KEY, MQTT_PASSWORD, *_ADMIN_TOKEN, ...) that every core service
+  // declares — treating those as editable turned this panel into a list of
+  // every service and let an operator corrupt the stack's internal wiring.
   const d = v.default ?? ''
-  // Self-referencing interpolation, e.g. "${TWILIO_FROM_NUMBER:-}" — the
-  // generated .env carries a placeholder line the operator fills in.
   return new RegExp(`^\\$\\{${v.name}(:-.*)?\\}$`).test(d)
 }
 
