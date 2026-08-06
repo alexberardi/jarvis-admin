@@ -280,6 +280,23 @@ describe('env-generator', () => {
     })
   })
 
+  describe('Whisper model', () => {
+    // Like the backend, the model path lives only in the compose environment
+    // block (and only when non-default), so without this key a reconcile
+    // reconstructs base.en and silently downgrades a bigger model.
+    it('persists the selected model path', () => {
+      const state = makeState({ whisperModelPath: '/whisper-models/ggml-small.en.bin' })
+      const output = generateEnv(state, registry)
+      expect(output).toContain('WHISPER_MODEL=/whisper-models/ggml-small.en.bin')
+    })
+
+    it('defaults to base.en when unset', () => {
+      const state = makeState()
+      const output = generateEnv(state, registry)
+      expect(output).toContain('WHISPER_MODEL=/whisper-models/ggml-base.en.bin')
+    })
+  })
+
   describe('TTS backend', () => {
     it('persists the selected backend and a default GPU index', () => {
       const state = makeState({ ttsBackend: 'cuda' })

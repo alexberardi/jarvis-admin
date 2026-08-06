@@ -209,6 +209,12 @@
           "required": true,
           "secret": true,
           "secretRef": "MQTT_PASSWORD"
+        },
+        {
+          "name": "REDIS_URL",
+          "description": "Redis connection for the phone-call dial queue (CC enqueues dials the gateway consumes)",
+          "required": false,
+          "default": "redis://:${REDIS_PASSWORD}@redis:6379/0"
         }
       ]
     },

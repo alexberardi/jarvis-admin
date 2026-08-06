@@ -43,6 +43,33 @@ export function loadEnvFile(composePath: string): Record<string, string> {
   return vars
 }
 
+/**
+ * Load the install's .env for a RECONCILE, backfilling ``WHISPER_MODEL`` from
+ * the existing docker-compose.yml when .env lacks it.
+ *
+ * The whisper model path has only ever lived in the whisper service's compose
+ * ``environment:`` block; env-generator did not persist it to .env until it was
+ * added alongside WHISPER_BACKEND. A stack created before that has no
+ * WHISPER_MODEL in .env, so reconstructWizardState would read it as base.en and
+ * a regenerate would silently downgrade a small/medium/large model. Recover it
+ * from the running compose (where the generator emitted ``      WHISPER_MODEL:
+ * <path>``) so the model survives the first reconcile; env-generator then writes
+ * it back to .env and future reconciles round-trip via .env alone.
+ */
+export function loadReconcileEnv(composePath: string): Record<string, string> {
+  const env = loadEnvFile(composePath)
+  if (env.WHISPER_MODEL === undefined) {
+    const composeFile = join(composePath, 'docker-compose.yml')
+    if (existsSync(composeFile)) {
+      // The key appears only under the whisper service; .env uses `=`, compose
+      // uses `:`, so a `KEY: value` match can't collide with an .env entry.
+      const m = readFileSync(composeFile, 'utf-8').match(/^\s+WHISPER_MODEL:\s*(\S+)\s*$/m)
+      if (m) env.WHISPER_MODEL = m[1]
+    }
+  }
+  return env
+}
+
 export interface UpgradedComposeFiles {
   compose: string
   env: string
@@ -129,6 +156,14 @@ export function buildUpgradedComposeFiles(
     env = upsertEnvVar(env, 'JARVIS_IMAGE_TAG', overrides.releaseTrack === 'dev' ? 'dev' : 'latest')
   }
 
+  // A whisper-model change from the reconcile options screen must win over
+  // mergeEnv's "existing value wins" rule (same as the release track) —
+  // otherwise the previously-persisted WHISPER_MODEL is kept and the switch
+  // silently no-ops.
+  if (overrides?.whisperModelPath) {
+    env = upsertEnvVar(env, 'WHISPER_MODEL', overrides.whisperModelPath)
+  }
+
   const enabledServices = getAllEnabledServices(state, registry)
   const primaryDb = registry.infrastructure.find((i) => i.id === 'postgres')
     ?.envVars.find((e) => e.name === 'POSTGRES_DB')?.default ?? 'jarvis_config'
@@ -149,7 +184,7 @@ export function regenerateComposeFiles(
   hostComposePath?: string,
 ): UpgradedComposeFiles {
   const registry: ServiceRegistry = parseRegistry(registryData)
-  const existingEnv = loadEnvFile(composePath)
+  const existingEnv = loadReconcileEnv(composePath)
   return buildUpgradedComposeFiles(existingEnv, registry, overrides, hostComposePath)
 }
 
@@ -168,7 +203,7 @@ export async function regenerateComposeFilesLatest(
   hostComposePath?: string,
 ): Promise<UpgradedComposeFiles> {
   const registry: ServiceRegistry = parseRegistry(registryData)
-  const existingEnv = loadEnvFile(composePath)
+  const existingEnv = loadReconcileEnv(composePath)
   // dev floats (no digest pins), so only the stable track needs a refresh.
   const track =
     overrides?.releaseTrack === 'dev' ||
@@ -227,8 +262,9 @@ export async function upgradeCompose(
     }
   }
 
-  // Step 2: Load existing env
-  const existingEnv = loadEnvFile(composePath)
+  // Step 2: Load existing env (recovering WHISPER_MODEL from the running
+  // compose for stacks whose .env predates that key — see loadReconcileEnv)
+  const existingEnv = loadReconcileEnv(composePath)
 
   // Refresh the pinned image digests from GHCR so the regenerated compose points
   // at the newest published build and `docker compose pull` actually fetches it

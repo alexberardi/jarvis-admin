@@ -730,6 +730,11 @@ describe('compose-generator', () => {
       expect(block).not.toContain('entrypoint:')
     })
 
+    it('gives jarvis-command-center REDIS_URL (it enqueues phone-call dials the gateway consumes)', () => {
+      const cc = serviceBlock(generateCompose(makeState({}), registry), 'jarvis-command-center')
+      expect(cc).toContain('REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0')
+    })
+
     it('keeps an explicit serve command on migrate services with no seed (overriding entrypoint clears image CMD)', () => {
       const output = generateCompose(allMigrateState, registry)
       const cc = serviceBlock(output, 'jarvis-command-center')
