@@ -40,6 +40,7 @@ describe('secret-generator', () => {
       expect(secrets.REDIS_PASSWORD).toHaveLength(32)
       expect(secrets.AUTH_SECRET_KEY).toHaveLength(64)
       expect(secrets.JARVIS_CONFIG_ADMIN_TOKEN).toHaveLength(64)
+      expect(secrets.JARVIS_ADAPTER_CALLBACK_TOKEN).toHaveLength(64)
     })
 
     it('includes MODEL_SERVICE_TOKEN as a 64-hex secret (llm-proxy <-> model service auth)', () => {

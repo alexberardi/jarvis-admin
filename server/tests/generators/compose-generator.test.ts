@@ -735,6 +735,11 @@ describe('compose-generator', () => {
       expect(cc).toContain('REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0')
     })
 
+    it('gives jarvis-command-center JARVIS_ADAPTER_CALLBACK_TOKEN (async-job callbacks fail-closed 503 without it -> memory-extraction persistence silently dies)', () => {
+      const cc = serviceBlock(generateCompose(makeState({}), registry), 'jarvis-command-center')
+      expect(cc).toContain('JARVIS_ADAPTER_CALLBACK_TOKEN: ${JARVIS_ADAPTER_CALLBACK_TOKEN}')
+    })
+
     it('keeps an explicit serve command on migrate services with no seed (overriding entrypoint clears image CMD)', () => {
       const output = generateCompose(allMigrateState, registry)
       const cc = serviceBlock(output, 'jarvis-command-center')
