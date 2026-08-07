@@ -6,6 +6,7 @@ import net from 'node:net'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser, requireSuperuserIfInstalled } from '../middleware/auth.js'
 import { getComposePath } from '../services/compose-path.js'
+import { getWhisperModelPath, setWhisperModelPath } from '../services/whisper-model-setting.js'
 import { generateCompose, getAllEnabledServices } from '../services/generators/compose-generator.js'
 import { generateEnv } from '../services/generators/env-generator.js'
 import { generateInitDbScript } from '../services/generators/init-db-generator.js'
@@ -858,7 +859,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
    * Returns the current optional services and integration toggles for the
    * reconcile options screen. Pre-populates from the existing .env.
    */
-  app.get('/reconcile/options', { preHandler: requireSuperuser }, async (_request, reply) => {
+  app.get('/reconcile/options', { preHandler: requireSuperuser }, async (request, reply) => {
     const composePath = getComposePath()
     const env = loadEnvFile(composePath)
     const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
@@ -875,11 +876,18 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         enabled: s.category === 'core' || state.enabledModules.includes(s.id),
       }))
 
+    // The whisper model is a RUNTIME setting (whisper.model_path) that jarvis-whisper-api
+    // reads from the settings DB and hot-reloads on — NOT the compose WHISPER_MODEL env
+    // (which the service ignores). Show the live setting so the field reflects the model
+    // STT actually loads; fall back to the compose-derived value / default if the settings
+    // gateway is unreachable.
+    const whisperModel = await getWhisperModelPath(app.config.configServiceUrl, request.headers.authorization)
+
     return reply.send({
       services: options,
       relayEnabled: state.relayEnabled,
       relayUrl: state.relayUrl || 'https://relay.jarvisautomation.io',
-      whisperModelPath: state.whisperModelPath || '/whisper-models/ggml-base.en.bin',
+      whisperModelPath: whisperModel || state.whisperModelPath || '/whisper-models/ggml-base.en.bin',
       whisperBackend: state.whisperBackend ?? 'cpu',
       ttsBackend: state.ttsBackend ?? 'cpu',
       pinImages: state.pinImages ?? false,
@@ -958,11 +966,16 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       const { reconstructWizardState } = await import('../services/upgrade/state-reconstructor.js')
       const { getComposeServices, getComposeWorkerIds } = await import('../services/generators/compose-generator.js')
 
-      // Apply user overrides from the options screen (if provided)
+      // Apply user overrides from the options screen (if provided). NOTE:
+      // whisperModelPath is deliberately NOT a compose override — the whisper model
+      // is a runtime setting (whisper.model_path) that jarvis-whisper-api reads from
+      // the settings DB and hot-reloads on; it's written to the settings gateway
+      // below, not baked into the generated compose (whose WHISPER_MODEL env the
+      // service ignores). whisperBackend (the image variant) stays a compose concern.
       const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string; whisperBackend?: 'cpu' | 'cuda' | 'vulkan' | 'rocm'; releaseTrack?: 'stable' | 'dev' } | null
-      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperModelPath || body?.whisperBackend || body?.releaseTrack
+      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperBackend || body?.releaseTrack
       const overrides = hasOverrides
-        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperModelPath: body?.whisperModelPath, whisperBackend: body?.whisperBackend, releaseTrack: body?.releaseTrack }
+        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperBackend: body?.whisperBackend, releaseTrack: body?.releaseTrack }
         : undefined
 
       // Detect if the release track is changing (requires pull + force-recreate)
@@ -974,6 +987,19 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       emit({ phase: 'regenerate', message: 'Regenerating compose from latest registry...' })
       await upgradeCompose(app, overrides)
       emit({ phase: 'regenerate', message: 'Files regenerated.' })
+
+      // Whisper model is a runtime setting, not compose: write whisper.model_path to
+      // the settings gateway. jarvis-whisper-api hot-reloads the model on its next
+      // transcription (no container restart), so no compose recreate is needed for it.
+      if (body?.whisperModelPath) {
+        emit({ phase: 'whisper', message: `Setting whisper model → ${body.whisperModelPath}` })
+        const res = await setWhisperModelPath(app.config.configServiceUrl, request.headers.authorization, body.whisperModelPath)
+        emit(
+          res.ok
+            ? { phase: 'whisper', message: 'Whisper model saved (applies on the next transcription).' }
+            : { phase: 'whisper', message: `⚠️ Could not update whisper model: ${res.error ?? 'unknown error'}` },
+        )
+      }
 
       // Pull new images when switching release tracks
       if (trackChanged) {
