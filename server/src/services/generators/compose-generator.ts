@@ -620,6 +620,15 @@ function generateServiceBlock(
     lines.push('      JARVIS_AUTH_BASE_URL: http://host.docker.internal:${AUTH_PORT:-7701}')
   }
 
+  // Command-center URL for services that call CC directly (e.g. jarvis-phone-gateway
+  // fetching the call session). Same rationale + name convention as JARVIS_AUTH_BASE_URL;
+  // without it the gateway defaulted to localhost and dropped every dial job
+  // ("session fetch failed") — prod 2026-08-07.
+  const alreadyHasCcUrl = service.envVars.some((e) => e.name === 'JARVIS_COMMAND_CENTER_BASE_URL')
+  if (service.dependsOn.includes('jarvis-command-center') && !alreadyHasCcUrl) {
+    lines.push('      JARVIS_COMMAND_CENTER_BASE_URL: http://host.docker.internal:${COMMAND_CENTER_PORT:-7703}')
+  }
+
   // LLM proxy needs model service config and backend env vars
   if (service.id === 'jarvis-llm-proxy-api') {
     lines.push('      MODEL_SERVICE_URL: http://localhost:7705')
@@ -810,6 +819,15 @@ function generateWorkerBlock(
     !overrideKeys.has('JARVIS_AUTH_BASE_URL')
   ) {
     lines.push('      JARVIS_AUTH_BASE_URL: http://host.docker.internal:${AUTH_PORT:-7701}')
+  }
+
+  const parentHasCcUrl = parent.envVars.some((e) => e.name === 'JARVIS_COMMAND_CENTER_BASE_URL')
+  if (
+    parent.dependsOn.includes('jarvis-command-center') &&
+    !parentHasCcUrl &&
+    !overrideKeys.has('JARVIS_COMMAND_CENTER_BASE_URL')
+  ) {
+    lines.push('      JARVIS_COMMAND_CENTER_BASE_URL: http://host.docker.internal:${COMMAND_CENTER_PORT:-7703}')
   }
 
   // Mirror llm-proxy backend env so the worker can resolve models + queue.
