@@ -987,6 +987,9 @@ describe('jarvis-phone-gateway (optional service, phone-calls PRD)', () => {
     // Standard first-party plumbing
     expect(gw).toContain('JARVIS_APP_ID: ${JARVIS_APP_ID_PHONE_GATEWAY:-}')
     expect(gw).toContain('JARVIS_AUTH_BASE_URL:')
+    // CC base URL for the dial worker's session fetch — prod 2026-08-07: absent →
+    // gateway defaulted to localhost → every dial job dropped ("session fetch failed")
+    expect(gw).toContain('JARVIS_COMMAND_CENTER_BASE_URL: http://host.docker.internal:${COMMAND_CENTER_PORT:-7703}')
     expect(gw).toContain('healthcheck:')
     expect(gw).toContain("urllib.request.urlopen('http://localhost:7713/health')")
     expect(gw).toContain('restart: unless-stopped')
