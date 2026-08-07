@@ -215,6 +215,13 @@
           "description": "Redis connection for the phone-call dial queue (CC enqueues dials the gateway consumes)",
           "required": false,
           "default": "redis://:${REDIS_PASSWORD}@redis:6379/0"
+        },
+        {
+          "name": "JARVIS_ADAPTER_CALLBACK_TOKEN",
+          "description": "CC-internal auth for async-job result callbacks (memory extraction, deep research, characterization synthesis, adapter training). CC attaches it at enqueue and validates it at the /…/callback endpoints (fail-closed); unset -> every callback 503s and nothing persists (save_memory, transcript mark_processed, inbox delivery).",
+          "required": true,
+          "secret": true,
+          "secretRef": "JARVIS_ADAPTER_CALLBACK_TOKEN"
         }
       ]
     },

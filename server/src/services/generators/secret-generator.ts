@@ -29,6 +29,14 @@ export const SECRET_KEYS = [
   // all Loki logs (voice transcripts / PII) + SSRF-pivot via the datasource proxy.
   // 'PASSWORD' in the name -> 16 bytes / 32 hex.
   'GRAFANA_ADMIN_PASSWORD',
+  // CC-internal auth for async-job result callbacks (memory extraction, deep
+  // research, characterization synthesis, adapter training). CC attaches it at
+  // enqueue and validates it at the /…/callback endpoints (main.py:1714-1742,
+  // FAIL-CLOSED): unset -> every callback 503s and the persist step never runs
+  // (save_memory, transcript mark_processed, inbox delivery). Was unset on prod
+  // -> passive memory extraction silently dead 2026-06-17..2026-08-07. Same
+  // treatment as MODEL_SERVICE_TOKEN: no 'PASSWORD' in the name -> 32 bytes / 64 hex.
+  'JARVIS_ADAPTER_CALLBACK_TOKEN',
 ] as const
 
 export type SecretKey = (typeof SECRET_KEYS)[number]
