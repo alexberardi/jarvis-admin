@@ -1006,3 +1006,40 @@ describe('jarvis-phone-gateway (optional service, phone-calls PRD)', () => {
     expect(gw).toContain('jarvis-command-center:')
   })
 })
+
+describe('nativeOnly services (jarvis-osx-api)', () => {
+  const registry = loadRegistry()
+
+  it('registry entry exists, is optional, nativeCapable and nativeOnly', () => {
+    const svc = registry.services.find((s) => s.id === 'jarvis-osx-api')
+    expect(svc).toBeDefined()
+    expect(svc?.category).toBe('optional')
+    expect(svc?.port).toBe(7723)
+    expect(svc?.nativeCapable).toBe(true)
+    expect(svc?.nativeOnly).toBe(true)
+  })
+
+  it('is NEVER emitted to compose on linux, even when enabled', () => {
+    const state = makeState({
+      platform: 'linux',
+      enabledModules: ['jarvis-whisper-api', 'jarvis-tts', 'jarvis-osx-api'],
+    })
+    expect(getComposeServices(state, registry).map((s) => s.id)).not.toContain('jarvis-osx-api')
+    expect(generateCompose(state, registry)).not.toContain('jarvis-osx-api')
+  })
+
+  it('is NEVER emitted to compose on darwin, even without native opt-in', () => {
+    const state = makeState({
+      platform: 'darwin',
+      enabledModules: ['jarvis-whisper-api', 'jarvis-tts', 'jarvis-osx-api'],
+      nativeServices: [], // user did NOT opt it into native mode — still excluded
+    })
+    expect(getComposeServices(state, registry).map((s) => s.id)).not.toContain('jarvis-osx-api')
+    expect(generateCompose(state, registry)).not.toContain('jarvis-osx-api')
+  })
+
+  it('stays out of compose when NOT enabled (baseline)', () => {
+    const state = makeState({ platform: 'linux' })
+    expect(generateCompose(state, registry)).not.toContain('jarvis-osx-api')
+  })
+})

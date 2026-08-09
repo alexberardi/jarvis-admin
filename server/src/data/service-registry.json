@@ -487,6 +487,19 @@
       ]
     },
     {
+      "id": "jarvis-osx-api",
+      "name": "macOS Bridge",
+      "description": "iMessage, Contacts, and Shortcuts bridge — macOS native only, runs as a LaunchAgent, never in Docker",
+      "category": "optional",
+      "port": 7723,
+      "image": "",
+      "healthCheck": "/health",
+      "dependsOn": [],
+      "envVars": [],
+      "nativeCapable": true,
+      "nativeOnly": true
+    },
+    {
       "id": "jarvis-admin",
       "name": "Admin Dashboard",
       "description": "Web admin dashboard for managing Jarvis services and settings",
