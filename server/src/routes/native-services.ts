@@ -105,6 +105,7 @@ function resolvePort(serviceId: string, svc: ServiceDefinition, composePath: str
     'jarvis-llm-proxy-api': 'LLM_PROXY_API_PORT',
     'jarvis-whisper-api': 'WHISPER_API_PORT',
     'jarvis-tts': 'TTS_PORT',
+    'jarvis-osx-api': 'OSX_API_PORT',
   }
   const portVar = portVarMap[serviceId]
   if (portVar && env[portVar]) {
@@ -348,6 +349,7 @@ function portEnvVarFor(serviceId: string): string {
   if (serviceId === 'jarvis-llm-proxy-api') return 'LLM_PROXY_PORT'
   if (serviceId === 'jarvis-whisper-api') return 'WHISPER_PORT'
   if (serviceId === 'jarvis-tts') return 'TTS_PORT'
+  if (serviceId === 'jarvis-osx-api') return 'OSX_API_PORT'
   return 'PORT'
 }
 

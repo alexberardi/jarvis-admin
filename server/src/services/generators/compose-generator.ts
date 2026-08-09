@@ -88,7 +88,10 @@ export function getComposeServices(
   state: WizardState,
   registry: ServiceRegistry,
 ): ServiceDefinition[] {
-  const all = getAllEnabledServices(state, registry)
+  // nativeOnly services (e.g. jarvis-osx-api) are excluded UNCONDITIONALLY —
+  // on every platform, regardless of native opt-in. They have no Docker image;
+  // leaking one into a Linux/prod compose yields an unpullable service.
+  const all = getAllEnabledServices(state, registry).filter((s) => !s.nativeOnly)
   const nativeIds = new Set(state.nativeServices ?? [])
   if (state.platform === 'darwin') {
     return all.filter((s) => {

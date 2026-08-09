@@ -61,6 +61,13 @@ export interface ServiceDefinition {
    */
   nativeCapable?: boolean
   /**
+   * true = the service can ONLY run natively (LaunchAgent) and must never be
+   * emitted to compose on ANY platform, regardless of native opt-in (e.g.
+   * jarvis-osx-api, which needs host TCC grants + a GUI session). Implies the
+   * service has no published Docker image.
+   */
+  nativeOnly?: boolean
+  /**
    * For `gpu: true` services that ship a CPU image alongside GPU variants
    * (e.g. whisper publishes :latest, :latest-cuda, :latest-rocm). When set,
    * the service is NOT excluded on macOS, the variant suffix is only applied
