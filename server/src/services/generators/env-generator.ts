@@ -104,6 +104,14 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
     lines.push('')
   }
 
+  // Live model serving type — read back by state-reconstructor on regen so the
+  // llama-server sidecar (servingType='llama-server') is never silently dropped.
+  // The LIVE_MODEL_* values its command references are managed by the admin
+  // live-model setting (Phase 2) and preserved across regens by mergeEnv.
+  lines.push('# --- Live model serving ---')
+  lines.push(`SERVING_TYPE=${state.servingType ?? 'llama-cpp'}`)
+  lines.push('')
+
   // Phone gateway (optional): Twilio credentials are gateway-only env secrets
   // (never the settings DB — see the phone-calls PRD). Empty placeholders when
   // first enabled — the user pastes real values; reconcile preserves them via
