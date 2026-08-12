@@ -371,4 +371,12 @@ describe('Phone gateway (jarvis-phone-gateway)', () => {
     expect(output).not.toContain('PHONE_GATEWAY_PORT')
     expect(output).not.toContain('TWILIO_ACCOUNT_SID')
   })
+
+  it('emits SERVING_TYPE (default llama-cpp) so a regen reconstructs the live-model serving', () => {
+    expect(generateEnv(makeState(), registry)).toMatch(/^SERVING_TYPE=llama-cpp$/m)
+  })
+
+  it('emits the chosen serving type when llama-server is selected', () => {
+    expect(generateEnv(makeState({ servingType: 'llama-server' }), registry)).toMatch(/^SERVING_TYPE=llama-server$/m)
+  })
 })

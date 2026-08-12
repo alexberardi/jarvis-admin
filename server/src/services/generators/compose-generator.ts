@@ -228,6 +228,14 @@ export function generateCompose(
     }
   }
 
+  // Live-model sidecar (llama-server) — a first-class generated service so a
+  // compose regen can never silently drop it. NVIDIA/Linux only; the proxy
+  // reaches it at http://llama-server:8080 (model.live.backend=REST, set in the DB).
+  if (state.servingType === 'llama-server' && state.platform !== 'darwin') {
+    lines.push('')
+    lines.push(...generateLlamaServerBlock())
+  }
+
   // Networks
   lines.push('')
   lines.push('networks:')
@@ -469,6 +477,57 @@ function pushGpuConfig(
   } else {
     lines.push('    ipc: host')
   }
+}
+
+/**
+ * Standalone llama.cpp `llama-server` sidecar that serves the LIVE voice model
+ * over REST (the proxy routes model.live.backend=REST → http://llama-server:8080).
+ *
+ * Emitted as a FIRST-CLASS compose service — NOT a registry `services[]` entry —
+ * because that list also drives DB creation + app-cred registration + a python
+ * healthcheck, none of which a raw third-party llama.cpp binary should get. This
+ * is the fix for the docker-compose.override.yml footgun: a regen can no longer
+ * silently drop the live-model sidecar (see state-reconstructor for the read-back).
+ *
+ * The command is parametrized by LIVE_MODEL_* env vars so switching the live model
+ * is a `.env` write + `up -d llama-server`, never a YAML edit. -ctxcp/-cms preserve
+ * prod's exact command for a zero-gap migration. No healthcheck (the image has no
+ * curl/python) and callers must NOT add depends_on: {service_healthy} — a hard dep
+ * would cascade-restart the proxy every time Phase 2 recreates just this container.
+ * NVIDIA/Linux only (server-cuda image); callers gate on platform !== 'darwin'.
+ */
+function generateLlamaServerBlock(): string[] {
+  const lines: string[] = []
+  lines.push('  llama-server:')
+  lines.push('    container_name: llama-server')
+  lines.push('    image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+  lines.push('    ports:')
+  lines.push('      - "${LLAMA_SERVER_PORT:-7799}:8080"')
+  lines.push('    volumes:')
+  lines.push('      - ${MODELS_DIR:-./.models}:/models:ro')
+  lines.push('    command:')
+  lines.push('      - "-m"')
+  lines.push('      - "/models/${LIVE_MODEL_FILE}"')
+  lines.push('      - "--chat-template"')
+  lines.push('      - "${LIVE_MODEL_CHAT_TEMPLATE:-chatml}"')
+  lines.push('      - "-ngl"')
+  lines.push('      - "${LIVE_MODEL_NGL:-99}"')
+  lines.push('      - "-c"')
+  lines.push('      - "${LIVE_MODEL_CTX:-32768}"')
+  lines.push('      - "-ctxcp"')
+  lines.push('      - "${LIVE_MODEL_CTXCP:-32}"')
+  lines.push('      - "-cms"')
+  lines.push('      - "${LIVE_MODEL_CMS:-256}"')
+  lines.push('      - "--host"')
+  lines.push('      - "0.0.0.0"')
+  lines.push('      - "--port"')
+  lines.push('      - "8080"')
+  // NVIDIA reservation + ipc/shm (server-cuda needs a GPU).
+  pushGpuDevices(lines, 'nvidia')
+  lines.push('    networks:')
+  lines.push('      - jarvis')
+  lines.push('    restart: unless-stopped')
+  return lines
 }
 
 function generateServiceBlock(
