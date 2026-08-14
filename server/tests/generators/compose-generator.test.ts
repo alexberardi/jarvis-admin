@@ -1043,3 +1043,37 @@ describe('nativeOnly services (jarvis-osx-api)', () => {
     expect(generateCompose(state, registry)).not.toContain('jarvis-osx-api')
   })
 })
+
+describe('compose-generator: llama-server sidecar (servingType)', () => {
+  const registry = loadRegistry()
+
+  it('emits the llama-server sidecar as a first-class, compose-only service when servingType=llama-server on linux', () => {
+    const out = generateCompose(makeState({ servingType: 'llama-server', platform: 'linux' }), registry)
+    // First-class generated service — survives a regen (the docker-compose.override.yml footgun fix)
+    expect(out).toContain('container_name: llama-server')
+    expect(out).toContain('image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+    expect(out).toContain('${LLAMA_SERVER_PORT:-7799}:8080')
+    expect(out).toContain('${MODELS_DIR:-./.models}:/models:ro')
+    // Env-parametrized command so Phase 2 can retarget the live model via .env (no YAML edit)
+    expect(out).toContain('/models/${LIVE_MODEL_FILE}')
+    expect(out).toContain('${LIVE_MODEL_CHAT_TEMPLATE:-chatml}')
+    expect(out).toContain('${LIVE_MODEL_CTX:-32768}')
+    // Preserve prod's exact command for a zero-gap migration: -ctxcp / -cms
+    expect(out).toContain('${LIVE_MODEL_CTXCP:-32}')
+    expect(out).toContain('${LIVE_MODEL_CMS:-256}')
+    // It is NOT a Jarvis app: no app-to-app creds injected into the sidecar block.
+    const block = out.slice(out.indexOf('  llama-server:'))
+    expect(block.split(/\n {2}\S/)[0]).not.toContain('JARVIS_APP_ID')
+  })
+
+  it('does NOT emit the sidecar for the default (llama-cpp) serving type', () => {
+    const out = generateCompose(makeState(), registry)
+    expect(out).not.toContain('container_name: llama-server')
+    expect(out).not.toContain('llama.cpp:server-cuda')
+  })
+
+  it('does NOT emit the sidecar on macOS even when servingType=llama-server', () => {
+    const out = generateCompose(makeState({ servingType: 'llama-server', platform: 'darwin' }), registry)
+    expect(out).not.toContain('container_name: llama-server')
+  })
+})

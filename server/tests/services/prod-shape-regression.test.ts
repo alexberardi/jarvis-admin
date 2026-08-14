@@ -140,3 +140,35 @@ describe('prod-shape regression: a reconcile must preserve the GPU/broker deploy
     expect(env).toMatch(/^MODEL_SERVICE_TOKEN=.+$/m)
   })
 })
+
+describe('regen-safety: a reconcile must PRESERVE the llama-server sidecar (override.yml footgun)', () => {
+  const registry = loadRegistry()
+
+  it('round-trips SERVING_TYPE=llama-server from .env → state → generated sidecar', () => {
+    const env = {
+      ...prodShapedEnv(),
+      SERVING_TYPE: 'llama-server',
+      LIVE_MODEL_FILE: 'Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf',
+    }
+    const state = reconstructWizardState(env, registry)
+    state.platform = 'linux'
+    // Before this fix the reconstructor dropped servingType → the regen omitted
+    // the sidecar → live inference died. It must now survive the round-trip.
+    expect(state.servingType).toBe('llama-server')
+    const compose = generateCompose(state, registry, DIGESTS)
+    expect(compose).toContain('container_name: llama-server')
+    expect(compose).toContain('image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+    expect(compose).toContain('/models/${LIVE_MODEL_FILE}')
+  })
+
+  it('infers llama-server from LIVE_MODEL_FILE even if SERVING_TYPE is absent (defensive)', () => {
+    const env = { ...prodShapedEnv(), LIVE_MODEL_FILE: 'model.gguf' } // no SERVING_TYPE
+    expect(reconstructWizardState(env, registry).servingType).toBe('llama-server')
+  })
+
+  it('defaults to llama-cpp (no sidecar) when nothing indicates one', () => {
+    const state = reconstructWizardState(prodShapedEnv(), registry)
+    expect(state.servingType).toBe('llama-cpp')
+    expect(generateCompose(state, registry, DIGESTS)).not.toContain('container_name: llama-server')
+  })
+})
