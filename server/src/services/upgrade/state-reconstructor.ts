@@ -1,5 +1,5 @@
 import { arch, totalmem } from 'node:os'
-import type { HardwareInfo, TtsBackend, WhisperBackend, WizardState } from '../../types/wizard.js'
+import type { HardwareInfo, ServingType, TtsBackend, WhisperBackend, WizardState } from '../../types/wizard.js'
 import type { ServiceRegistry } from '../../types/service-registry.js'
 import { serviceIdToPortVar } from '../generators/port-utils.js'
 import { SECRET_KEYS } from '../generators/secret-generator.js'
@@ -74,6 +74,20 @@ export function reconstructWizardState(
   // TTS device — same persistence contract as whisperBackend (see above).
   const ttsBackend: TtsBackend = existingEnv.TTS_BACKEND === 'cuda' ? 'cuda' : 'cpu'
 
+  // Live-model serving type. SERVING_TYPE is authoritative; if absent, INFER it
+  // so a reconcile of a box that somehow lost the key can't silently drop the
+  // sidecar (the whole point of this fix): a LIVE_MODEL_FILE means the
+  // llama-server sidecar was serving live; else JARVIS_MODEL_BACKEND=VLLM → vllm;
+  // else the in-process GGUF default.
+  const SERVING_TYPES: ReadonlySet<string> = new Set(['vllm', 'llama-cpp', 'llama-server'])
+  const servingType: ServingType = SERVING_TYPES.has(existingEnv.SERVING_TYPE ?? '')
+    ? (existingEnv.SERVING_TYPE as ServingType)
+    : existingEnv.LIVE_MODEL_FILE
+      ? 'llama-server'
+      : (existingEnv.JARVIS_MODEL_BACKEND ?? '').toUpperCase() === 'VLLM'
+        ? 'vllm'
+        : 'llama-cpp'
+
   // Image pinning: opt-in only. Missing key = floating tags (this is also
   // the migration path — pre-existing pinned installs heal to floating tags
   // on their next regen, ending the stale-pin stranding class).
@@ -122,6 +136,7 @@ export function reconstructWizardState(
     whisperBackend,
     ttsBackend,
     pinImages,
+    servingType,
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
     releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,

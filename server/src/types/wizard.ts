@@ -15,6 +15,16 @@ export type WhisperBackend = 'cpu' | 'cuda' | 'vulkan' | 'rocm'
  */
 export type TtsBackend = 'cpu' | 'cuda'
 
+/**
+ * How the LIVE voice model is served.
+ *  - 'llama-cpp'    : in-process GGUF inside jarvis-llm-proxy-api (default; today's behavior).
+ *  - 'vllm'         : in-process vLLM (HF/safetensors) inside the proxy.
+ *  - 'llama-server' : a standalone llama.cpp `llama-server` sidecar the proxy calls over REST.
+ *                     NVIDIA/Linux only. Emitted as a first-class compose service so a regen
+ *                     can't silently drop it (the docker-compose.override.yml footgun).
+ */
+export type ServingType = 'vllm' | 'llama-cpp' | 'llama-server'
+
 export interface HardwareInfo {
   platform: 'darwin' | 'linux'
   arch: string
@@ -47,6 +57,12 @@ export interface WizardState {
   /** Opt-in digest pinning (PIN_IMAGES). Default false: floating tags so `docker compose pull` updates. */
   pinImages?: boolean
   llmInterface: string
+  /**
+   * How the live voice model is served (default 'llama-cpp' = in-process GGUF).
+   * When 'llama-server', the generator emits the standalone `llama-server` sidecar
+   * (NVIDIA/Linux only) parametrized by the LIVE_MODEL_* env vars.
+   */
+  servingType?: ServingType
 
   // New: deployment mode
   deploymentMode: 'local' | 'remote-llm'
