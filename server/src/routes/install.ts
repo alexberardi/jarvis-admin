@@ -1106,6 +1106,57 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       await new Promise<void>((resolve) => {
         child.on('close', async (code) => {
           if (code === 0) {
+            // Background-model slot: the sidecar container is compose, but the
+            // proxy routes to it via DB settings (model.background.*). Write
+            // them here so the Reconcile toggle is ONE action, then restart the
+            // llm-proxy containers (all model.* keys are requires_reload — a
+            // settings write alone is silently inert).
+            if (body?.bgModelEnabled !== undefined && app.config.llmProxyUrl) {
+              try {
+                const {
+                  buildBackgroundSlotSettings,
+                  buildBackgroundSlotDisableSettings,
+                  computeBgCtxPerSlot,
+                  writeBackgroundSlotSettings,
+                } = await import('../services/bg-model-config.js')
+                const bgSettings = body.bgModelEnabled
+                  ? buildBackgroundSlotSettings(body.bgModelFile ?? env.BG_MODEL_FILE ?? '', computeBgCtxPerSlot(env))
+                  : buildBackgroundSlotDisableSettings()
+                emit({
+                  phase: 'bg-model',
+                  message: body.bgModelEnabled
+                    ? `Pointing the LLM proxy background slot at llama-server-bg (${body.bgModelFile ?? env.BG_MODEL_FILE})...`
+                    : 'Clearing the LLM proxy background slot (falls back to the live model)...',
+                })
+                const bgRes = await writeBackgroundSlotSettings(
+                  app.config.llmProxyUrl,
+                  request.headers.authorization ?? '',
+                  bgSettings,
+                )
+                if (!bgRes.ok) {
+                  emit({ phase: 'bg-model', message: `⚠️ Background slot settings failed: ${bgRes.error ?? 'unknown error'}` })
+                } else {
+                  if (bgRes.failedKeys.length > 0) {
+                    emit({ phase: 'bg-model', message: `⚠️ Some keys were rejected (older llm-proxy image?): ${bgRes.failedKeys.join(', ')}` })
+                  }
+                  // Apply: model.* settings only load on model-service startup.
+                  const docker = app.docker
+                  if (docker) {
+                    emit({ phase: 'bg-model', message: 'Restarting LLM proxy to load the background slot...' })
+                    const containers = await docker.listJarvisContainers()
+                    for (const c of containers.filter((x) => x.name.includes('llm-proxy') || x.name.includes('llm_proxy'))) {
+                      await docker.restartContainer(c.id)
+                    }
+                    emit({ phase: 'bg-model', message: 'Background model slot configured.' })
+                  } else {
+                    emit({ phase: 'bg-model', message: '⚠️ Docker unavailable — restart the llm-proxy containers to apply the background slot.' })
+                  }
+                }
+              } catch (bgErr) {
+                emit({ stream: 'stderr', text: `Background-slot configuration warning: ${bgErr instanceof Error ? bgErr.message : String(bgErr)}\n` })
+              }
+            }
+
             // Re-register with config-service so the registry picks up any
             // coordinate changes (e.g. the external/published coords mobile
             // needs). Sync regenerates compose, but config-service registration
