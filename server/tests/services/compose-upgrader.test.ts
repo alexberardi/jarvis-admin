@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { upgradeCompose, regenerateComposeFiles } from '../../src/services/upgrade/compose-upgrader.js'
+import { resetHostPlatformCache } from '../../src/services/host-platform.js'
 
 /**
  * Minimal valid starting state — registry-conformant .env keys for core services
@@ -408,6 +409,57 @@ describe('operational-state stickiness (2026-07-06: "buttons must respect each o
     expect(later.env).toMatch(/^WHISPER_MODEL=\/whisper-models\/ggml-small\.en\.bin$/m)
     const whisper = /\n {2}jarvis-whisper-api:[\s\S]*?(?=\n {2}\S|$)/.exec(later.compose)?.[0]
     expect(whisper).toContain('WHISPER_MODEL: /whisper-models/ggml-small.en.bin')
+  })
+
+  it('background-sidecar enable + model file stick through the NEXT plain regen', async () => {
+    process.env.HOST_OS = 'linux'
+    resetHostPlatformCache()
+    try {
+      writeFakeInstall(composePath, {})
+
+      await upgradeCompose(fakeApp, { bgModelEnabled: true, bgModelFile: 'Qwen3.8-27B-UD-Q3_K_XL.gguf' })
+      expect(readFileSync(join(composePath, '.env'), 'utf-8')).toMatch(/^BG_MODEL_ENABLED=true$/m)
+
+      const later = regenerateComposeFiles(composePath)
+      expect(later.env).toMatch(/^BG_MODEL_ENABLED=true$/m)
+      expect(later.env).toMatch(/^BG_MODEL_FILE=Qwen3\.8-27B-UD-Q3_K_XL\.gguf$/m)
+      expect(later.compose).toContain('container_name: llama-server-bg')
+      expect(later.compose).toContain('"--jinja"')
+    } finally {
+      delete process.env.HOST_OS
+      resetHostPlatformCache()
+    }
+  })
+
+  it('disabling the background sidecar removes the service and sticks', async () => {
+    process.env.HOST_OS = 'linux'
+    resetHostPlatformCache()
+    try {
+      writeFakeInstall(composePath, { BG_MODEL_ENABLED: 'true', BG_MODEL_FILE: 'x.gguf' })
+
+      await upgradeCompose(fakeApp, { bgModelEnabled: false })
+
+      const later = regenerateComposeFiles(composePath)
+      expect(later.env).toMatch(/^BG_MODEL_ENABLED=false$/m)
+      expect(later.compose).not.toContain('llama-server-bg')
+    } finally {
+      delete process.env.HOST_OS
+      resetHostPlatformCache()
+    }
+  })
+
+  it('a bare BG_MODEL_FILE with no BG_MODEL_ENABLED key infers the sidecar on (legacy/hand-set .env)', () => {
+    process.env.HOST_OS = 'linux'
+    resetHostPlatformCache()
+    try {
+      writeFakeInstall(composePath, { BG_MODEL_FILE: 'hand-set.gguf' })
+
+      const later = regenerateComposeFiles(composePath)
+      expect(later.compose).toContain('container_name: llama-server-bg')
+    } finally {
+      delete process.env.HOST_OS
+      resetHostPlatformCache()
+    }
   })
 
   it('recovers a non-base WHISPER_MODEL from the running compose when .env lacks it (legacy stack)', () => {

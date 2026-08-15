@@ -236,6 +236,16 @@ export function generateCompose(
     lines.push(...generateLlamaServerBlock())
   }
 
+  // Background-model sidecar (llama-server-bg) — a second llama.cpp instance for
+  // the proxy's BACKGROUND slot (queue jobs, errand planner) so reasoning models
+  // can think without touching live voice. Same first-class treatment as
+  // llama-server: a regen can never silently drop it. Gated on the durable
+  // BG_MODEL_ENABLED env key (see state-reconstructor).
+  if (state.bgModelEnabled && state.platform !== 'darwin') {
+    lines.push('')
+    lines.push(...generateLlamaServerBgBlock())
+  }
+
   // Networks
   lines.push('')
   lines.push('networks:')
@@ -518,6 +528,53 @@ function generateLlamaServerBlock(): string[] {
   lines.push('      - "${LIVE_MODEL_CTXCP:-32}"')
   lines.push('      - "-cms"')
   lines.push('      - "${LIVE_MODEL_CMS:-256}"')
+  lines.push('      - "--host"')
+  lines.push('      - "0.0.0.0"')
+  lines.push('      - "--port"')
+  lines.push('      - "8080"')
+  // NVIDIA reservation + ipc/shm (server-cuda needs a GPU).
+  pushGpuDevices(lines, 'nvidia')
+  lines.push('    networks:')
+  lines.push('      - jarvis')
+  lines.push('    restart: unless-stopped')
+  return lines
+}
+
+/**
+ * Background-model llama.cpp sidecar (`llama-server-bg`) — serves the proxy's
+ * BACKGROUND slot (model.background.backend=REST → http://llama-server-bg:8080).
+ *
+ * Differences from the live block, all deliberate:
+ * - `--jinja` instead of `--chat-template chatml`: reasoning models (Qwen3.8+)
+ *   need their EMBEDDED chat template rendered — it carries the reasoning-effort
+ *   default and the per-request `enable_thinking` kwarg the proxy uses to turn
+ *   thinking off for jobs like memory extraction. A chatml override silently
+ *   discards all of that.
+ * - `-np` (parallel slots): per-slot context is `-c` divided by `-np`; the
+ *   default 32768/2 gives two 16k slots so a long thinking job cannot
+ *   head-of-line-block a second background request.
+ * - No -ctxcp/-cms: context checkpointing is a live-voice latency optimization.
+ * Same no-healthcheck / no-depends_on rules as generateLlamaServerBlock.
+ */
+function generateLlamaServerBgBlock(): string[] {
+  const lines: string[] = []
+  lines.push('  llama-server-bg:')
+  lines.push('    container_name: llama-server-bg')
+  lines.push('    image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+  lines.push('    ports:')
+  lines.push('      - "${LLAMA_SERVER_BG_PORT:-7798}:8080"')
+  lines.push('    volumes:')
+  lines.push('      - ${MODELS_DIR:-./.models}:/models:ro')
+  lines.push('    command:')
+  lines.push('      - "-m"')
+  lines.push('      - "/models/${BG_MODEL_FILE}"')
+  lines.push('      - "--jinja"')
+  lines.push('      - "-ngl"')
+  lines.push('      - "${BG_MODEL_NGL:-99}"')
+  lines.push('      - "-c"')
+  lines.push('      - "${BG_MODEL_CTX:-32768}"')
+  lines.push('      - "-np"')
+  lines.push('      - "${BG_MODEL_NP:-2}"')
   lines.push('      - "--host"')
   lines.push('      - "0.0.0.0"')
   lines.push('      - "--port"')

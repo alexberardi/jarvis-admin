@@ -112,6 +112,16 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
   lines.push(`SERVING_TYPE=${state.servingType ?? 'llama-cpp'}`)
   lines.push('')
 
+  // Background-model sidecar — same durability contract as SERVING_TYPE: the
+  // enabling key (and the model file) are read back by state-reconstructor so a
+  // reconcile re-emits llama-server-bg. BG_MODEL_CTX/NP/NGL and
+  // LLAMA_SERVER_BG_PORT are optional operator overrides preserved by mergeEnv;
+  // the compose references them with ${VAR:-default} fallbacks.
+  lines.push('# --- Background model sidecar ---')
+  lines.push(`BG_MODEL_ENABLED=${state.bgModelEnabled ? 'true' : 'false'}`)
+  lines.push(`BG_MODEL_FILE=${state.bgModelFile ?? ''}`)
+  lines.push('')
+
   // Phone gateway (optional): Twilio credentials are gateway-only env secrets
   // (never the settings DB — see the phone-calls PRD). Empty placeholders when
   // first enabled — the user pastes real values; reconcile preserves them via
