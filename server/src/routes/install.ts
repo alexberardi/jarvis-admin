@@ -892,6 +892,10 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       ttsBackend: state.ttsBackend ?? 'cpu',
       pinImages: state.pinImages ?? false,
       releaseTrack: state.releaseTrack ?? 'stable',
+      bgModelEnabled: state.bgModelEnabled ?? false,
+      bgModelFile: state.bgModelFile ?? '',
+      // The sidecar is NVIDIA/Linux only — lets the UI grey the toggle out.
+      bgModelSupported: state.platform !== 'darwin',
     })
   })
 
@@ -972,10 +976,10 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       // the settings DB and hot-reloads on; it's written to the settings gateway
       // below, not baked into the generated compose (whose WHISPER_MODEL env the
       // service ignores). whisperBackend (the image variant) stays a compose concern.
-      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string; whisperBackend?: 'cpu' | 'cuda' | 'vulkan' | 'rocm'; releaseTrack?: 'stable' | 'dev' } | null
-      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperBackend || body?.releaseTrack
+      const body = request.body as { enabledModules?: string[]; relayEnabled?: boolean; relayUrl?: string; whisperModelPath?: string; whisperBackend?: 'cpu' | 'cuda' | 'vulkan' | 'rocm'; releaseTrack?: 'stable' | 'dev'; bgModelEnabled?: boolean; bgModelFile?: string } | null
+      const hasOverrides = body?.enabledModules || body?.relayEnabled !== undefined || body?.whisperBackend || body?.releaseTrack || body?.bgModelEnabled !== undefined || body?.bgModelFile !== undefined
       const overrides = hasOverrides
-        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperBackend: body?.whisperBackend, releaseTrack: body?.releaseTrack }
+        ? { enabledModules: body?.enabledModules, relayEnabled: body?.relayEnabled, relayUrl: body?.relayUrl, whisperBackend: body?.whisperBackend, releaseTrack: body?.releaseTrack, bgModelEnabled: body?.bgModelEnabled, bgModelFile: body?.bgModelFile }
         : undefined
 
       // Detect if the release track is changing (requires pull + force-recreate)

@@ -88,6 +88,14 @@ export function reconstructWizardState(
         ? 'vllm'
         : 'llama-cpp'
 
+  // Background-model sidecar. BG_MODEL_ENABLED is authoritative; if absent,
+  // infer from a set BG_MODEL_FILE (same never-silently-drop-the-sidecar
+  // contract as SERVING_TYPE above).
+  const bgModelEnabled =
+    existingEnv.BG_MODEL_ENABLED === 'true' ||
+    (existingEnv.BG_MODEL_ENABLED === undefined && !!existingEnv.BG_MODEL_FILE)
+  const bgModelFile = existingEnv.BG_MODEL_FILE || ''
+
   // Image pinning: opt-in only. Missing key = floating tags (this is also
   // the migration path — pre-existing pinned installs heal to floating tags
   // on their next regen, ending the stale-pin stranding class).
@@ -137,6 +145,8 @@ export function reconstructWizardState(
     ttsBackend,
     pinImages,
     servingType,
+    bgModelEnabled,
+    bgModelFile,
     llmInterface: existingEnv.LLM_INTERFACE_SEED ?? '',
     deploymentTarget: 'standard',
     releaseTrack: existingEnv.JARVIS_IMAGE_TAG === 'dev' ? 'dev' as const : 'stable' as const,

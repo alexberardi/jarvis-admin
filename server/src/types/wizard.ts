@@ -63,6 +63,15 @@ export interface WizardState {
    * (NVIDIA/Linux only) parametrized by the LIVE_MODEL_* env vars.
    */
   servingType?: ServingType
+  /**
+   * Background-model sidecar (llama-server-bg) for the proxy's BACKGROUND slot.
+   * When true, the generator emits a second llama.cpp sidecar (NVIDIA/Linux only)
+   * parametrized by the BG_MODEL_* env vars, launched with --jinja so reasoning
+   * models keep their embedded chat template. Durable key: BG_MODEL_ENABLED.
+   */
+  bgModelEnabled?: boolean
+  /** GGUF filename (relative to the models dir) served by llama-server-bg. */
+  bgModelFile?: string
 
   // New: deployment mode
   deploymentMode: 'local' | 'remote-llm'

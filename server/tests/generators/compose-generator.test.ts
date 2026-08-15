@@ -1077,3 +1077,43 @@ describe('compose-generator: llama-server sidecar (servingType)', () => {
     expect(out).not.toContain('container_name: llama-server')
   })
 })
+
+describe('compose-generator: llama-server-bg sidecar (bgModelEnabled)', () => {
+  const registry = loadRegistry()
+
+  it('emits the background sidecar with --jinja (no chatml override) when enabled on linux', () => {
+    const out = generateCompose(makeState({ bgModelEnabled: true, platform: 'linux' }), registry)
+    expect(out).toContain('container_name: llama-server-bg')
+    expect(out).toContain('${LLAMA_SERVER_BG_PORT:-7798}:8080')
+    expect(out).toContain('/models/${BG_MODEL_FILE}')
+    expect(out).toContain('${BG_MODEL_CTX:-32768}')
+    expect(out).toContain('${BG_MODEL_NP:-2}')
+    // --jinja renders the model's EMBEDDED template (reasoning-effort default +
+    // per-request enable_thinking). A chatml override would discard it — assert
+    // the bg block carries --jinja and NO --chat-template.
+    const block = out.slice(out.indexOf('  llama-server-bg:'))
+    const service = block.split(/\n {2}\S/)[0]
+    expect(service).toContain('"--jinja"')
+    expect(service).not.toContain('--chat-template')
+    expect(service).not.toContain('JARVIS_APP_ID')
+  })
+
+  it('coexists with the live llama-server sidecar (both blocks emitted)', () => {
+    const out = generateCompose(
+      makeState({ servingType: 'llama-server', bgModelEnabled: true, platform: 'linux' }),
+      registry,
+    )
+    expect(out).toContain('container_name: llama-server\n')
+    expect(out).toContain('container_name: llama-server-bg')
+  })
+
+  it('does NOT emit the background sidecar by default', () => {
+    const out = generateCompose(makeState({ platform: 'linux' }), registry)
+    expect(out).not.toContain('llama-server-bg')
+  })
+
+  it('does NOT emit the background sidecar on macOS even when enabled', () => {
+    const out = generateCompose(makeState({ bgModelEnabled: true, platform: 'darwin' }), registry)
+    expect(out).not.toContain('llama-server-bg')
+  })
+})

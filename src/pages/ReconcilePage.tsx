@@ -22,6 +22,9 @@ interface ReconcileOptions {
   ttsBackend?: 'cpu' | 'cuda'
   pinImages?: boolean
   releaseTrack: 'stable' | 'dev'
+  bgModelEnabled?: boolean
+  bgModelFile?: string
+  bgModelSupported?: boolean
 }
 
 interface LogLine {
@@ -54,6 +57,10 @@ export default function ReconcilePage() {
   const [ttsBackend, setTtsBackend] = useState<'cpu' | 'cuda'>('cpu')
   const [pinImages, setPinImages] = useState(false)
   const [releaseTrack, setReleaseTrack] = useState<'stable' | 'dev'>('stable')
+  const [bgModelEnabled, setBgModelEnabled] = useState(false)
+  const [bgModelFile, setBgModelFile] = useState('')
+  const [bgModelSupported, setBgModelSupported] = useState(true)
+  const [installedModels, setInstalledModels] = useState<string[]>([])
 
   // Download-instead-of-apply: regenerated files the operator swaps in by hand.
   const [regenFiles, setRegenFiles] = useState<{ compose: string; env: string; initDb: string } | null>(null)
@@ -88,6 +95,22 @@ export default function ReconcilePage() {
         setTtsBackend(data.ttsBackend ?? 'cpu')
         setPinImages(data.pinImages ?? false)
         setReleaseTrack(data.releaseTrack ?? 'stable')
+        setBgModelEnabled(data.bgModelEnabled ?? false)
+        setBgModelFile(data.bgModelFile ?? '')
+        setBgModelSupported(data.bgModelSupported ?? true)
+        // Installed GGUFs feed the background-model picker; a failure here just
+        // leaves the datalist empty (free-text input still works).
+        try {
+          const modelsRes = await fetch('/api/models', {
+            headers: { Authorization: `Bearer ${token}` },
+          })
+          if (modelsRes.ok) {
+            const models: { name: string }[] = await modelsRes.json()
+            setInstalledModels(models.map((m) => m.name).filter((n) => n.endsWith('.gguf')))
+          }
+        } catch {
+          // non-fatal
+        }
         setPhase('options')
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load options')
@@ -117,7 +140,7 @@ export default function ReconcilePage() {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, ttsBackend, pinImages, releaseTrack }),
+        body: JSON.stringify({ enabledModules, relayEnabled, relayUrl, whisperModelPath, whisperBackend, ttsBackend, pinImages, releaseTrack, bgModelEnabled, bgModelFile }),
       })
 
       if (!res.ok || !res.body) {
@@ -171,6 +194,8 @@ export default function ReconcilePage() {
       ttsBackend,
       pinImages,
       releaseTrack,
+      bgModelEnabled,
+      bgModelFile,
     }
   }
 
@@ -388,6 +413,60 @@ export default function ReconcilePage() {
               </div>
             </div>
           )}
+
+          <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
+            <h2 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Background model</h2>
+            <div className="px-3">
+              <label className="flex items-start gap-3 text-sm">
+                <input
+                  type="checkbox"
+                  checked={bgModelEnabled}
+                  disabled={!bgModelSupported}
+                  onChange={(e) => setBgModelEnabled(e.target.checked)}
+                  className="mt-0.5"
+                  data-testid="bg-model-checkbox"
+                />
+                <span>
+                  <span className="font-medium text-[var(--color-text)]">Run a second model for background work</span>
+                  <span className="mt-1 block text-xs text-[var(--color-text-muted)]">
+                    Serves memory extraction, errand planning, and other background jobs from a
+                    dedicated model so reasoning never slows down live voice. NVIDIA/Linux only —
+                    needs enough free VRAM alongside the live model.
+                  </span>
+                </span>
+              </label>
+              {!bgModelSupported && (
+                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                  Not available on this host (requires Linux with an NVIDIA GPU).
+                </p>
+              )}
+              {bgModelEnabled && (
+                <div className="mt-3">
+                  <label className="text-xs font-medium text-[var(--color-text-muted)]">Model file</label>
+                  <input
+                    type="text"
+                    value={bgModelFile}
+                    onChange={(e) => setBgModelFile(e.target.value)}
+                    list="bg-model-files"
+                    placeholder="Qwen3.8-27B-UD-Q3_K_XL.gguf"
+                    className="mt-1 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-1.5 text-sm font-mono text-[var(--color-text)] placeholder:text-[var(--color-text-muted)]"
+                    data-testid="bg-model-file-input"
+                  />
+                  <datalist id="bg-model-files">
+                    {installedModels.map((m) => (
+                      <option key={m} value={m} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                    A GGUF from your models directory — download one on the{' '}
+                    <a href="/models" className="underline">Models</a> page first. After syncing,
+                    point the LLM proxy&apos;s background slot at it (model.background.backend=REST,
+                    rest_url http://llama-server-bg:8080) and reload the model service.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
           <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
             <label className="flex items-start gap-3 text-sm">

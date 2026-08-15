@@ -123,6 +123,12 @@ export function buildUpgradedComposeFiles(
   if (overrides?.releaseTrack) {
     state.releaseTrack = overrides.releaseTrack
   }
+  if (overrides?.bgModelEnabled !== undefined) {
+    state.bgModelEnabled = overrides.bgModelEnabled
+  }
+  if (overrides?.bgModelFile !== undefined) {
+    state.bgModelFile = overrides.bgModelFile
+  }
   if (hostComposePath) {
     state.hostComposePath = hostComposePath
   }
@@ -154,6 +160,17 @@ export function buildUpgradedComposeFiles(
   // regens, and the reconstructed track round-trips from this same key.
   if (overrides?.releaseTrack) {
     env = upsertEnvVar(env, 'JARVIS_IMAGE_TAG', overrides.releaseTrack === 'dev' ? 'dev' : 'latest')
+  }
+
+  // Background-sidecar toggles from the reconcile screen must win over
+  // mergeEnv's "existing value wins" rule (same reasoning as JARVIS_IMAGE_TAG):
+  // BG_MODEL_ENABLED/BG_MODEL_FILE round-trip through state-reconstructor, so
+  // without the explicit upsert a UI change would never stick.
+  if (overrides?.bgModelEnabled !== undefined) {
+    env = upsertEnvVar(env, 'BG_MODEL_ENABLED', String(overrides.bgModelEnabled))
+  }
+  if (overrides?.bgModelFile !== undefined) {
+    env = upsertEnvVar(env, 'BG_MODEL_FILE', overrides.bgModelFile)
   }
 
   // A whisper-model change from the reconcile options screen must win over
@@ -241,6 +258,14 @@ export interface UpgradeOverrides {
    * flag, not user config, so an explicit value wins over env preservation.
    */
   mqttAllowAnon?: boolean
+  /**
+   * Enable/disable the background-model sidecar (llama-server-bg). Undefined
+   * leaves the reconstructed state untouched. Explicit values win over env
+   * preservation (same rule as releaseTrack).
+   */
+  bgModelEnabled?: boolean
+  /** GGUF filename for llama-server-bg (relative to the models dir). */
+  bgModelFile?: string
 }
 
 export async function upgradeCompose(
