@@ -165,6 +165,10 @@ describe('compose-generator', () => {
       expect(output).toContain('ipc: host')
       expect(output).toContain('shm_size: "8gb"')
       expect(output).toContain('.models')
+      // llm-proxy (and its worker) KEEP count: all — their in-process GPU path
+      // is unused when the llama sidecars serve inference, but other
+      // deployments rely on it. Only whisper + the sidecars are device-pinned.
+      expect(output).toContain('count: all')
     })
 
     it('adds vulkan device passthrough for AMD GPU', () => {
@@ -302,10 +306,15 @@ describe('compose-generator', () => {
       expect(w).not.toContain('driver: nvidia')
     })
 
-    it('cuda: -cuda image + nvidia deploy block', () => {
+    it('cuda: -cuda image + nvidia deploy block pinned to ONE gpu (WHISPER_GPU_DEVICE)', () => {
+      // count: all let CUDA spread work across both cards — whisper is pinned
+      // to GPU0 (with the bg sidecar), away from live voice on GPU1
+      // (prod 2026-08-15 layer-split contention).
       const w = whisperBlock(generateCompose(whisperBackendState('cuda'), registry))
       expect(w).toContain(imgLine(WHISPER_IMG, '-cuda'))
       expect(w).toContain('driver: nvidia')
+      expect(w).toContain("device_ids: ['${WHISPER_GPU_DEVICE:-0}']")
+      expect(w).not.toContain('count: all')
     })
 
     it('vulkan: -vulkan image + /dev/dri + render group', () => {
@@ -1057,13 +1066,21 @@ describe('compose-generator: llama-server sidecar (servingType)', () => {
     // Env-parametrized command so Phase 2 can retarget the live model via .env (no YAML edit)
     expect(out).toContain('/models/${LIVE_MODEL_FILE}')
     expect(out).toContain('${LIVE_MODEL_CHAT_TEMPLATE:-chatml}')
-    expect(out).toContain('${LIVE_MODEL_CTX:-32768}')
+    // ctx defaults to 24576 (was 32768): the model must fit a SINGLE card once
+    // pinned — max observed prod prompt is 16.6k tokens, so 24k has headroom.
+    expect(out).toContain('${LIVE_MODEL_CTX:-24576}')
     // Preserve prod's exact command for a zero-gap migration: -ctxcp / -cms
     expect(out).toContain('${LIVE_MODEL_CTXCP:-32}')
     expect(out).toContain('${LIVE_MODEL_CMS:-256}')
-    // It is NOT a Jarvis app: no app-to-app creds injected into the sidecar block.
     const block = out.slice(out.indexOf('  llama-server:'))
-    expect(block.split(/\n {2}\S/)[0]).not.toContain('JARVIS_APP_ID')
+    const service = block.split(/\n {2}\S/)[0]!
+    // Pinned to ONE gpu (default GPU1, with kokoro): count: all layer-split the
+    // model across both 3090s → cross-GPU sync on every live-voice token
+    // (prod 2026-08-15).
+    expect(service).toContain("device_ids: ['${LIVE_MODEL_GPU_DEVICE:-1}']")
+    expect(service).not.toContain('count: all')
+    // It is NOT a Jarvis app: no app-to-app creds injected into the sidecar block.
+    expect(service).not.toContain('JARVIS_APP_ID')
   })
 
   it('does NOT emit the sidecar for the default (llama-cpp) serving type', () => {
@@ -1092,10 +1109,14 @@ describe('compose-generator: llama-server-bg sidecar (bgModelEnabled)', () => {
     // per-request enable_thinking). A chatml override would discard it — assert
     // the bg block carries --jinja and NO --chat-template.
     const block = out.slice(out.indexOf('  llama-server-bg:'))
-    const service = block.split(/\n {2}\S/)[0]
+    const service = block.split(/\n {2}\S/)[0]!
     expect(service).toContain('"--jinja"')
     expect(service).not.toContain('--chat-template')
     expect(service).not.toContain('JARVIS_APP_ID')
+    // Pinned to ONE gpu (default GPU0, with whisper) so background thinking
+    // never contends with live voice on GPU1 (prod 2026-08-15).
+    expect(service).toContain("device_ids: ['${BG_MODEL_GPU_DEVICE:-0}']")
+    expect(service).not.toContain('count: all')
   })
 
   it('coexists with the live llama-server sidecar (both blocks emitted)', () => {
