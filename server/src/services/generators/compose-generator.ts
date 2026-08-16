@@ -412,7 +412,16 @@ function getServiceImage(
   return pinnedOrTaggedImage(baseImage, track, suffix, digests, state.pinImages ?? false)
 }
 
-function pushGpuDevices(lines: string[], gpuType: string): void {
+/**
+ * Emit GPU runtime config. `deviceIds` (nvidia only) pins the reservation to a
+ * single GPU via `device_ids: ['<expr>']` — pass a compose interpolation like
+ * `${WHISPER_GPU_DEVICE:-0}` so operators can re-pin from .env. Omit it to
+ * reserve every GPU (`count: all`). Pinning matters on multi-GPU hosts: with
+ * `count: all` the CUDA runtime layer-splits models across cards, and the
+ * cross-GPU sync + contention costs real latency (prod 2026-08-15: both llama
+ * sidecars were split across both 3090s).
+ */
+function pushGpuDevices(lines: string[], gpuType: string, deviceIds?: string): void {
   if (gpuType === 'nvidia') {
     lines.push('    ipc: host')
     lines.push('    shm_size: "8gb"')
@@ -421,7 +430,11 @@ function pushGpuDevices(lines: string[], gpuType: string): void {
     lines.push('        reservations:')
     lines.push('          devices:')
     lines.push('            - driver: nvidia')
-    lines.push('              count: all')
+    if (deviceIds) {
+      lines.push(`              device_ids: ['${deviceIds}']`)
+    } else {
+      lines.push('              count: all')
+    }
     lines.push('              capabilities: [gpu]')
   } else if (gpuType === 'amd' || gpuType === 'amd-rocm') {
     lines.push('    devices:')
@@ -464,9 +477,13 @@ function pushGpuConfig(
 
   // Whisper: device passthrough follows the EXPLICIT whisperBackend selection
   // (cpu default), independent of the auto-detected LLM gpuType. cpu -> nothing.
+  // Pinned to ONE gpu (WHISPER_GPU_DEVICE, default 0) — shares GPU0 with the
+  // background llama sidecar on prod, away from live voice on GPU1.
   if (service.id === 'jarvis-whisper-api') {
     const wb = state.whisperBackend ?? 'cpu'
-    if (wb !== 'cpu') pushGpuDevices(lines, WHISPER_BACKEND_GPU[wb] ?? 'none')
+    if (wb !== 'cpu') {
+      pushGpuDevices(lines, WHISPER_BACKEND_GPU[wb] ?? 'none', '${WHISPER_GPU_DEVICE:-0}')
+    }
     return
   }
 
@@ -523,7 +540,10 @@ function generateLlamaServerBlock(): string[] {
   lines.push('      - "-ngl"')
   lines.push('      - "${LIVE_MODEL_NGL:-99}"')
   lines.push('      - "-c"')
-  lines.push('      - "${LIVE_MODEL_CTX:-32768}"')
+  // 24576 (not 32768): the live model must fit a SINGLE card once pinned —
+  // max observed prod prompt is 16.6k tokens, so 24k leaves headroom without
+  // spilling KV cache past one 3090's VRAM.
+  lines.push('      - "${LIVE_MODEL_CTX:-24576}"')
   lines.push('      - "-ctxcp"')
   lines.push('      - "${LIVE_MODEL_CTXCP:-32}"')
   lines.push('      - "-cms"')
@@ -532,8 +552,12 @@ function generateLlamaServerBlock(): string[] {
   lines.push('      - "0.0.0.0"')
   lines.push('      - "--port"')
   lines.push('      - "8080"')
-  // NVIDIA reservation + ipc/shm (server-cuda needs a GPU).
-  pushGpuDevices(lines, 'nvidia')
+  // NVIDIA reservation + ipc/shm (server-cuda needs a GPU). Pinned to ONE gpu
+  // (LIVE_MODEL_GPU_DEVICE, default 1): `count: all` let CUDA layer-split the
+  // model across both cards → cross-GPU sync + contention on every live-voice
+  // token (prod 2026-08-15). Live shares GPU1 with kokoro TTS, away from
+  // whisper + the background sidecar on GPU0.
+  pushGpuDevices(lines, 'nvidia', '${LIVE_MODEL_GPU_DEVICE:-1}')
   lines.push('    networks:')
   lines.push('      - jarvis')
   lines.push('    restart: unless-stopped')
@@ -579,8 +603,10 @@ function generateLlamaServerBgBlock(): string[] {
   lines.push('      - "0.0.0.0"')
   lines.push('      - "--port"')
   lines.push('      - "8080"')
-  // NVIDIA reservation + ipc/shm (server-cuda needs a GPU).
-  pushGpuDevices(lines, 'nvidia')
+  // NVIDIA reservation + ipc/shm (server-cuda needs a GPU). Pinned to ONE gpu
+  // (BG_MODEL_GPU_DEVICE, default 0) — background work shares GPU0 with
+  // whisper, keeping GPU1 free for live voice (see generateLlamaServerBlock).
+  pushGpuDevices(lines, 'nvidia', '${BG_MODEL_GPU_DEVICE:-0}')
   lines.push('    networks:')
   lines.push('      - jarvis')
   lines.push('    restart: unless-stopped')

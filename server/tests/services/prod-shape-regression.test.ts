@@ -85,10 +85,14 @@ function block(compose: string, id: string): string {
 describe('prod-shape regression: a reconcile must preserve the GPU/broker deployment', () => {
   const { compose, env } = regenerate()
 
-  it('whisper keeps its cuda variant and GPU passthrough (floating tag by default)', () => {
+  it('whisper keeps its cuda variant and single-GPU passthrough (floating tag by default)', () => {
     const w = block(compose, 'jarvis-whisper-api')
     expect(w).toContain('jarvis-whisper-api:${JARVIS_IMAGE_TAG:-latest}-cuda')
     expect(w).toContain('driver: nvidia')
+    // Pinned to ONE gpu (default GPU0, shared with the bg sidecar): count: all
+    // let CUDA contend with live voice on GPU1 (prod 2026-08-15).
+    expect(w).toContain("device_ids: ['${WHISPER_GPU_DEVICE:-0}']")
+    expect(w).not.toContain('count: all')
   })
 
   it('tts keeps single-GPU passthrough (never count:all) + kokoro device fallback', () => {
@@ -106,6 +110,11 @@ describe('prod-shape regression: a reconcile must preserve the GPU/broker deploy
     expect(api).toContain('driver: nvidia')
     expect(worker).toContain('driver: nvidia')
     expect(api).toContain('serve.sh')
+    // llm-proxy stays on count: all — its in-process GPU path is unused on prod
+    // (sidecars serve inference) but other deployments rely on it. Only
+    // whisper + the llama sidecars are device-pinned.
+    expect(api).toContain('count: all')
+    expect(worker).toContain('count: all')
   })
 
   it('floating tags by default: no @sha256 pins anywhere (2026-07-06 decision)', () => {
@@ -159,6 +168,10 @@ describe('regen-safety: a reconcile must PRESERVE the llama-server sidecar (over
     expect(compose).toContain('container_name: llama-server')
     expect(compose).toContain('image: ghcr.io/ggml-org/llama.cpp:server-cuda')
     expect(compose).toContain('/models/${LIVE_MODEL_FILE}')
+    // The regen must also preserve prod's GPU pinning + single-card ctx
+    // (2026-08-15 hand-edit): live on GPU1, 24k ctx to fit one 3090.
+    expect(compose).toContain("device_ids: ['${LIVE_MODEL_GPU_DEVICE:-1}']")
+    expect(compose).toContain('${LIVE_MODEL_CTX:-24576}')
   })
 
   it('infers llama-server from LIVE_MODEL_FILE even if SERVING_TYPE is absent (defensive)', () => {
