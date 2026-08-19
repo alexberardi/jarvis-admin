@@ -1060,7 +1060,11 @@ describe('compose-generator: llama-server sidecar (servingType)', () => {
     const out = generateCompose(makeState({ servingType: 'llama-server', platform: 'linux' }), registry)
     // First-class generated service — survives a regen (the docker-compose.override.yml footgun fix)
     expect(out).toContain('container_name: llama-server')
-    expect(out).toContain('image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+    // Pinned to a DIGEST, never the floating :server-cuda tag — a `docker compose
+    // pull` must not silently swap the inference engine out from under prod
+    // (prod & dev had drifted to different builds before this pin).
+    expect(out).toContain('image: ghcr.io/ggml-org/llama.cpp@sha256:')
+    expect(out).not.toContain('llama.cpp:server-cuda')
     expect(out).toContain('${LLAMA_SERVER_PORT:-7799}:8080')
     expect(out).toContain('${MODELS_DIR:-./.models}:/models:ro')
     // Env-parametrized command so Phase 2 can retarget the live model via .env (no YAML edit)
@@ -1086,7 +1090,9 @@ describe('compose-generator: llama-server sidecar (servingType)', () => {
   it('does NOT emit the sidecar for the default (llama-cpp) serving type', () => {
     const out = generateCompose(makeState(), registry)
     expect(out).not.toContain('container_name: llama-server')
-    expect(out).not.toContain('llama.cpp:server-cuda')
+    // Repo-level absence (the image is digest-pinned now, so :server-cuda alone
+    // would no longer catch a wrongly-emitted sidecar).
+    expect(out).not.toContain('ghcr.io/ggml-org/llama.cpp')
   })
 
   it('does NOT emit the sidecar on macOS even when servingType=llama-server', () => {
