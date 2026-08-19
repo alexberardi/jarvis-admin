@@ -166,7 +166,10 @@ describe('regen-safety: a reconcile must PRESERVE the llama-server sidecar (over
     expect(state.servingType).toBe('llama-server')
     const compose = generateCompose(state, registry, DIGESTS)
     expect(compose).toContain('container_name: llama-server')
-    expect(compose).toContain('image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+    // Digest-pinned, never the floating :server-cuda tag (see LLAMA_CPP_IMAGE) —
+    // a `compose pull` must not swap the live-inference engine out from under prod.
+    expect(compose).toContain('image: ghcr.io/ggml-org/llama.cpp@sha256:')
+    expect(compose).not.toContain('llama.cpp:server-cuda')
     expect(compose).toContain('/models/${LIVE_MODEL_FILE}')
     // The regen must also preserve prod's GPU pinning + single-card ctx
     // (2026-08-15 hand-edit): live on GPU1, 24k ctx to fit one 3090.

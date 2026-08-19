@@ -506,6 +506,16 @@ function pushGpuConfig(
   }
 }
 
+// Pinned llama.cpp build for the model sidecars. `:server-cuda` is a FLOATING tag:
+// a `docker compose pull` silently swaps the inference engine, and prod & dev had
+// already drifted onto different builds (same failure shape as the whisper.cpp
+// unpinned-build incident). Third-party images bypass the digest-pin mechanism
+// (getExportImage / PIN_IMAGES), so pin it here explicitly — always, regardless of
+// PIN_IMAGES. Frozen 2026-08-19 to prod's live, known-good build; bump this digest
+// deliberately after testing a new llama.cpp server-cuda build.
+const LLAMA_CPP_IMAGE =
+  'ghcr.io/ggml-org/llama.cpp@sha256:4d27e4014eb4baec84911d97112a73d6d47885341bf13c4abbeed70b875eed05'
+
 /**
  * Standalone llama.cpp `llama-server` sidecar that serves the LIVE voice model
  * over REST (the proxy routes model.live.backend=REST → http://llama-server:8080).
@@ -527,7 +537,7 @@ function generateLlamaServerBlock(): string[] {
   const lines: string[] = []
   lines.push('  llama-server:')
   lines.push('    container_name: llama-server')
-  lines.push('    image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+  lines.push(`    image: ${LLAMA_CPP_IMAGE}`)
   lines.push('    ports:')
   lines.push('      - "${LLAMA_SERVER_PORT:-7799}:8080"')
   lines.push('    volumes:')
@@ -584,7 +594,7 @@ function generateLlamaServerBgBlock(): string[] {
   const lines: string[] = []
   lines.push('  llama-server-bg:')
   lines.push('    container_name: llama-server-bg')
-  lines.push('    image: ghcr.io/ggml-org/llama.cpp:server-cuda')
+  lines.push(`    image: ${LLAMA_CPP_IMAGE}`)
   lines.push('    ports:')
   lines.push('      - "${LLAMA_SERVER_BG_PORT:-7798}:8080"')
   lines.push('    volumes:')
