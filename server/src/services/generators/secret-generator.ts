@@ -1,10 +1,43 @@
-import { randomBytes } from 'node:crypto'
+import { generateKeyPairSync, randomBytes } from 'node:crypto'
 
 /**
  * Generates a cryptographically secure hex string using Node.js crypto.
  */
 export function generateHexSecret(byteLength: number = 32): string {
   return randomBytes(byteLength).toString('hex')
+}
+
+/**
+ * RSA keypair for jarvis-auth's RS256 signing, returned as a base64-encoded
+ * PKCS#8 PEM.
+ *
+ * Base64 because a raw PEM is multi-line and .env / docker-compose env blocks
+ * mangle those. Only the private half is emitted: jarvis-auth derives the public
+ * key from it and publishes it at /auth/public-key, so the two can never drift.
+ *
+ * 2048-bit: the tokens live 30 minutes and the key is a local-network signing
+ * key, so 4096 buys nothing but slower installs on small nodes.
+ */
+export function generateRsaPrivateKeyB64(): string {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  })
+  return Buffer.from(privateKey).toString('base64')
+}
+
+/**
+ * Secrets that are NOT flat hex strings and need their own generator. Kept in
+ * SECRET_KEYS as well, so the upgrade paths (env-merger, state-reconstructor)
+ * preserve them across an upgrade — regenerating this one would invalidate every
+ * RS256 token in the fleet and strand verifiers that cache the public key.
+ */
+export const KEYPAIR_SECRET_KEYS: readonly string[] = ['AUTH_PRIVATE_KEY']
+
+export function generateSecretFor(key: string): string {
+  if (KEYPAIR_SECRET_KEYS.includes(key)) return generateRsaPrivateKeyB64()
+  return generateHexSecret(key.includes('PASSWORD') ? 16 : 32)
 }
 
 export const SECRET_KEYS = [
@@ -37,6 +70,9 @@ export const SECRET_KEYS = [
   // -> passive memory extraction silently dead 2026-06-17..2026-08-07. Same
   // treatment as MODEL_SERVICE_TOKEN: no 'PASSWORD' in the name -> 32 bytes / 64 hex.
   'JARVIS_ADAPTER_CALLBACK_TOKEN',
+  // RSA private key for jarvis-auth's RS256 signing (base64 PKCS#8 PEM, NOT hex
+  // — see generateSecretFor). Listed here so the upgrade paths preserve it.
+  'AUTH_PRIVATE_KEY',
 ] as const
 
 export type SecretKey = (typeof SECRET_KEYS)[number]
@@ -48,8 +84,7 @@ export type SecretKey = (typeof SECRET_KEYS)[number]
 export function generateAllSecrets(): Record<SecretKey, string> {
   const secrets: Record<string, string> = {}
   for (const key of SECRET_KEYS) {
-    const byteLength = key.includes('PASSWORD') ? 16 : 32
-    secrets[key] = generateHexSecret(byteLength)
+    secrets[key] = generateSecretFor(key)
   }
   return secrets as Record<SecretKey, string>
 }
