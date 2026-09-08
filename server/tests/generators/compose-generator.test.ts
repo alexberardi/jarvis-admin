@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import { parse as parseYaml } from 'yaml'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { generateCompose, getAllEnabledServices, getComposeServices, getComposeWorkerIds, pinnedOrTaggedImage } from '../../src/services/generators/compose-generator.js'
@@ -1142,5 +1143,71 @@ describe('compose-generator: llama-server-bg sidecar (bgModelEnabled)', () => {
   it('does NOT emit the background sidecar on macOS even when enabled', () => {
     const out = generateCompose(makeState({ bgModelEnabled: true, platform: 'darwin' }), registry)
     expect(out).not.toContain('llama-server-bg')
+  })
+})
+
+describe('recipes and its object store', () => {
+  const registry = loadRegistry()
+
+  // The bug this exists for: jarvis-installer shipped MinIO in ONE of its two
+  // generators, so the other emitted `depends_on: minio` against infrastructure
+  // it never wrote, and `docker compose config` rejected the whole project.
+  // Every unit test passed — they all drove the other generator. This registry
+  // and this generator are a THIRD path over the same data.
+  const sync = () =>
+    generateCompose(
+      makeState({ enabledModules: ['jarvis-recipes-server', 'jarvis-ocr-service'] }),
+      registry,
+    )
+
+  it('emits the object store the recipes services depend on', () => {
+    expect(sync()).toContain('  minio:')
+  })
+
+  it('creates the bucket recipes uploads to', () => {
+    // MinIO does not create one on first write: without this the store runs
+    // perfectly, empty, and every photo import fails on a config-shaped error.
+    expect(sync()).toContain('mc mb --ignore-existing local/jarvis-recipes')
+  })
+
+  it('waits for MinIO rather than assuming it is up', () => {
+    // depends_on only waits for the container to START; mc gets connection
+    // refused on the first attempt.
+    expect(sync()).toMatch(/until mc alias set local[\s\S]*?sleep 2/)
+  })
+
+  it('quotes the credentials so a password with spaces survives', () => {
+    expect(sync()).toContain('"$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"')
+  })
+
+  it('runs the queue workers alongside the APIs', () => {
+    const output = sync()
+    expect(output).toContain('jarvis-recipes-worker:')
+    expect(output).toContain('jarvis-ocr-worker:')
+  })
+
+  it('gives the OCR worker a queue recipes actually publishes to', () => {
+    // A queue nobody consumes does not error. The job sits there and the app
+    // spins until it times out.
+    const output = sync()
+    expect(output).toContain('OCR_QUEUE_NAME: jarvis.ocr.jobs.linux')
+    expect(output).toContain('OCR_QUEUES: jarvis.ocr.jobs.linux')
+  })
+
+  it('never depends on a service it did not emit', () => {
+    // depends_on is either a list of names or a map keyed by them, so it is
+    // typed to what compose actually allows rather than to `any`.
+    type ComposeService = { depends_on?: string[] | Record<string, unknown> }
+    const doc = parseYaml(sync()) as { services: Record<string, ComposeService> }
+    const defined = new Set(Object.keys(doc.services))
+
+    for (const [name, service] of Object.entries(doc.services)) {
+      const deps = Array.isArray(service.depends_on)
+        ? service.depends_on
+        : Object.keys(service.depends_on ?? {})
+      for (const dep of deps) {
+        expect(defined, `${name} depends on undefined service "${dep}"`).toContain(dep)
+      }
+    }
   })
 })

@@ -47,6 +47,15 @@ export interface ServiceDefinition {
   database?: string
   /** DATABASE_URL driver prefix (default: "postgresql://") */
   dbDriverPrefix?: string
+  /**
+   * Object-store bucket this service needs, created at deploy time by the
+   * `minio-init` one-shot.
+   *
+   * MinIO does NOT create buckets on demand: the first upload fails with a
+   * config-shaped error while the server sits there running perfectly, which
+   * reads as a broken build rather than a missing bucket.
+   */
+  objectStore?: ObjectStoreRequirement
   /** Selectable model options (e.g., whisper model sizes) */
   modelOptions?: ModelOption[]
   /** LLM interface/prompt provider options */
@@ -102,6 +111,23 @@ export interface InfrastructureDefinition {
   port: number
   envVars: EnvVar[]
   volumes: string[]
+  /**
+   * A second published port, for infrastructure with a web console of its own
+   * (MinIO's is on 9001). Bound like the data port.
+   */
+  consolePort?: number
+  /**
+   * Launch command, when the image needs one. Was an `if (infra.id === ...)`
+   * branch in the generator for redis; declaring it here means the next piece
+   * of infrastructure needing one does not add a third branch.
+   */
+  command?: string
+}
+
+/** An object-store bucket a service needs to exist before it starts. */
+export interface ObjectStoreRequirement {
+  /** Bucket name, created at deploy time. */
+  bucket: string
 }
 
 export interface ServiceRegistry {

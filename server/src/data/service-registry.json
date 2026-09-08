@@ -218,7 +218,7 @@
         },
         {
           "name": "JARVIS_ADAPTER_CALLBACK_TOKEN",
-          "description": "CC-internal auth for async-job result callbacks (memory extraction, deep research, characterization synthesis, adapter training). CC attaches it at enqueue and validates it at the /…/callback endpoints (fail-closed); unset -> every callback 503s and nothing persists (save_memory, transcript mark_processed, inbox delivery).",
+          "description": "CC-internal auth for async-job result callbacks (memory extraction, deep research, characterization synthesis, adapter training). CC attaches it at enqueue and validates it at the /\u2026/callback endpoints (fail-closed); unset -> every callback 503s and nothing persists (save_memory, transcript mark_processed, inbox delivery).",
           "required": true,
           "secret": true,
           "secretRef": "JARVIS_ADAPTER_CALLBACK_TOKEN"
@@ -489,7 +489,7 @@
     {
       "id": "jarvis-osx-api",
       "name": "macOS Bridge",
-      "description": "iMessage, Contacts, and Shortcuts bridge — macOS native only, runs as a LaunchAgent, never in Docker",
+      "description": "iMessage, Contacts, and Shortcuts bridge \u2014 macOS native only, runs as a LaunchAgent, never in Docker",
       "category": "optional",
       "port": 7723,
       "image": "",
@@ -540,7 +540,7 @@
     {
       "id": "jarvis-phone-gateway",
       "name": "Phone Calls",
-      "description": "AI phone-call gateway — places user-confirmed outbound calls (reservations, orders) over Twilio using the local whisper/LLM/TTS pipeline",
+      "description": "AI phone-call gateway \u2014 places user-confirmed outbound calls (reservations, orders) over Twilio using the local whisper/LLM/TTS pipeline",
       "category": "optional",
       "port": 7713,
       "image": "ghcr.io/alexberardi/jarvis-phone-gateway:latest",
@@ -565,14 +565,14 @@
         },
         {
           "name": "TWILIO_ACCOUNT_SID",
-          "description": "Twilio account SID (gateway-only secret — paste into .env; never stored in the settings DB)",
+          "description": "Twilio account SID (gateway-only secret \u2014 paste into .env; never stored in the settings DB)",
           "required": true,
           "secret": true,
           "default": "${TWILIO_ACCOUNT_SID:-}"
         },
         {
           "name": "TWILIO_AUTH_TOKEN",
-          "description": "Twilio auth token (also the media-stream signature verification key — paste into .env)",
+          "description": "Twilio auth token (also the media-stream signature verification key \u2014 paste into .env)",
           "required": true,
           "secret": true,
           "default": "${TWILIO_AUTH_TOKEN:-}"
@@ -601,6 +601,175 @@
       "healthCheck": "/api",
       "dependsOn": [],
       "envVars": []
+    },
+    {
+      "id": "jarvis-recipes-server",
+      "name": "Recipes",
+      "description": "Recipe box, meal planning and shopping lists for a household. Imports recipes from a URL or from photos of a page.",
+      "category": "optional",
+      "port": 7030,
+      "containerPort": 7030,
+      "image": "ghcr.io/alexberardi/jarvis-recipes-server:latest",
+      "healthCheck": "/health",
+      "migrate": true,
+      "dependsOn": [
+        "postgres",
+        "redis",
+        "minio",
+        "jarvis-auth",
+        "jarvis-config-service"
+      ],
+      "database": "jarvis_recipes",
+      "dbDriverPrefix": "postgresql+psycopg2://",
+      "objectStore": {
+        "bucket": "jarvis-recipes"
+      },
+      "envVars": [
+        {
+          "name": "DATABASE_URL",
+          "description": "PostgreSQL connection string",
+          "required": true
+        },
+        {
+          "name": "AUTH_SECRET_KEY",
+          "description": "JWT signing key (must match jarvis-auth)",
+          "required": true,
+          "secret": true,
+          "secretRef": "AUTH_SECRET_KEY"
+        },
+        {
+          "name": "ADMIN_SECRET",
+          "description": "Secret for the static-data seed endpoints",
+          "required": true,
+          "secret": true,
+          "secretRef": "RECIPES_ADMIN_SECRET"
+        },
+        {
+          "name": "S3_BUCKET",
+          "description": "Bucket holding uploaded recipe images",
+          "required": true,
+          "default": "jarvis-recipes"
+        },
+        {
+          "name": "S3_ENDPOINT_URL",
+          "description": "MinIO endpoint",
+          "required": true,
+          "default": "http://minio:9000"
+        },
+        {
+          "name": "S3_FORCE_PATH_STYLE",
+          "description": "Path-style addressing (true for MinIO)",
+          "required": true,
+          "default": "true"
+        },
+        {
+          "name": "S3_REGION",
+          "description": "Region label; MinIO ignores it",
+          "required": false,
+          "default": "us-east-1"
+        },
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "description": "Object store access key",
+          "required": true,
+          "secret": true,
+          "secretRef": "MINIO_ROOT_USER"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "description": "Object store secret key",
+          "required": true,
+          "secret": true,
+          "secretRef": "MINIO_ROOT_PASSWORD"
+        },
+        {
+          "name": "OCR_QUEUES",
+          "description": "OCR queues to fan an image out to, comma separated",
+          "required": false,
+          "default": "jarvis.ocr.jobs.linux"
+        }
+      ],
+      "workers": [
+        {
+          "id": "jarvis-recipes-worker",
+          "command": "python scripts/run_rq_worker.py",
+          "envOverrides": {}
+        }
+      ]
+    },
+    {
+      "id": "jarvis-ocr-service",
+      "name": "OCR",
+      "description": "Reads text out of photographed pages. Printed text only here; handwriting needs the Apple Vision worker on a Mac (see the repo's DEPLOYMENT.md).",
+      "category": "optional",
+      "port": 7031,
+      "containerPort": 7031,
+      "image": "ghcr.io/alexberardi/jarvis-ocr-service:latest",
+      "healthCheck": "/health",
+      "migrate": true,
+      "dependsOn": [
+        "postgres",
+        "redis",
+        "minio",
+        "jarvis-auth",
+        "jarvis-config-service"
+      ],
+      "database": "jarvis_ocr",
+      "dbDriverPrefix": "postgresql+psycopg2://",
+      "envVars": [
+        {
+          "name": "DATABASE_URL",
+          "description": "PostgreSQL connection string",
+          "required": true
+        },
+        {
+          "name": "OCR_ENABLE_RAPIDOCR",
+          "description": "Enable the RapidOCR engine",
+          "required": false,
+          "default": "true"
+        },
+        {
+          "name": "S3_ENDPOINT_URL",
+          "description": "MinIO endpoint",
+          "required": true,
+          "default": "http://minio:9000"
+        },
+        {
+          "name": "S3_FORCE_PATH_STYLE",
+          "description": "Path-style addressing (true for MinIO)",
+          "required": true,
+          "default": "true"
+        },
+        {
+          "name": "S3_REGION",
+          "description": "Region label; MinIO ignores it",
+          "required": false,
+          "default": "us-east-1"
+        },
+        {
+          "name": "AWS_ACCESS_KEY_ID",
+          "description": "Object store access key",
+          "required": true,
+          "secret": true,
+          "secretRef": "MINIO_ROOT_USER"
+        },
+        {
+          "name": "AWS_SECRET_ACCESS_KEY",
+          "description": "Object store secret key",
+          "required": true,
+          "secret": true,
+          "secretRef": "MINIO_ROOT_PASSWORD"
+        }
+      ],
+      "workers": [
+        {
+          "id": "jarvis-ocr-worker",
+          "command": "python worker.py",
+          "envOverrides": {
+            "OCR_QUEUE_NAME": "jarvis.ocr.jobs.linux"
+          }
+        }
+      ]
     }
   ],
   "infrastructure": [
@@ -641,6 +810,7 @@
       "description": "Task queue \u2014 used for long-running jobs and async pipelines",
       "image": "redis:7-alpine",
       "port": 6379,
+      "command": "redis-server --requirepass ${REDIS_PASSWORD}",
       "envVars": [
         {
           "name": "REDIS_PASSWORD",
@@ -652,6 +822,34 @@
       ],
       "volumes": [
         "jarvis-redis-data:/data"
+      ]
+    },
+    {
+      "id": "minio",
+      "name": "MinIO",
+      "description": "S3-compatible object store \u2014 holds uploaded images for services that hand them between workers by URI. Deployed only when a selected service needs one.",
+      "image": "minio/minio:latest",
+      "port": 9000,
+      "consolePort": 9001,
+      "command": "server /data --console-address \":9001\"",
+      "envVars": [
+        {
+          "name": "MINIO_ROOT_USER",
+          "description": "MinIO root user",
+          "required": true,
+          "secret": true,
+          "secretRef": "MINIO_ROOT_USER"
+        },
+        {
+          "name": "MINIO_ROOT_PASSWORD",
+          "description": "MinIO root password",
+          "required": true,
+          "secret": true,
+          "secretRef": "MINIO_ROOT_PASSWORD"
+        }
+      ],
+      "volumes": [
+        "jarvis-minio-data:/data"
       ]
     },
     {

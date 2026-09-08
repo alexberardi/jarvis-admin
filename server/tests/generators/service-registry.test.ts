@@ -77,8 +77,24 @@ describe('service-registry', () => {
     expect(llm!.gpu).toBe(true)
   })
 
-  it('does not contain removed services (ocr, recipes)', () => {
-    expect(getServiceById(registry, 'jarvis-ocr-service')).toBeUndefined()
-    expect(getServiceById(registry, 'jarvis-recipes-server')).toBeUndefined()
+  // Both were dropped from this registry in e52423d (March 2026, the installer
+  // wizard work) and a test kept them out. They are back deliberately: they now
+  // ship images, are registered in jarvis-installer, and are covered by
+  // install-e2e. Optional, so an install that does not want them is unchanged.
+  it('offers recipes and OCR as optional services', () => {
+    for (const id of ['jarvis-recipes-server', 'jarvis-ocr-service']) {
+      const service = getServiceById(registry, id)
+      expect(service, `${id} missing from the registry`).toBeDefined()
+      expect(service!.category).toBe('optional')
+    }
+  })
+
+  it('recipes declares the object store it stores images in', () => {
+    // The dependency is not decoration: photo import uploads to MinIO and hands
+    // the OCR worker an s3:// URI. Without it the feature is visible in the app
+    // and broken in practice.
+    const recipes = getServiceById(registry, 'jarvis-recipes-server')
+    expect(recipes!.dependsOn).toContain('minio')
+    expect(recipes!.objectStore?.bucket).toBeTruthy()
   })
 })

@@ -7,7 +7,7 @@ import {
   getRequiredInfrastructure,
 } from './service-registry.js'
 import { serviceIdToPortVar } from './port-utils.js'
-import { SECRET_KEYS, generateHexSecret } from './secret-generator.js'
+import { SECRET_KEYS, generateSecretFor } from './secret-generator.js'
 
 export function generateEnv(state: WizardState, registry: ServiceRegistry): string {
   const lines: string[] = []
@@ -23,7 +23,7 @@ export function generateEnv(state: WizardState, registry: ServiceRegistry): stri
     // guard would refuse to start. A reconstructed install carries its existing
     // value through; a genuinely missing one gets a fresh strong secret (passwords
     // 16 bytes, tokens/keys 32 — matching generateAllSecrets).
-    const value = state.secrets[key] || generateHexSecret(key.includes('PASSWORD') ? 16 : 32)
+    const value = state.secrets[key] || generateSecretFor(key)
     lines.push(`${key}=${value}`)
   }
   lines.push('')
