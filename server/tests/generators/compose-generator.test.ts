@@ -1195,7 +1195,10 @@ describe('recipes and its object store', () => {
   })
 
   it('never depends on a service it did not emit', () => {
-    const doc = parseYaml(sync()) as { services: Record<string, any> }
+    // depends_on is either a list of names or a map keyed by them, so it is
+    // typed to what compose actually allows rather than to `any`.
+    type ComposeService = { depends_on?: string[] | Record<string, unknown> }
+    const doc = parseYaml(sync()) as { services: Record<string, ComposeService> }
     const defined = new Set(Object.keys(doc.services))
 
     for (const [name, service] of Object.entries(doc.services)) {
