@@ -62,6 +62,14 @@ export const SECRET_KEYS = [
   // all Loki logs (voice transcripts / PII) + SSRF-pivot via the datasource proxy.
   // 'PASSWORD' in the name -> 16 bytes / 32 hex.
   'GRAFANA_ADMIN_PASSWORD',
+  // MinIO's root credentials. Generated, not defaulted: minio/minio is what
+  // everyone reaches for, and the console it unlocks is every uploaded image in
+  // the install. The 'user' is an access key, so a random value is the right
+  // shape for it -- both land in the generated .env if the console is needed.
+  'MINIO_ROOT_USER',
+  'MINIO_ROOT_PASSWORD',
+  // X-Admin-Secret for the recipes static-data seed endpoints.
+  'RECIPES_ADMIN_SECRET',
   // CC-internal auth for async-job result callbacks (memory extraction, deep
   // research, characterization synthesis, adapter training). CC attaches it at
   // enqueue and validates it at the /…/callback endpoints (main.py:1714-1742,

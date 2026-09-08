@@ -214,6 +214,10 @@ export function generateCompose(
   for (const inf of infra) {
     lines.push('')
     lines.push(...generateInfraBlock(inf, state))
+    if (inf.id === 'minio') {
+      lines.push('')
+      lines.push(...generateMinioInitBlock(composeServices))
+    }
   }
 
   // Application services (and any sibling workers)
@@ -284,6 +288,50 @@ export function generateCompose(
   return lines.join('\n')
 }
 
+/**
+ * A one-shot that creates the buckets the enabled services asked for.
+ *
+ * MinIO does NOT create a bucket on first write. Without this the object store
+ * runs perfectly and the first upload fails with a config-shaped error, which
+ * reads as a broken build rather than a missing bucket.
+ *
+ * A literal block, not a folded scalar wrapping `sh -c "..."`: folding joins the
+ * lines with spaces and the inner quotes collide with the outer pair, so a
+ * credential containing a space breaks the command. `$$` is compose's escape --
+ * the shell expands these, not compose.
+ */
+function generateMinioInitBlock(enabled: ServiceDefinition[]): string[] {
+  const buckets = [
+    ...new Set(
+      enabled.map((s) => s.objectStore?.bucket).filter((b): b is string => Boolean(b)),
+    ),
+  ]
+
+  return [
+    '  minio-init:',
+    '    image: minio/mc:latest',
+    '    container_name: jarvis-minio-init',
+    '    depends_on:',
+    '      - minio',
+    '    entrypoint: ["/bin/sh", "-c"]',
+    '    command:',
+    '      - |',
+    // depends_on only waits for the container to START, so mc gets connection
+    // refused on the first attempt.
+    '        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do',
+    '          sleep 2',
+    '        done',
+    ...buckets.map((b) => `        mc mb --ignore-existing local/${b}`),
+    '    environment:',
+    '      MINIO_ROOT_USER: ${MINIO_ROOT_USER}',
+    '      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}',
+    '    networks:',
+    '      - jarvis',
+    // It exits 0 once the buckets exist; unless-stopped would recreate it.
+    '    restart: on-failure',
+  ]
+}
+
 function generateInfraBlock(
   infra: InfrastructureDefinition,
   state: WizardState,
@@ -299,6 +347,13 @@ function generateInfraBlock(
   if (infra.port) {
     lines.push('    ports:')
     lines.push(`      - "${infraBindPrefix(infra.id)}\${${portVar}:-${hostPort}}:${infra.port}"`)
+    if (infra.consolePort) {
+      // Bound like the data port: a console reachable off-host is a login form
+      // for everything the object store holds.
+      lines.push(
+        `      - "${infraBindPrefix(infra.id)}\${${portVar}_CONSOLE:-${infra.consolePort}}:${infra.consolePort}"`,
+      )
+    }
     if (infra.id === 'mosquitto') {
       // WebSocket listener for external nodes via Cloudflare Tunnel
       lines.push('      - "${MOSQUITTO_WS_PORT:-9883}:9001"')
@@ -318,9 +373,10 @@ function generateInfraBlock(
     }
   }
 
-  // Redis needs a command for password auth
-  if (infra.id === 'redis') {
-    lines.push('    command: redis-server --requirepass ${REDIS_PASSWORD}')
+  // Declared on the infrastructure entry rather than branched on here. Redis
+  // needs one for password auth, MinIO to point the server at its data dir.
+  if (infra.command) {
+    lines.push(`    command: ${infra.command}`)
   }
 
   // Mosquitto: hash the shared MQTT credential into a password_file at startup
