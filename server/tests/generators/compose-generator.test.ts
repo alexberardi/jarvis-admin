@@ -1000,7 +1000,9 @@ describe('jarvis-phone-gateway (optional service, phone-calls PRD)', () => {
     expect(gw).toContain('TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}')
     expect(gw).toContain('PHONE_GATEWAY_PUBLIC_WSS_URL: ${PHONE_GATEWAY_PUBLIC_WSS_URL:-}')
     // Standard first-party plumbing
-    expect(gw).toContain('JARVIS_APP_ID: ${JARVIS_APP_ID_PHONE_GATEWAY:-}')
+    // Literal, not a .env reference: the id is deterministic, and the .env slot
+    // was only ever populated when the app client was first created.
+    expect(gw).toContain('JARVIS_APP_ID: jarvis-phone-gateway')
     expect(gw).toContain('JARVIS_AUTH_BASE_URL:')
     // CC base URL for the dial worker's session fetch — prod 2026-08-07: absent →
     // gateway defaulted to localhost → every dial job dropped ("session fetch failed")
@@ -1219,6 +1221,44 @@ describe('recipes and its object store', () => {
       for (const dep of deps) {
         expect(defined, `${name} depends on undefined service "${dep}"`).toContain(dep)
       }
+    }
+  })
+})
+
+
+// App-to-app auth needs BOTH halves. env-generator writes JARVIS_APP_ID_<SUFFIX>=
+// empty and only registration fills it -- but registration injects a value only
+// when config-service CREATES the app client (`if (r.app_key)`). A service whose
+// client already existed re-registered with no key returned, so its ID stayed
+// empty and every downstream call failed with
+//
+//   JARVIS_APP_ID and JARVIS_APP_KEY must be set for llm proxy authentication
+//
+// on prod, for jarvis-recipes-server and jarvis-ocr-service. The key was fine;
+// only the id -- which is deterministic -- was missing.
+describe('app-to-app credentials are complete', () => {
+  const registry = loadRegistry()
+
+  it('never emits an app key without an app id', () => {
+    const state = makeState({
+      enabledModules: registry.services.map((s) => s.id),
+    })
+    type Svc = { environment?: Record<string, string> }
+    const doc = parseYaml(generateCompose(state, registry)) as {
+      services: Record<string, Svc>
+    }
+
+    const withKey = Object.entries(doc.services).filter(
+      ([, svc]) => svc.environment?.JARVIS_APP_KEY !== undefined,
+    )
+    expect(withKey.length).toBeGreaterThan(0)
+
+    for (const [id, svc] of withKey) {
+      const appId = svc.environment!.JARVIS_APP_ID
+      expect(appId, `${id} has an app key but no app id`).toBeTruthy()
+      // An unresolved ${...:-} placeholder is how this failed: compose
+      // substitutes it to empty and the service starts unauthenticated.
+      expect(String(appId), `${id} defers its app id to .env`).not.toContain('${')
     }
   })
 })

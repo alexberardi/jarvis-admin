@@ -819,8 +819,19 @@ function generateServiceBlock(
     return lines
   }
 
-  // App-to-app auth placeholders (filled after registration)
-  lines.push('      JARVIS_APP_ID: ${JARVIS_APP_ID_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
+  // App-to-app auth. The ID is the service id, always -- registration sends
+  // `name: s.id` and auth stores it as the app_id -- so emit it literally
+  // rather than indirecting through .env. env-generator writes
+  // JARVIS_APP_ID_<SUFFIX>= empty and only registration fills it, but
+  // registration injects a value only when config-service CREATES the app
+  // client (`if (r.app_key)`). A service whose client already exists -- seeded
+  // at install, or added later by sync -- re-registers with no key returned, so
+  // the ID stayed empty forever and the service failed app auth with
+  // "JARVIS_APP_ID and JARVIS_APP_KEY must be set". The installer's export
+  // generator has always emitted the literal id; this matches it.
+  //
+  // The KEY is a real secret and stays in .env.
+  lines.push(`      JARVIS_APP_ID: ${service.id}`)
   lines.push('      JARVIS_APP_KEY: ${JARVIS_APP_KEY_' + service.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase() + ':-}')
 
   // Auth URL for all services that depend on jarvis-auth.
@@ -1025,7 +1036,10 @@ function generateWorkerBlock(
 
   const appKeySuffix = parent.id.replace(/^jarvis-/, '').replace(/-/g, '_').toUpperCase()
   if (!overrideKeys.has('JARVIS_APP_ID')) {
-    lines.push(`      JARVIS_APP_ID: \${JARVIS_APP_ID_${appKeySuffix}:-}`)
+    // Literal, for the same reason as the parent service above: the id is
+    // deterministic, and the .env slot it used to read was only ever filled on
+    // first creation of the app client.
+    lines.push(`      JARVIS_APP_ID: ${parent.id}`)
   }
   if (!overrideKeys.has('JARVIS_APP_KEY')) {
     lines.push(`      JARVIS_APP_KEY: \${JARVIS_APP_KEY_${appKeySuffix}:-}`)
