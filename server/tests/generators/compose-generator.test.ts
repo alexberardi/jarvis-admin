@@ -1189,9 +1189,20 @@ describe('recipes and its object store', () => {
   it('gives the OCR worker a queue recipes actually publishes to', () => {
     // A queue nobody consumes does not error. The job sits there and the app
     // spins until it times out.
-    const output = sync()
-    expect(output).toContain('OCR_QUEUE_NAME: jarvis.ocr.jobs.linux')
-    expect(output).toContain('OCR_QUEUES: jarvis.ocr.jobs.linux')
+    //
+    // OCR_QUEUES is operator-settable (a self-referencing ${...:-default}) so a
+    // second OCR host can be added per install. Assert against the resolved
+    // fallback rather than the literal: adding a host must stay opt-in, and
+    // must never drop the queue this install's own worker listens on.
+    type Svc = { environment?: Record<string, string> }
+    const doc = parseYaml(sync()) as { services: Record<string, Svc> }
+
+    const consumed = doc.services['jarvis-ocr-worker'].environment!.OCR_QUEUE_NAME
+    const published = String(doc.services['jarvis-recipes-server'].environment!.OCR_QUEUES)
+    const fallback = /^\$\{OCR_QUEUES:-(.*)\}$/.exec(published)?.[1] ?? published
+
+    expect(consumed).toBe('jarvis.ocr.jobs.linux')
+    expect(fallback.split(',').map((q) => q.trim())).toContain(consumed)
   })
 
   it('never depends on a service it did not emit', () => {

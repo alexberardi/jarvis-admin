@@ -381,7 +381,7 @@ describe('service-env routes', () => {
       '../../src/data/service-registry.json',
     )
 
-    it('returns 200 and lists exactly [jarvis-phone-gateway], excluding every core service', async () => {
+    it('lists only services with genuinely operator-supplied vars, never core wiring', async () => {
       await app.close()
       app = await buildApp({
         docker: createMockDocker([]),
@@ -395,8 +395,17 @@ describe('service-env routes', () => {
         headers: { authorization: 'Bearer t' },
       })
       expect(res.statusCode).toBe(200)
-      const ids = res.json().services.map((s: { service_id: string }) => s.service_id)
-      expect(ids).toEqual(['jarvis-phone-gateway'])
+      const services = res.json().services as {
+        service_id: string
+        vars: { name: string; user_supplied: boolean }[]
+      }[]
+      const ids = services.map((s) => s.service_id)
+
+      // Twilio credentials, and the OCR fan-out queue list -- which is
+      // operator-settable so a second OCR host (an Apple Vision worker on a
+      // Mac) can be added per install.
+      expect(ids.sort()).toEqual(['jarvis-phone-gateway', 'jarvis-recipes-server'])
+
       for (const core of [
         'jarvis-config-service',
         'jarvis-auth',
@@ -405,6 +414,18 @@ describe('service-env routes', () => {
         'jarvis-admin',
       ]) {
         expect(ids).not.toContain(core)
+      }
+
+      // recipes-server also declares AUTH_SECRET_KEY, ADMIN_SECRET, the
+      // object-store credentials and the redis wiring. Those may be LISTED
+      // (read-only, secrets as is_set only), but exactly one may be writable:
+      // listing a service must never make its generated wiring editable.
+      const recipesVars = services.find((s) => s.service_id === 'jarvis-recipes-server')!.vars
+      const editable = recipesVars.filter((v) => v.user_supplied).map((v) => v.name)
+      expect(editable).toEqual(['OCR_QUEUES'])
+
+      for (const generated of ['AUTH_SECRET_KEY', 'ADMIN_SECRET', 'REDIS_PASSWORD']) {
+        expect(editable).not.toContain(generated)
       }
     })
   })

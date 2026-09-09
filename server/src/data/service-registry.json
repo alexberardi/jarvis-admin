@@ -736,9 +736,9 @@
         },
         {
           "name": "OCR_QUEUES",
-          "description": "OCR queues to fan an image out to, comma separated",
+          "description": "OCR queues to fan an image out to, comma separated. Add a host's queue to send every image to it as well: jarvis.ocr.jobs.mac is an Apple Vision worker on a Mac, which reads handwriting the Linux providers cannot. A host that never answers is dropped from the join at its deadline rather than stalling the import.",
           "required": false,
-          "default": "jarvis.ocr.jobs.linux"
+          "default": "${OCR_QUEUES:-jarvis.ocr.jobs.linux}"
         },
         {
           "name": "REDIS_HOST",
