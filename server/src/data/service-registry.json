@@ -47,6 +47,14 @@
           "required": false,
           "default": "http://jarvis-auth:8000"
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -91,6 +99,14 @@
           "required": false,
           "default": "http://jarvis-config-service:7700"
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "jarvis_auth.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -223,6 +239,14 @@
           "secret": true,
           "secretRef": "JARVIS_ADAPTER_CALLBACK_TOKEN"
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -289,6 +313,14 @@
           "required": false,
           "default": "http://jarvis-auth:8000"
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -335,6 +367,14 @@
       "nativeCapable": true,
       "volumes": [
         "jarvis-tts-hf-cache:/app/models/hf_cache"
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -385,6 +425,10 @@
             "MODEL_SERVICE_URL": "http://jarvis-llm-proxy-api:7705"
           }
         }
+      ],
+      "serveCommand": [
+        "bash",
+        "scripts/serve.sh"
       ]
     },
     {
@@ -442,6 +486,14 @@
           "required": false,
           "default": "http://jarvis-auth:8000"
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -695,6 +747,14 @@
           "command": "python scripts/run_rq_worker.py",
           "envOverrides": {}
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "jarvis_recipes.app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     },
     {
@@ -769,6 +829,14 @@
             "OCR_QUEUE_NAME": "jarvis.ocr.jobs.linux"
           }
         }
+      ],
+      "serveCommand": [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "{{CONTAINER_PORT}}"
       ]
     }
   ],

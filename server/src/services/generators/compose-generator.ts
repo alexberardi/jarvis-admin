@@ -897,25 +897,33 @@ function generateServiceBlock(
   }
 
   // Overriding `entrypoint` (above) CLEARS the image's CMD, so the migrate
-  // wrapper's `exec "$@"` has nothing to run unless we supply a command. llm-proxy
-  // uses its image's supervised launcher (scripts/serve.sh): API in the foreground
-  // plus the model service respawned with backoff — the old raw dual-uvicorn
-  // `model_service & exec main` left the model service unsupervised, so a native
-  // crash (llama.cpp) meant no respawn and the API 503'd forever (2026-07-02
-  // outage; roadmap #59). Every other migrate service serves app.main:app.
-  // Without this, command-center/whisper/notifications exec "" and exit right
-  // after migrating (restart-loop, no server) — the bug that 500'd the fleet.
-  if (service.id === 'jarvis-llm-proxy-api') {
-    lines.push('    command: ["bash", "scripts/serve.sh"]')
-  } else if (service.id === 'jarvis-auth') {
-    // jarvis-auth is the one migrate service whose app is NOT at top-level
-    // `app.main` — its image packages it under `jarvis_auth.app.main`. Using the
-    // generic `app.main:app` here crash-loops auth with `ModuleNotFoundError: No
-    // module named 'app'`, so it never serves /health (the installer's
-    // gen-export-compose already special-cases auth this same way).
-    lines.push(`    command: ["uvicorn", "jarvis_auth.app.main:app", "--host", "0.0.0.0", "--port", "${containerPort}"]`)
-  } else if (service.migrate) {
-    lines.push(`    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "${containerPort}"]`)
+  // wrapper's `exec "$@"` has nothing to run unless we supply a command. Without
+  // it, command-center/whisper/notifications exec "" and exit right after
+  // migrating (restart-loop, no server) — the bug that 500'd the fleet.
+  //
+  // The command is registry data, never inferred from the service id. The module
+  // path is a property of the image, and the services disagree: llm-proxy serves
+  // through its image's supervised launcher (scripts/serve.sh) — API in the
+  // foreground plus the model service respawned with backoff, where the old raw
+  // dual-uvicorn `model_service & exec main` left the model service unsupervised,
+  // so a native crash (llama.cpp) meant no respawn and the API 503'd forever
+  // (2026-07-02 outage; roadmap #59) — while auth and recipes-server package
+  // their apps under `jarvis_auth.app.main` and `jarvis_recipes.app.main` rather
+  // than top-level `app.main`. The id-chain this replaces handed every service it
+  // did not name the `app.main` default, which is how recipes-server reached prod
+  // crash-looping on `ModuleNotFoundError: No module named 'app'`.
+  if (service.migrate) {
+    if (!service.serveCommand?.length) {
+      throw new Error(
+        `Service "${service.id}" sets migrate: true but declares no serveCommand. ` +
+          `The migrate entrypoint clears the image CMD, so the container would ` +
+          `exec "" and exit immediately after migrating.`,
+      )
+    }
+    const argv = service.serveCommand.map((arg) =>
+      arg.replace('{{CONTAINER_PORT}}', String(containerPort)),
+    )
+    lines.push(`    command: [${argv.map((a) => JSON.stringify(a)).join(', ')}]`)
   }
 
   pushGpuConfig(lines, service, state)
