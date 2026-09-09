@@ -101,6 +101,23 @@ export interface ServiceDefinition {
    * a hardcoded service id.
    */
   migrate?: boolean
+  /**
+   * The command a `migrate: true` service serves with, once the migrate
+   * entrypoint has run. Required for those services and ignored for the rest.
+   *
+   * Overriding `entrypoint` CLEARS the image's CMD, so the wrapper's `exec "$@"`
+   * has nothing to run unless a command is supplied here. This is registry data
+   * rather than generator logic because the module path is a property of the
+   * image: most services package their app at `app.main`, but jarvis-auth uses
+   * `jarvis_auth.app.main`, jarvis-recipes-server uses `jarvis_recipes.app.main`
+   * and jarvis-llm-proxy-api serves through a supervised launcher instead of
+   * uvicorn. Inferring it from the service id grew an if-chain that silently
+   * gave every new service the wrong default -- recipes-server crash-looped on
+   * `ModuleNotFoundError: No module named 'app'` for exactly that reason.
+   *
+   * `{{CONTAINER_PORT}}` is substituted with the service's container port.
+   */
+  serveCommand?: string[]
 }
 
 export interface InfrastructureDefinition {
