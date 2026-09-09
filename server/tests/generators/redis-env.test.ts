@@ -113,3 +113,40 @@ describe('services that depend on redis can reach it', () => {
     }
   })
 })
+
+
+// A service that depends on jarvis-config-service uses service discovery, and
+// discovery needs to know where the config service is. recipes-server and
+// ocr-service declared the dependency but not the URL, so both booted with
+// discovery disabled:
+//
+//   JARVIS_CONFIG_URL IS NOT SET
+//   This service is running WITHOUT service discovery.
+//   URLs will fall back to env vars or FAIL.
+//
+// It stayed hidden while recipes only did JSON-LD extraction, which needs
+// nothing downstream. The first import that fell back to the LLM failed with
+// "llm proxy not configured" -- the service could not resolve llm-proxy's URL.
+
+describe('services that depend on config-service can find it', () => {
+  const registry = loadRegistry()
+  const discoveryUsers = registry.services.filter((s) =>
+    (s.dependsOn ?? []).includes('jarvis-config-service'),
+  )
+
+  it('has discovery users to check', () => {
+    expect(discoveryUsers.length).toBeGreaterThan(0)
+  })
+
+  it.each(discoveryUsers.map((s) => s.id))('%s is told where config-service is', (id) => {
+    const state = makeState({ enabledModules: [id] })
+    const compose = parseYaml(generateCompose(state, registry))
+    const env = compose.services[id]?.environment ?? {}
+
+    expect(
+      env.JARVIS_CONFIG_URL,
+      `${id} depends on config-service but runs without discovery`,
+    ).toBeTruthy()
+    expect(String(env.JARVIS_CONFIG_URL)).not.toContain('localhost')
+  })
+})
