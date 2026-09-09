@@ -739,6 +739,25 @@
           "description": "OCR queues to fan an image out to, comma separated",
           "required": false,
           "default": "jarvis.ocr.jobs.linux"
+        },
+        {
+          "name": "REDIS_HOST",
+          "description": "Redis host backing the job queue",
+          "required": true,
+          "default": "redis"
+        },
+        {
+          "name": "REDIS_PORT",
+          "description": "Redis port",
+          "required": false,
+          "default": "6379"
+        },
+        {
+          "name": "REDIS_PASSWORD",
+          "description": "Redis password; the broker runs with --requirepass",
+          "required": true,
+          "secret": true,
+          "secretRef": "REDIS_PASSWORD"
         }
       ],
       "workers": [
@@ -819,6 +838,25 @@
           "required": true,
           "secret": true,
           "secretRef": "MINIO_ROOT_PASSWORD"
+        },
+        {
+          "name": "REDIS_HOST",
+          "description": "Redis host backing the job queue",
+          "required": true,
+          "default": "redis"
+        },
+        {
+          "name": "REDIS_PORT",
+          "description": "Redis port",
+          "required": false,
+          "default": "6379"
+        },
+        {
+          "name": "REDIS_PASSWORD",
+          "description": "Redis password; the broker runs with --requirepass",
+          "required": true,
+          "secret": true,
+          "secretRef": "REDIS_PASSWORD"
         }
       ],
       "workers": [
