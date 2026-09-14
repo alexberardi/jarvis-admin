@@ -82,7 +82,7 @@ describe('the minio images', () => {
   })
 
   it("the registry's minio entry names quay.io with a pinned release", () => {
-    const minio = (loadRegistry() as any).infrastructure.find((i: any) => i.id === 'minio')
+    const minio = loadRegistry().infrastructure.find((i) => i.id === 'minio')
     expect(minio).toBeTruthy()
     expect(minio.image).toMatch(/^quay\.io\/minio\/minio:RELEASE\./)
   })
