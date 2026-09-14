@@ -309,7 +309,7 @@ function generateMinioInitBlock(enabled: ServiceDefinition[]): string[] {
 
   return [
     '  minio-init:',
-    '    image: minio/mc:latest',
+    '    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z',
     '    container_name: jarvis-minio-init',
     '    depends_on:',
     '      - minio',
