@@ -946,7 +946,7 @@
       "id": "minio",
       "name": "MinIO",
       "description": "S3-compatible object store \u2014 holds uploaded images for services that hand them between workers by URI. Deployed only when a selected service needs one.",
-      "image": "minio/minio:latest",
+      "image": "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
       "port": 9000,
       "consolePort": 9001,
       "command": "server /data --console-address \":9001\"",
