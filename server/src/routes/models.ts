@@ -1,11 +1,14 @@
 import { execFile, execSync } from 'node:child_process'
-import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync } from 'node:fs'
+import { existsSync, readdirSync, statSync, unlinkSync, mkdirSync, createWriteStream } from 'node:fs'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import type { FastifyInstance } from 'fastify'
 import { requireSuperuser } from '../middleware/auth.js'
 import { getHostPlatform } from '../services/host-platform.js'
 import { upsertEnvVar } from '../services/env-file.js'
+import { isContainerised } from '../services/runtime-env.js'
 
 /**
  * Download a single file straight from HuggingFace with curl — no
@@ -13,7 +16,27 @@ import { upsertEnvVar } from '../services/env-file.js'
  * asynchronously after install, so the venv python isn't available when the
  * Models step runs; curl always is. Gated repos use the Bearer token.
  */
-function downloadFileDirect(
+/**
+ * Fetch a file from HuggingFace to disk, in-process.
+ *
+ * This used to shell out to `curl`, which is NOT in the admin image --
+ * node:22-alpine ships wget, not curl. So every fresh Docker install that
+ * reached the wizard's Models step got
+ *
+ *     500 {"error":"Whisper model download failed: spawn curl ENOENT"}
+ *
+ * reproduced against a live admin container. Node can stream a download itself,
+ * so nothing here depends on which binaries an image happens to carry.
+ *
+ * Keeps curl\'s retry behaviour (3 attempts, 2s apart) and its habit of
+ * removing a partial file, so a failed download cannot leave something that
+ * looks like a model.
+ */
+const DOWNLOAD_ATTEMPTS = 3
+const DOWNLOAD_RETRY_MS = 2_000
+const DOWNLOAD_TIMEOUT_MS = 1_800_000
+
+async function downloadFileDirect(
   modelsDir: string,
   repo: string,
   filename: string,
@@ -21,18 +44,33 @@ function downloadFileDirect(
 ): Promise<string> {
   const dest = join(modelsDir, filename)
   const url = `https://huggingface.co/${repo}/resolve/main/${filename}?download=true`
-  const args = ['-fL', '--retry', '3', '--retry-delay', '2', '-o', dest, url]
-  if (token) args.push('-H', `Authorization: Bearer ${token}`)
-  return new Promise((resolve, reject) => {
-    execFile('curl', args, { timeout: 1_800_000, maxBuffer: 1024 * 1024 }, (err, _stdout, stderr) => {
-      if (err) {
-        try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
-        reject(new Error(stderr || err.message))
-      } else {
-        resolve(dest)
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+
+  let lastError = ''
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers,
+        redirect: 'follow',
+        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+      })
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`)
       }
-    })
-  })
+      await pipeline(Readable.fromWeb(response.body as never), createWriteStream(dest))
+      return dest
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+      // A half-written file is worse than none: it looks like a model and the
+      // service fails to load it much later, far from this cause.
+      try { if (existsSync(dest)) unlinkSync(dest) } catch { /* ignore */ }
+      if (attempt < DOWNLOAD_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, DOWNLOAD_RETRY_MS))
+      }
+    }
+  }
+  throw new Error(lastError || 'download failed')
 }
 
 /**
@@ -239,6 +277,23 @@ export async function modelsRoutes(app: FastifyInstance): Promise<void> {
     upsertEnvVar('WHISPER_ALLOW_MODEL_AUTODOWNLOAD', enabled ? 'true' : 'false')
     if (!enabled) {
       return reply.send({ success: true, enabled: false, downloaded: false })
+    }
+
+    // Only meaningful when whisper runs on this machine. In a container,
+    // homedir() is the CONTAINER's /root -- ephemeral, and not where a
+    // containerised whisper service looks for its model, which has its own
+    // volume and its own autodownload driven by the env flag written above. So
+    // fetching 140MB here would be wasted at best; before this check it was
+    // also fatal, because the download shelled out to curl, which is not in
+    // this image: every fresh Docker install reaching the Models step got
+    // `500 Whisper model download failed: spawn curl ENOENT`.
+    if (isContainerised()) {
+      return reply.send({
+        success: true,
+        enabled: true,
+        downloaded: false,
+        reason: 'containerised: the whisper service downloads its own model',
+      })
     }
 
     const modelDir = join(homedir(), 'whisper.cpp', 'models')
