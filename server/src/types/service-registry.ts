@@ -77,6 +77,20 @@ export interface ServiceDefinition {
    */
   nativeOnly?: boolean
   /**
+   * Host platforms this service can run on at all. Omitted = every platform.
+   *
+   * `nativeOnly` says HOW a service runs (LaunchAgent, never a container); this
+   * says WHERE it can run. jarvis-osx-api needed both and only had the first,
+   * so its "macOS native only" constraint lived in its description text -- prose
+   * the wizard cannot enforce. A Windows user was offered it, enabled it, and
+   * the install step tried to run a launchd deploy script through bash:
+   *
+   *     Cloning into 'C:\Users\dumbf\.jarvis\native\jarvis-osx-api'...
+   *     <3>WSL ERROR: CreateProcessCommon:818: execvpe(/bin/bash) failed:
+   *       No such file or directory
+   */
+  platforms?: ('darwin' | 'linux' | 'win32')[]
+  /**
    * For `gpu: true` services that ship a CPU image alongside GPU variants
    * (e.g. whisper publishes :latest, :latest-cuda, :latest-rocm). When set,
    * the service is NOT excluded on macOS, the variant suffix is only applied
