@@ -4,7 +4,7 @@ export type GpuType = 'nvidia' | 'amd' | 'amd-rocm' | 'apple' | 'none'
 export type WhisperBackend = 'cpu' | 'cuda' | 'vulkan' | 'rocm'
 
 export interface HardwareInfo {
-  platform: 'darwin' | 'linux'
+  platform: 'darwin' | 'linux' | 'win32'
   arch: string
   totalMemoryGb: number
   gpuName: string | null
@@ -30,7 +30,7 @@ export interface WizardState {
   deploymentTarget: 'standard' | 'compose-export'
   remoteLlmUrl: string
   remoteWhisperUrl: string
-  platform: 'darwin' | 'linux'
+  platform: 'darwin' | 'linux' | 'win32'
   hardware: HardwareInfo | null
   relayEnabled: boolean
   installRunning: boolean
@@ -60,7 +60,7 @@ export type WizardAction =
   | { type: 'SET_DEPLOYMENT_TARGET'; target: 'standard' | 'compose-export' }
   | { type: 'SET_REMOTE_LLM_URL'; url: string }
   | { type: 'SET_REMOTE_WHISPER_URL'; url: string }
-  | { type: 'SET_PLATFORM'; platform: 'darwin' | 'linux' }
+  | { type: 'SET_PLATFORM'; platform: 'darwin' | 'linux' | 'win32' }
   | { type: 'SET_HARDWARE'; hardware: HardwareInfo }
   | { type: 'SET_RELAY_ENABLED'; enabled: boolean }
   | { type: 'SET_INSTALL_RUNNING'; running: boolean }

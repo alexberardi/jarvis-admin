@@ -18,6 +18,8 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }))
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { buildApp } from '../../src/app.js'
 import { resetHostPlatformCache } from '../../src/services/host-platform.js'
@@ -87,14 +89,27 @@ describe('GET /api/install/hardware on Windows', () => {
     expect(commands.some((c) => c.includes('nvidia-smi'))).toBe(true)
   })
 
-  it('reports "not a Mac" so the wizard does not offer native macOS services', async () => {
+  it('reports win32, not a collapsed "linux"', async () => {
     execSyncMock.mockImplementation(() => { throw new Error('no gpu') })
 
     const body = (await app.inject({ method: 'GET', url: '/api/install/hardware' })).json()
 
-    // The field is a two-way gate for the Mac-only native path; Windows is
-    // correctly on the non-Mac side of it.
-    expect(body.platform).toBe('linux')
+    // This asserted 'linux' at first, on the reasoning that the wizard only
+    // needs "native macOS or not". It does gate on that -- every consumer
+    // compares against 'darwin' -- but the same field is what the Hardware
+    // screen DISPLAYS, so collapsing it told a Windows user they were on Linux.
+    // Reported by the user who had already been told they were on a Mac.
+    expect(body.platform).toBe('win32')
+    expect(body.platform).not.toBe('darwin')
+  })
+
+  it('is still on the non-Mac side of every darwin gate', async () => {
+    // Widening the value must not accidentally enable the Mac-only native path.
+    execSyncMock.mockImplementation(() => { throw new Error('no gpu') })
+
+    const body = (await app.inject({ method: 'GET', url: '/api/install/hardware' })).json()
+
+    expect(body.platform === 'darwin').toBe(false)
   })
 
   it('a Windows host with no NVIDIA driver still gets a usable recommendation', async () => {
@@ -104,5 +119,29 @@ describe('GET /api/install/hardware on Windows', () => {
 
     expect(body.gpuType).toBe('none')
     expect(body.recommendedBackends.length).toBeGreaterThan(0)
+  })
+})
+
+describe('the Hardware screen label', () => {
+  // A source guard because this repo has no frontend test runner -- only the
+  // server has vitest. The label is where both mistakes actually surfaced: the
+  // user saw "macOS" on Windows, then "Linux" on Windows, and neither was
+  // visible to any test.
+  const source = readFileSync(
+    join(import.meta.dirname, '..', '..', '..', 'src', 'components', 'wizard', 'HardwareStep.tsx'),
+    'utf-8',
+  )
+
+  it('maps every platform it can receive to a name', () => {
+    for (const platform of ['darwin', 'linux', 'win32']) {
+      expect(source).toMatch(new RegExp(`${platform}:\\s*'`))
+    }
+    expect(source).toContain("'Windows'")
+  })
+
+  it('does not decide the label with a two-way ternary', () => {
+    // `platform === 'darwin' ? 'macOS' : 'Linux'` is what displayed "Linux" to
+    // a Windows user: correct for two platforms, silently wrong for a third.
+    expect(source).not.toMatch(/platform === 'darwin' \? 'macOS' : 'Linux'/)
   })
 })

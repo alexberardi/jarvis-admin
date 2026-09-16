@@ -149,7 +149,7 @@ interface ServiceGroupProps {
   locked?: boolean
   onToggle?: (id: string, enabled: boolean) => void
   onToggleNative?: (id: string, enabled: boolean) => void
-  platform?: 'darwin' | 'linux'
+  platform?: 'darwin' | 'linux' | 'win32'
 }
 
 function ServiceGroup({
