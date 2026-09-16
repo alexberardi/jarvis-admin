@@ -10,6 +10,40 @@ permissions:
   contents: read
 
 jobs:
+  # Runs the platform-detection tests on a REAL Windows host.
+  #
+  # Two wrong platform labels reached a user because the suite only ever ran on
+  # Linux: Windows was reported as macOS (Docker Desktop identifies itself the
+  # same way on both), and after that was fixed it was reported as Linux (the
+  # value was collapsed to darwin|linux for the client). On a Linux runner
+  # "collapsed" and "correct" are the same string, so nothing failed.
+  #
+  # Deliberately narrow: these files, not the whole suite. The point is to catch
+  # platform-detection regressions on every PR without adopting whatever else
+  # may be Windows-specific in a suite that has never run here. Widening it is a
+  # one-line change to the glob if that becomes worth doing.
+  #
+  # Note what this canNOT cover: GitHub's Windows runners cannot run Linux
+  # containers, so an actual Docker Compose bring-up still needs a real machine.
+  windows-platform:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install server dependencies
+        run: npm ci --prefix server
+
+      - name: Platform detection on Windows
+        run: npx vitest run tests/routes/hardware-native-platform.test.ts tests/services/host-platform-native.test.ts tests/services/host-platform.test.ts
+        working-directory: server
+
   test:
     runs-on: ubuntu-latest
 
