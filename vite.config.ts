@@ -15,6 +15,15 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    // Component tests, matching jarvis-installer's setup. This repo had no
+    // frontend test runner at all, which is why two wrong platform labels
+    // shipped: the Hardware screen was never executed by anything.
+    test: {
+      globals: true,
+      environment: 'jsdom',
+      setupFiles: ['./tests/setup.ts'],
+      include: ['src/**/*.test.tsx', 'src/**/*.test.ts'],
+    },
     server: {
       port: 7710,
       proxy: {
