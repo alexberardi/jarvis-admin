@@ -14,7 +14,7 @@ import { seedGo2rtcConfig } from '../services/generators/go2rtc-config.js'
 import { generateAllSecrets } from '../services/generators/secret-generator.js'
 import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
-import { savePersistedConfig } from '../config.js'
+import { savePersistedConfig, serviceUrlsFromPorts } from '../config.js'
 import { getHostPlatform } from '../services/host-platform.js'
 import { shouldSelfTerminateAfterInstall } from '../services/admin-lifecycle.js'
 import type { WizardState, HardwareInfo, InstallState, PreflightCheck, PreflightResult } from '../types/wizard.js'
@@ -696,24 +696,31 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         composeFile, composePath, registry.services, adminToken, portOverrides, emit, alreadyHealthy,
       )
 
-      // Persist service URLs so the admin server can proxy to them
-      if (result.success) {
-        const authPort = envVars.AUTH_PORT ?? '7701'
-        const configPort = envVars.CONFIG_SERVICE_PORT ?? '7700'
-        const llmPort = envVars.LLM_PROXY_API_PORT ?? '7704'
-        const ccPort = envVars.COMMAND_CENTER_PORT ?? '7703'
+      // Persist service URLs REGARDLESS of health.
+      //
+      // These are derived from the ports we just generated -- they are
+      // configuration, not an observation. Gating them on `result.success`
+      // meant one optional service failing its health check left admin with
+      // authUrl = '' forever, and loadConfig's empty default exists to mean
+      // "not set up yet". A real Windows install hit this: auth and
+      // config-service were both healthy, but go2rtc, phone-gateway, llm-proxy
+      // and the admin CONTAINER were not, so nothing was saved and every
+      // authenticated endpoint then failed with
+      //
+      //   [requireSuperuser] Auth service error (authUrl=):
+      //     TypeError: fetch() URL is invalid  code: ERR_INVALID_URL
+      //
+      // answering 502 to the wizard's own Models step, which is where the user
+      // gave up. Reinstalling could not fix it, because the same optional
+      // services failed again.
+      //
+      // A URL that is not answering yet produces a connection error someone can
+      // read and retry. An empty URL produces a TypeError nobody can act on.
+      const urls = serviceUrlsFromPorts(envVars)
+      savePersistedConfig(urls)
 
-        const urls = {
-          authUrl: `http://localhost:${authPort}`,
-          configServiceUrl: `http://localhost:${configPort}`,
-          llmProxyUrl: `http://localhost:${llmPort}`,
-          commandCenterUrl: `http://localhost:${ccPort}`,
-        }
-        savePersistedConfig(urls)
-
-        // Update in-memory config so subsequent requests work immediately
-        Object.assign(app.config, urls)
-      }
+      // Update in-memory config so subsequent requests work immediately
+      Object.assign(app.config, urls)
 
       // Emit service health results before closing
       if (result.serviceHealth) {

@@ -16,8 +16,13 @@ describe('admin-lifecycle: post-install self-termination', () => {
     expect(shouldSelfTerminateAfterInstall('linux')).toBe(true)
   })
 
-  it('self-terminates on any non-darwin platform (hands off to a container)', () => {
-    expect(shouldSelfTerminateAfterInstall('windows' as never)).toBe(true)
+  it('does NOT self-terminate on Windows — its admin container is not proven', () => {
+    // Was `!== darwin`, which only looked right while Docker Desktop made
+    // Windows report darwin: the installer stayed alive by accident. Now that a
+    // native process reports win32 honestly, exiting would strand it, because a
+    // real Windows install had "jarvis-admin failed health check after 60s" —
+    // the native binary was the only dashboard there was.
+    expect(shouldSelfTerminateAfterInstall('win32')).toBe(false)
   })
 })
 
@@ -30,7 +35,16 @@ describe('admin-lifecycle: serve-vs-redirect when already installed', () => {
     expect(shouldRedirectWhenInstalled('linux')).toBe(true)
   })
 
-  it('redirects on other non-darwin platforms', () => {
-    expect(shouldRedirectWhenInstalled('win32')).toBe(true)
+  it('does NOT redirect on Windows — that container may not be there', () => {
+    // Same lesson: a redirect to a container that failed its health check is a
+    // dead port, while serving the app from this binary works either way.
+    expect(shouldRedirectWhenInstalled('win32')).toBe(false)
+  })
+
+  it('only linux redirects — every other platform serves the app itself', () => {
+    // The rule is "is there a container serving this port", not "is this
+    // darwin". Linux is the only platform where that is established.
+    expect(shouldRedirectWhenInstalled('linux')).toBe(true)
+    expect(shouldRedirectWhenInstalled('freebsd')).toBe(false)
   })
 })
