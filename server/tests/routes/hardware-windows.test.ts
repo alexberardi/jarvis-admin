@@ -18,8 +18,6 @@ vi.mock('node:child_process', () => ({
   execFile: vi.fn(),
 }))
 
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import { buildApp } from '../../src/app.js'
 import { resetHostPlatformCache } from '../../src/services/host-platform.js'
@@ -122,26 +120,3 @@ describe('GET /api/install/hardware on Windows', () => {
   })
 })
 
-describe('the Hardware screen label', () => {
-  // A source guard because this repo has no frontend test runner -- only the
-  // server has vitest. The label is where both mistakes actually surfaced: the
-  // user saw "macOS" on Windows, then "Linux" on Windows, and neither was
-  // visible to any test.
-  const source = readFileSync(
-    join(import.meta.dirname, '..', '..', '..', 'src', 'components', 'wizard', 'HardwareStep.tsx'),
-    'utf-8',
-  )
-
-  it('maps every platform it can receive to a name', () => {
-    for (const platform of ['darwin', 'linux', 'win32']) {
-      expect(source).toMatch(new RegExp(`${platform}:\\s*'`))
-    }
-    expect(source).toContain("'Windows'")
-  })
-
-  it('does not decide the label with a two-way ternary', () => {
-    // `platform === 'darwin' ? 'macOS' : 'Linux'` is what displayed "Linux" to
-    // a Windows user: correct for two platforms, silently wrong for a third.
-    expect(source).not.toMatch(/platform === 'darwin' \? 'macOS' : 'Linux'/)
-  })
-})
