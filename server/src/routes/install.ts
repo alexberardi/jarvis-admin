@@ -16,6 +16,7 @@ import { parseRegistry } from '../services/generators/service-registry.js'
 import { pollServiceHealth, registerServices, tieredStartup, getDefaultEnabledModules } from '../services/orchestrator.js'
 import { savePersistedConfig, serviceUrlsFromPorts } from '../config.js'
 import { getHostPlatform } from '../services/host-platform.js'
+import { registryForHost } from '../services/registry-platform.js'
 import { shouldSelfTerminateAfterInstall } from '../services/admin-lifecycle.js'
 import type { WizardState, HardwareInfo, InstallState, PreflightCheck, PreflightResult } from '../types/wizard.js'
 import type { ServiceRegistry } from '../types/service-registry.js'
@@ -887,14 +888,18 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
    * Get the service registry data.
    */
   app.get('/registry', async (_request, reply) => {
-    return reply.send(registry)
+    // Filtered for THIS host: a service the install step would refuse should
+    // not be offered by the wizard in the first place.
+    return reply.send(registryForHost(registry, getHostPlatform()))
   })
 
   /**
    * Get default enabled modules.
    */
   app.get('/defaults', async (_request, reply) => {
-    const modules = getDefaultEnabledModules(registry)
+    // Same filter: a default-on service that cannot run here would otherwise be
+    // enabled for a host that will reject it.
+    const modules = getDefaultEnabledModules(registryForHost(registry, getHostPlatform()))
     return reply.send({ enabledModules: modules })
   })
 

@@ -549,7 +549,10 @@
       "dependsOn": [],
       "envVars": [],
       "nativeCapable": true,
-      "nativeOnly": true
+      "nativeOnly": true,
+      "platforms": [
+        "darwin"
+      ]
     },
     {
       "id": "jarvis-admin",
