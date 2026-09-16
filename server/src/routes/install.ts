@@ -422,6 +422,41 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
         } else {
           recommendedBackends.push('gguf')
         }
+      } else if (plat === 'win32') {
+        // Windows: nvidia-smi ships with the driver and is on PATH, so the same
+        // query works. There was no branch here at all, which meant a Windows
+        // host fell through with gpuType 'none' and got recommended a REMOTE
+        // llm -- and before the host-platform fix it never even got this far,
+        // because Docker Desktop made it look like a Mac and it probed with
+        // system_profiler. A real user's RTX 3050 was invisible for both
+        // reasons at once.
+        try {
+          const output = execSync(
+            'nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits',
+            { encoding: 'utf-8', timeout: 10_000 },
+          )
+          const lines = output.trim().split('\n').filter(Boolean)
+          let totalVram = 0
+          const gpuNames: string[] = []
+          for (const line of lines) {
+            const parts = line.split(', ')
+            if (parts.length >= 2) {
+              gpuNames.push(parts[0].trim())
+              totalVram += parseInt(parts[1], 10)
+            }
+          }
+          if (gpuNames.length > 0) {
+            gpuName = gpuNames.length === 1 ? gpuNames[0] : `${gpuNames.length}x ${gpuNames[0]}`
+            gpuVramMb = totalVram
+            gpuType = 'nvidia'
+          }
+        } catch {
+          // No NVIDIA GPU, or no driver.
+        }
+        // GGUF either way; vLLM only where CUDA is actually reachable, which on
+        // Windows means the containers run under WSL2 with GPU passthrough.
+        recommendedBackends.push('gguf')
+        recommendedBackend = 'gguf'
       } else if (plat === 'linux') {
         // Linux: check for NVIDIA GPU(s)
         try {
@@ -503,6 +538,9 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const info: HardwareInfo = {
+        // The wizard uses this only to decide "native macOS or not" -- it
+        // gates the Mac-only native-services path. Windows is correctly
+        // 'not a Mac', so it maps here rather than needing a third value.
         platform: plat === 'darwin' ? 'darwin' : 'linux',
         arch: archName,
         totalMemoryGb,
