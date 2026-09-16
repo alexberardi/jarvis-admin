@@ -52,6 +52,33 @@ function loadPersistedConfig(): PersistedConfig {
   return {}
 }
 
+/**
+ * The service URLs an install implies, from the ports it generated.
+ *
+ * Derived, not observed: these are where the services WILL be, so they are safe
+ * to persist before anything is confirmed healthy. Gating them on health left a
+ * real Windows install with authUrl = '' after two optional services failed,
+ * and every authenticated endpoint then died with "fetch() URL is invalid".
+ */
+export function serviceUrlsFromPorts(
+  envVars: Record<string, string | undefined>,
+): Required<Pick<PersistedConfig, 'authUrl' | 'configServiceUrl' | 'llmProxyUrl' | 'commandCenterUrl'>> {
+  // `??` alone is not enough: a blank line in the generated .env parses to '',
+  // which is not nullish, so `?? '7701'` would produce "http://localhost:" --
+  // an invalid URL, which is the exact failure this function exists to prevent.
+  const port = (value: string | undefined, fallback: string): string => {
+    const trimmed = value?.trim()
+    return trimmed && trimmed.length > 0 ? trimmed : fallback
+  }
+
+  return {
+    authUrl: `http://localhost:${port(envVars.AUTH_PORT, '7701')}`,
+    configServiceUrl: `http://localhost:${port(envVars.CONFIG_SERVICE_PORT, '7700')}`,
+    llmProxyUrl: `http://localhost:${port(envVars.LLM_PROXY_API_PORT, '7704')}`,
+    commandCenterUrl: `http://localhost:${port(envVars.COMMAND_CENTER_PORT, '7703')}`,
+  }
+}
+
 export function savePersistedConfig(urls: PersistedConfig): void {
   const existing = loadPersistedConfig()
   const merged = { ...existing, ...urls }
