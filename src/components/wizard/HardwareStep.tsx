@@ -50,6 +50,16 @@ const GPU_OPTIONS: ReadonlyArray<{
   { label: 'Other (enter VRAM manually)', gpu: 'Other', gpuType: 'none', vramMb: null, backends: ['gguf'], defaultBackend: 'gguf' },
 ]
 
+// A Windows user was shown "macOS" (Docker Desktop reports the same string on
+// both), and after that was fixed they were shown "Linux" -- because the
+// platform was being collapsed to two values on its way here. Named labels so
+// adding a platform means adding a row, not editing a ternary.
+const PLATFORM_LABELS: Record<string, string> = {
+  darwin: 'macOS',
+  linux: 'Linux',
+  win32: 'Windows',
+}
+
 export default function HardwareStep() {
   const { state, dispatch } = useWizard()
   const [loading, setLoading] = useState(!state.hardware)
@@ -120,7 +130,7 @@ export default function HardwareStep() {
               <span className="text-xs font-medium uppercase">Platform</span>
             </div>
             <p className="mt-1 text-sm font-medium text-[var(--color-text)]">
-              {hw.platform === 'darwin' ? 'macOS' : 'Linux'} ({hw.arch})
+              {PLATFORM_LABELS[hw.platform] ?? hw.platform} ({hw.arch})
             </p>
           </div>
 

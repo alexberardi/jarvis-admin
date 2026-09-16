@@ -539,10 +539,14 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const info: HardwareInfo = {
-        // The wizard uses this only to decide "native macOS or not" -- it
-        // gates the Mac-only native-services path. Windows is correctly
-        // 'not a Mac', so it maps here rather than needing a third value.
-        platform: plat === 'darwin' ? 'darwin' : 'linux',
+        // The REAL platform. This was collapsed to darwin|linux on the
+        // reasoning that the wizard only needs "native macOS or not" -- which
+        // was wrong, because the same field is what the Hardware screen
+        // DISPLAYS. A Windows user stopped being told they were on a Mac and
+        // started being told they were on Linux. Every consumer compares
+        // against 'darwin', so a third value changes no behaviour and fixes
+        // the label.
+        platform: plat,
         arch: archName,
         totalMemoryGb,
         gpuName,
@@ -557,7 +561,7 @@ export async function installRoutes(app: FastifyInstance): Promise<void> {
       // Graceful fallback — never throw from hardware detection
       console.error('[install] Hardware detection failed:', err)
       const fallback: HardwareInfo = {
-        platform: getHostPlatform() === 'darwin' ? 'darwin' : 'linux',
+        platform: getHostPlatform(),
         arch: arch(),
         totalMemoryGb: Math.round(totalmem() / (1024 * 1024 * 1024)),
         gpuName: null,

@@ -26,7 +26,7 @@ export type TtsBackend = 'cpu' | 'cuda'
 export type ServingType = 'vllm' | 'llama-cpp' | 'llama-server'
 
 export interface HardwareInfo {
-  platform: 'darwin' | 'linux'
+  platform: 'darwin' | 'linux' | 'win32'
   arch: string
   totalMemoryGb: number
   gpuName: string | null
@@ -78,7 +78,7 @@ export interface WizardState {
   deploymentTarget: 'standard' | 'compose-export'
   remoteLlmUrl: string
   remoteWhisperUrl: string
-  platform: 'darwin' | 'linux'
+  platform: 'darwin' | 'linux' | 'win32'
   hardware: HardwareInfo | null
   /** Jarvis Relay (OAuth callback proxy + Expo Push at https://relay.jarvisautomation.io). */
   relayEnabled: boolean
