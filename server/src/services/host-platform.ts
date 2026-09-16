@@ -15,6 +15,7 @@
 // Cached after the first call so the docker-info shell-out doesn't happen on
 // every request.
 import { execSync } from 'node:child_process'
+import { isContainerised } from './runtime-env.js'
 
 export type HostPlatform = 'darwin' | 'linux' | 'win32'
 
@@ -35,6 +36,18 @@ function compute(): HostPlatform {
   const fromEnv = process.env.HOST_OS?.trim().toLowerCase()
   if (fromEnv === 'darwin' || fromEnv === 'linux' || fromEnv === 'win32') {
     return fromEnv
+  }
+
+  // A NATIVE process knows its own OS, so ask it first. The docker-info
+  // heuristic below exists only because a containerised admin cannot see the
+  // host -- consulting it when we are not in a container gets the answer WRONG:
+  // Docker Desktop reports "Docker Desktop" on Windows as well as macOS, so the
+  // Windows admin .exe was told it was running on a Mac. A real user hit that
+  // on a fresh install: the wizard showed "Mac" on the hardware screen, then
+  // took the darwin branch and probed with system_profiler, so their RTX 3050
+  // was never looked for at all.
+  if (!isContainerised()) {
+    return process.platform as HostPlatform
   }
 
   // Ask the Docker daemon. We have its socket mounted in the container.
