@@ -234,7 +234,7 @@
         },
         {
           "name": "JARVIS_ADAPTER_CALLBACK_TOKEN",
-          "description": "CC-internal auth for async-job result callbacks (memory extraction, deep research, characterization synthesis, adapter training). CC attaches it at enqueue and validates it at the /\u2026/callback endpoints (fail-closed); unset -> every callback 503s and nothing persists (save_memory, transcript mark_processed, inbox delivery).",
+          "description": "CC-internal auth for async-job result callbacks (memory extraction, deep research, characterization synthesis, adapter training). CC attaches it at enqueue and validates it at the /…/callback endpoints (fail-closed); unset -> every callback 503s and nothing persists (save_memory, transcript mark_processed, inbox delivery).",
           "required": true,
           "secret": true,
           "secretRef": "JARVIS_ADAPTER_CALLBACK_TOKEN"
@@ -541,7 +541,7 @@
     {
       "id": "jarvis-osx-api",
       "name": "macOS Bridge",
-      "description": "iMessage, Contacts, and Shortcuts bridge \u2014 macOS native only, runs as a LaunchAgent, never in Docker",
+      "description": "iMessage, Contacts, and Shortcuts bridge — macOS native only, runs as a LaunchAgent, never in Docker",
       "category": "optional",
       "port": 7723,
       "image": "",
@@ -595,7 +595,7 @@
     {
       "id": "jarvis-phone-gateway",
       "name": "Phone Calls",
-      "description": "AI phone-call gateway \u2014 places user-confirmed outbound calls (reservations, orders) over Twilio using the local whisper/LLM/TTS pipeline",
+      "description": "AI phone-call gateway — places user-confirmed outbound calls (reservations, orders) over Twilio using the local whisper/LLM/TTS pipeline",
       "category": "optional",
       "port": 7713,
       "image": "ghcr.io/alexberardi/jarvis-phone-gateway:latest",
@@ -620,14 +620,14 @@
         },
         {
           "name": "TWILIO_ACCOUNT_SID",
-          "description": "Twilio account SID (gateway-only secret \u2014 paste into .env; never stored in the settings DB)",
+          "description": "Twilio account SID (gateway-only secret — paste into .env; never stored in the settings DB)",
           "required": true,
           "secret": true,
           "default": "${TWILIO_ACCOUNT_SID:-}"
         },
         {
           "name": "TWILIO_AUTH_TOKEN",
-          "description": "Twilio auth token (also the media-stream signature verification key \u2014 paste into .env)",
+          "description": "Twilio auth token (also the media-stream signature verification key — paste into .env)",
           "required": true,
           "secret": true,
           "default": "${TWILIO_AUTH_TOKEN:-}"
@@ -670,7 +670,7 @@
       "dependsOn": [
         "postgres",
         "redis",
-        "minio",
+        "seaweedfs",
         "jarvis-auth",
         "jarvis-config-service"
       ],
@@ -713,19 +713,19 @@
         },
         {
           "name": "S3_ENDPOINT_URL",
-          "description": "MinIO endpoint",
+          "description": "Object store endpoint",
           "required": true,
-          "default": "http://minio:9000"
+          "default": "http://seaweedfs:8333"
         },
         {
           "name": "S3_FORCE_PATH_STYLE",
-          "description": "Path-style addressing (true for MinIO)",
+          "description": "Path-style addressing (required for SeaweedFS)",
           "required": true,
           "default": "true"
         },
         {
           "name": "S3_REGION",
-          "description": "Region label; MinIO ignores it",
+          "description": "Region label; SeaweedFS ignores it",
           "required": false,
           "default": "us-east-1"
         },
@@ -734,14 +734,14 @@
           "description": "Object store access key",
           "required": true,
           "secret": true,
-          "secretRef": "MINIO_ROOT_USER"
+          "secretRef": "OBJECT_STORE_ACCESS_KEY"
         },
         {
           "name": "AWS_SECRET_ACCESS_KEY",
           "description": "Object store secret key",
           "required": true,
           "secret": true,
-          "secretRef": "MINIO_ROOT_PASSWORD"
+          "secretRef": "OBJECT_STORE_SECRET_KEY"
         },
         {
           "name": "OCR_QUEUES",
@@ -798,7 +798,7 @@
       "dependsOn": [
         "postgres",
         "redis",
-        "minio",
+        "seaweedfs",
         "jarvis-auth",
         "jarvis-config-service"
       ],
@@ -824,19 +824,19 @@
         },
         {
           "name": "S3_ENDPOINT_URL",
-          "description": "MinIO endpoint",
+          "description": "Object store endpoint",
           "required": true,
-          "default": "http://minio:9000"
+          "default": "http://seaweedfs:8333"
         },
         {
           "name": "S3_FORCE_PATH_STYLE",
-          "description": "Path-style addressing (true for MinIO)",
+          "description": "Path-style addressing (required for SeaweedFS)",
           "required": true,
           "default": "true"
         },
         {
           "name": "S3_REGION",
-          "description": "Region label; MinIO ignores it",
+          "description": "Region label; SeaweedFS ignores it",
           "required": false,
           "default": "us-east-1"
         },
@@ -845,14 +845,14 @@
           "description": "Object store access key",
           "required": true,
           "secret": true,
-          "secretRef": "MINIO_ROOT_USER"
+          "secretRef": "OBJECT_STORE_ACCESS_KEY"
         },
         {
           "name": "AWS_SECRET_ACCESS_KEY",
           "description": "Object store secret key",
           "required": true,
           "secret": true,
-          "secretRef": "MINIO_ROOT_PASSWORD"
+          "secretRef": "OBJECT_STORE_SECRET_KEY"
         },
         {
           "name": "REDIS_HOST",
@@ -897,7 +897,7 @@
     {
       "id": "postgres",
       "name": "PostgreSQL",
-      "description": "Primary database \u2014 stores users, commands, settings, and service config",
+      "description": "Primary database — stores users, commands, settings, and service config",
       "image": "pgvector/pgvector:pg16",
       "port": 5432,
       "envVars": [
@@ -928,7 +928,7 @@
     {
       "id": "redis",
       "name": "Redis",
-      "description": "Task queue \u2014 used for long-running jobs and async pipelines",
+      "description": "Task queue — used for long-running jobs and async pipelines",
       "image": "redis:7-alpine",
       "port": 6379,
       "command": "redis-server --requirepass ${REDIS_PASSWORD}",
@@ -946,37 +946,40 @@
       ]
     },
     {
-      "id": "minio",
-      "name": "MinIO",
-      "description": "S3-compatible object store \u2014 holds uploaded images for services that hand them between workers by URI. Deployed only when a selected service needs one.",
-      "image": "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
-      "port": 9000,
-      "consolePort": 9001,
-      "command": "server /data --console-address \":9001\"",
+      "id": "seaweedfs",
+      "name": "SeaweedFS",
+      "description": "S3-compatible object store — holds uploaded images for services that hand them between workers by URI. Provisioned only when a selected service needs one.",
+      "image": "chrislusf/seaweedfs@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d",
+      "port": 8333,
+      "entrypoint": [
+        "/bin/sh",
+        "-c"
+      ],
+      "command": "mkdir -p /etc/seaweedfs\ncat > /etc/seaweedfs/s3.json <<CFG\n{\"identities\":[{\"name\":\"jarvis\",\"credentials\":[{\"accessKey\":\"$$OBJECT_STORE_ACCESS_KEY\",\"secretKey\":\"$$OBJECT_STORE_SECRET_KEY\"}],\"actions\":[\"Admin\",\"Read\",\"Write\",\"List\",\"Tagging\"]}]}\nCFG\nexec weed server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json -volume.max=64 -master.volumeSizeLimitMB=1024",
       "envVars": [
         {
-          "name": "MINIO_ROOT_USER",
-          "description": "MinIO root user",
+          "name": "OBJECT_STORE_ACCESS_KEY",
+          "description": "Object store access key",
           "required": true,
           "secret": true,
-          "secretRef": "MINIO_ROOT_USER"
+          "secretRef": "OBJECT_STORE_ACCESS_KEY"
         },
         {
-          "name": "MINIO_ROOT_PASSWORD",
-          "description": "MinIO root password",
+          "name": "OBJECT_STORE_SECRET_KEY",
+          "description": "Object store secret key",
           "required": true,
           "secret": true,
-          "secretRef": "MINIO_ROOT_PASSWORD"
+          "secretRef": "OBJECT_STORE_SECRET_KEY"
         }
       ],
       "volumes": [
-        "jarvis-minio-data:/data"
+        "jarvis-seaweedfs-data:/data"
       ]
     },
     {
       "id": "loki",
       "name": "Loki",
-      "description": "Logging database \u2014 collects and indexes logs from all services",
+      "description": "Logging database — collects and indexes logs from all services",
       "image": "grafana/loki:2.9.0",
       "port": 3100,
       "envVars": [],
@@ -987,7 +990,7 @@
     {
       "id": "mosquitto",
       "name": "Mosquitto",
-      "description": "MQTT message broker \u2014 node-to-service communication for TTS, commands, and settings",
+      "description": "MQTT message broker — node-to-service communication for TTS, commands, and settings",
       "image": "eclipse-mosquitto:2.0",
       "port": 1884,
       "envVars": [
@@ -1018,7 +1021,7 @@
     {
       "id": "grafana",
       "name": "Grafana",
-      "description": "Monitoring dashboard \u2014 visualize logs and service health metrics",
+      "description": "Monitoring dashboard — visualize logs and service health metrics",
       "image": "grafana/grafana:latest",
       "port": 3000,
       "envVars": [

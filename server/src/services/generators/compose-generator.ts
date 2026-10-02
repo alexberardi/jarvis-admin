@@ -130,7 +130,7 @@ const NODE_HEALTHCHECK_SERVICES = new Set<string>(['jarvis-web', 'jarvis-admin']
 //
 // Infra that legitimately serves external clients — mosquitto (remote nodes)
 // and grafana (browser dashboards) — stays on all interfaces.
-const DATA_PLANE_INFRA = new Set<string>(['postgres', 'redis', 'minio', 'loki'])
+const DATA_PLANE_INFRA = new Set<string>(['postgres', 'redis', 'seaweedfs', 'loki'])
 
 function infraBindPrefix(infraId: string): string {
   return DATA_PLANE_INFRA.has(infraId) ? '${JARVIS_INFRA_BIND_HOST:-127.0.0.1}:' : ''
@@ -214,9 +214,9 @@ export function generateCompose(
   for (const inf of infra) {
     lines.push('')
     lines.push(...generateInfraBlock(inf, state))
-    if (inf.id === 'minio') {
+    if (inf.id === 'seaweedfs') {
       lines.push('')
-      lines.push(...generateMinioInitBlock(composeServices))
+      lines.push(...generateObjectStoreInitBlock(composeServices, inf.image))
     }
   }
 
@@ -300,7 +300,7 @@ export function generateCompose(
  * credential containing a space breaks the command. `$$` is compose's escape --
  * the shell expands these, not compose.
  */
-function generateMinioInitBlock(enabled: ServiceDefinition[]): string[] {
+function generateObjectStoreInitBlock(enabled: ServiceDefinition[], image: string): string[] {
   const buckets = [
     ...new Set(
       enabled.map((s) => s.objectStore?.bucket).filter((b): b is string => Boolean(b)),
@@ -308,23 +308,33 @@ function generateMinioInitBlock(enabled: ServiceDefinition[]): string[] {
   ]
 
   return [
-    '  minio-init:',
-    '    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z',
-    '    container_name: jarvis-minio-init',
+    '  seaweedfs-init:',
+    // The SAME image as the store: `weed shell` ships in it, so there is no
+    // second image to keep alive. The old `mc` one-shot was half the MinIO
+    // blast radius -- its Docker Hub repo vanished a day after the server's.
+    `    image: ${image}`,
+    '    container_name: jarvis-seaweedfs-init',
     '    depends_on:',
-    '      - minio',
+    '      - seaweedfs',
     '    entrypoint: ["/bin/sh", "-c"]',
     '    command:',
     '      - |',
-    // depends_on only waits for the container to START, so mc gets connection
-    // refused on the first attempt.
-    '        until mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"; do',
+    // depends_on only waits for the container to START, so the first attempt
+    // gets connection refused.
+    '        until echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 >/dev/null 2>&1; do',
     '          sleep 2',
     '        done',
-    ...buckets.map((b) => `        mc mb --ignore-existing local/${b}`),
-    '    environment:',
-    '      MINIO_ROOT_USER: ${MINIO_ROOT_USER}',
-    '      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}',
+    ...buckets.map(
+      (b) => `        echo "s3.bucket.create -name ${b}" | weed shell -master=seaweedfs:9333`,
+    ),
+    // `s3.bucket.create` prints "already exists" and STILL EXITS 0 -- so it is
+    // safe to re-run, but the exit code proves nothing either way. Verify, or
+    // this one-shot goes green having created nothing.
+    ...buckets.map(
+      (b) =>
+        `        echo "s3.bucket.list" | weed shell -master=seaweedfs:9333 | grep -q "${b}" || ` +
+        `{ echo "bucket ${b} missing after create"; exit 1; }`,
+    ),
     '    networks:',
     '      - jarvis',
     // It exits 0 once the buckets exist; unless-stopped would recreate it.
@@ -375,8 +385,23 @@ function generateInfraBlock(
 
   // Declared on the infrastructure entry rather than branched on here. Redis
   // needs one for password auth, MinIO to point the server at its data dir.
+  if (infra.entrypoint) {
+    lines.push(`    entrypoint: ${JSON.stringify(infra.entrypoint)}`)
+  }
   if (infra.command) {
-    lines.push(`    command: ${infra.command}`)
+    if (infra.command.includes('\n')) {
+      // A literal block: a folded scalar would join the lines with spaces and
+      // collapse a shell bootstrap into one broken line. SeaweedFS needs one
+      // because `-s3.config` takes a path, not env vars, so the credential
+      // file is written before exec.
+      lines.push('    command:')
+      lines.push('      - |')
+      for (const line of infra.command.split('\n')) {
+        lines.push(`        ${line}`)
+      }
+    } else {
+      lines.push(`    command: ${infra.command}`)
+    }
   }
 
   // Mosquitto: hash the shared MQTT credential into a password_file at startup

@@ -49,10 +49,10 @@ export interface ServiceDefinition {
   dbDriverPrefix?: string
   /**
    * Object-store bucket this service needs, created at deploy time by the
-   * `minio-init` one-shot.
+   * `seaweedfs-init` one-shot.
    *
-   * MinIO does NOT create buckets on demand: the first upload fails with a
-   * config-shaped error while the server sits there running perfectly, which
+   * The S3 API does NOT create buckets on demand: the first upload fails with
+   * a config-shaped error while the server sits there running perfectly, which
    * reads as a broken build rather than a missing bucket.
    */
   objectStore?: ObjectStoreRequirement
@@ -153,6 +153,12 @@ export interface InfrastructureDefinition {
    * of infrastructure needing one does not add a third branch.
    */
   command?: string
+  /**
+   * Entrypoint override, when the image needs a shell before its real command.
+   * SeaweedFS needs one: `-s3.config` takes a path, not env vars, so the
+   * credential file has to be materialised from the generated secrets at start.
+   */
+  entrypoint?: string[]
 }
 
 /** An object-store bucket a service needs to exist before it starts. */

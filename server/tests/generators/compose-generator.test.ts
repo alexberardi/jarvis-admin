@@ -1163,23 +1163,44 @@ describe('recipes and its object store', () => {
     )
 
   it('emits the object store the recipes services depend on', () => {
-    expect(sync()).toContain('  minio:')
+    expect(sync()).toContain('  seaweedfs:')
   })
 
   it('creates the bucket recipes uploads to', () => {
-    // MinIO does not create one on first write: without this the store runs
-    // perfectly, empty, and every photo import fails on a config-shaped error.
-    expect(sync()).toContain('mc mb --ignore-existing local/jarvis-recipes')
+    // The S3 API does not create one on first write: without this the store
+    // runs perfectly, empty, and every photo import fails on a config-shaped
+    // error.
+    expect(sync()).toContain('s3.bucket.create -name jarvis-recipes')
   })
 
-  it('waits for MinIO rather than assuming it is up', () => {
-    // depends_on only waits for the container to START; mc gets connection
-    // refused on the first attempt.
-    expect(sync()).toMatch(/until mc alias set local[\s\S]*?sleep 2/)
+  it('verifies the bucket instead of trusting the exit code', () => {
+    // `s3.bucket.create` prints "already exists" and STILL EXITS 0 -- so it is
+    // safe to re-run, but the exit code proves nothing either way. Without the
+    // check this one-shot goes green having created nothing, which is the exact
+    // failure it exists to prevent.
+    expect(sync()).toMatch(/s3\.bucket\.list[\s\S]*?grep -q "jarvis-recipes"/)
   })
 
-  it('quotes the credentials so a password with spaces survives', () => {
-    expect(sync()).toContain('"$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"')
+  it('waits for the store rather than assuming it is up', () => {
+    // depends_on only waits for the container to START; the one-shot gets
+    // connection refused on the first attempt.
+    expect(sync()).toMatch(/until echo "s3\.bucket\.list"[\s\S]*?sleep 2/)
+  })
+
+  it('writes the S3 credentials from the generated secrets', () => {
+    // `-s3.config` takes a FILE PATH, not env vars, so the identity file is
+    // materialised at start. `$$` is compose's escape: the SHELL expands these.
+    expect(sync()).toContain('$$OBJECT_STORE_ACCESS_KEY')
+    expect(sync()).toContain('/etc/seaweedfs/s3.json')
+  })
+
+  it('gives the store enough volume slots to accept writes', () => {
+    // -volume.max defaults to 8, and SeaweedFS makes a volume collection PER
+    // BUCKET, growing them 7 at a time -- a single node exhausts the slots and
+    // every PutObject returns InternalError. `0` auto-sizes from free disk and
+    // resolved to 2 in a container.
+    expect(sync()).toContain('-volume.max=64')
+    expect(sync()).not.toContain('-volume.max=0')
   })
 
   it('runs the queue workers alongside the APIs', () => {
