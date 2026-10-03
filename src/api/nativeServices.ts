@@ -22,6 +22,8 @@ export interface NativeServiceEntry {
 export interface NativeServicesResponse {
   supported: boolean
   services: NativeServiceEntry[]
+  /** Why native management is unavailable, when supported is false. */
+  reason?: string
 }
 
 export interface NativeLogResponse {
