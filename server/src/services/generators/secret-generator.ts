@@ -66,8 +66,8 @@ export const SECRET_KEYS = [
   // everyone reaches for, and the console it unlocks is every uploaded image in
   // the install. The 'user' is an access key, so a random value is the right
   // shape for it -- both land in the generated .env if the console is needed.
-  'MINIO_ROOT_USER',
-  'MINIO_ROOT_PASSWORD',
+  'OBJECT_STORE_ACCESS_KEY',
+  'OBJECT_STORE_SECRET_KEY',
   // X-Admin-Secret for the recipes static-data seed endpoints.
   'RECIPES_ADMIN_SECRET',
   // CC-internal auth for async-job result callbacks (memory extraction, deep

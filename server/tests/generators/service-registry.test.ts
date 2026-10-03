@@ -94,7 +94,7 @@ describe('service-registry', () => {
     // the OCR worker an s3:// URI. Without it the feature is visible in the app
     // and broken in practice.
     const recipes = getServiceById(registry, 'jarvis-recipes-server')
-    expect(recipes!.dependsOn).toContain('minio')
+    expect(recipes!.dependsOn).toContain('seaweedfs')
     expect(recipes!.objectStore?.bucket).toBeTruthy()
   })
 })

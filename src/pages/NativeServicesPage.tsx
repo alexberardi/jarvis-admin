@@ -43,7 +43,8 @@ export default function NativeServicesPage() {
         </header>
         <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-alt)] p-4">
           <p className="text-sm text-[var(--color-text-muted)]">
-            Native services are only available on macOS. On Linux all services run in Docker.
+            {data.reason ??
+              'Native services are only available on macOS. On Linux all services run in Docker.'}
           </p>
         </div>
       </div>

@@ -17,6 +17,7 @@ import type { ServiceDefinition, ServiceRegistry } from '../types/service-regist
 import registryData from '../data/service-registry.json' with { type: 'json' }
 import { getComposePath } from '../services/compose-path.js'
 import { getHostPlatform } from '../services/host-platform.js'
+import { isContainerised } from '../services/runtime-env.js'
 
 const GITHUB_ORG = 'alexberardi'
 const NATIVE_ROOT = join(homedir(), '.jarvis', 'native')
@@ -119,6 +120,20 @@ function nativeCapableServices(registry: ServiceRegistry): ServiceDefinition[] {
   return registry.services.filter((s) => s.nativeCapable)
 }
 
+// launchd agents live in the USER's ~/Library/LaunchAgents and are driven by
+// launchctl -- neither of which a container can reach: inside one, homedir() is
+// /root and launchctl does not exist at all. getHostPlatform() reports darwin on
+// Docker Desktop BY DESIGN (see host-platform.ts), so that check alone let every
+// route below run against the container's own filesystem: the catalog reported
+// `installed: false` for agents that were installed and running on the host, and
+// the page then told the user to re-run the install wizard to enable services
+// that were already up. runtime-env.ts states the rule this follows -- anything
+// touching the filesystem or spawning host tools must ask isContainerised(),
+// not which OS the host runs.
+const CONTAINERISED_REASON =
+  'Admin is running inside a container, so it cannot see or control this ' +
+  "machine's launchd agents. Run admin natively on macOS to manage them."
+
 export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> {
   const registry = parseRegistry(registryData)
 
@@ -148,6 +163,9 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   app.get('/', async (_request, reply) => {
     if (getHostPlatform() !== 'darwin') {
       return reply.send({ supported: false, services: [] })
+    }
+    if (isContainerised()) {
+      return reply.send({ supported: false, services: [], reason: CONTAINERISED_REASON })
     }
     const services = nativeCapableServices(registry).map((svc) => {
       const label = launchdLabel(svc.id)
@@ -183,6 +201,9 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   app.get<{ Params: { id: string } }>('/:id/install', async (request, reply) => {
     if (getHostPlatform() !== 'darwin') {
       return reply.code(400).send({ error: 'Native services are macOS-only' })
+    }
+    if (isContainerised()) {
+      return reply.code(409).send({ error: CONTAINERISED_REASON })
     }
     const { id } = request.params as { id: string }
     const svc = registry.services.find((s) => s.id === id)
@@ -256,6 +277,7 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   /** Restart (kickstart -k) — also used for "start". */
   app.post<{ Params: { id: string } }>('/:id/restart', { preHandler: requireSuperuser }, async (request, reply) => {
     if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
+    if (isContainerised()) return reply.code(409).send({ error: CONTAINERISED_REASON })
     const id = requireKnownServiceId(request, reply)
     if (!id) return
     const label = launchdLabel(id)
@@ -276,6 +298,7 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   /** Stop (bootout) — leaves the plist in place so the user can re-enable later. */
   app.post<{ Params: { id: string } }>('/:id/stop', { preHandler: requireSuperuser }, async (request, reply) => {
     if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
+    if (isContainerised()) return reply.code(409).send({ error: CONTAINERISED_REASON })
     const id = requireKnownServiceId(request, reply)
     if (!id) return
     const label = launchdLabel(id)
@@ -293,6 +316,7 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
   /** Uninstall: stop AND remove the plist file. */
   app.post<{ Params: { id: string } }>('/:id/uninstall', { preHandler: requireSuperuser }, async (request, reply) => {
     if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
+    if (isContainerised()) return reply.code(409).send({ error: CONTAINERISED_REASON })
     const id = requireKnownServiceId(request, reply)
     if (!id) return
     const label = launchdLabel(id)
@@ -321,6 +345,8 @@ export async function nativeServicesRoutes(app: FastifyInstance): Promise<void> 
     { preHandler: requireSuperuser },
     async (request, reply) => {
       if (getHostPlatform() !== 'darwin') return reply.code(400).send({ error: 'macOS only' })
+      if (isContainerised()) return reply.code(409).send({ error: CONTAINERISED_REASON })
+    if (isContainerised()) return reply.code(409).send({ error: CONTAINERISED_REASON })
       const id = requireKnownServiceId(request, reply)
       if (!id) return
       const { stream = 'stderr', lines = '200' } = request.query as { stream?: string; lines?: string }
