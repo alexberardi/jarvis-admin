@@ -1,5 +1,10 @@
 # jarvis-admin
 
+> [!WARNING]
+> **Deprecated: replaced by jarvisd.** This was the old stack's installer and web admin. jarvisd has its own admin, and new installs no longer use this installer. New installs: [installer.jarvisautomation.io](https://installer.jarvisautomation.io). Moving an existing install: [Migrating from the Docker install](https://docs.jarvisautomation.dev/install/migrating-from-docker/).
+>
+> The old stack stays supported, with fixes only, until jarvisd v0.1.0. This repository will be archived after that; published images and packages stay available for existing installs.
+
 Web admin dashboard for managing Jarvis services. Superuser-only access.
 
 React 19 + Vite frontend served by a Fastify backend that proxies to jarvis-auth, jarvis-config-service, and jarvis-settings-server.
